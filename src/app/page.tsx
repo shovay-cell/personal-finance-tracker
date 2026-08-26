@@ -5,6 +5,7 @@ import { useSearchParams } from 'next/navigation';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { CalendarClock, CheckCircle2, X } from 'lucide-react';
 import {
+  applyBudgetRollovers,
   financeDb,
   initializeFinanceDb,
   currentMonth,
@@ -80,6 +81,8 @@ function FinanceApp() {
     (async () => {
       await initializeFinanceDb();
       await refreshObligationStatuses();
+      // Carries last month's leftovers (and overspends) into the current month.
+      await applyBudgetRollovers();
       if (cancelled) return;
       setMounted(true);
 
@@ -248,7 +251,8 @@ function FinanceApp() {
             transactions={transactions}
             categories={categories}
             members={members}
-            baseCurrency={settings.baseCurrency}
+            plannedPayments={plannedPayments}
+            settings={settings}
             month={month}
             onMonthChange={handleMonthChange}
             rolloverDefault={settings.budgetRolloverEnabled}
@@ -278,6 +282,8 @@ function FinanceApp() {
         {activeTab === 'reports' && (
           <ReportsTab
             transactions={transactions}
+            plannedPayments={plannedPayments}
+            settings={settings}
             categories={categories}
             accounts={accounts}
             members={members}

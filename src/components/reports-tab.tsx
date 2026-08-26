@@ -7,6 +7,8 @@ import {
   CurrencyCode,
   FinanceAccount,
   FinanceCategory,
+  FinanceSettings,
+  PlannedPayment,
   Obligation,
   ObligationSettlement,
   ProfileMember,
@@ -26,12 +28,17 @@ import {
   sumBase,
 } from '@/services/analytics';
 import { exportReportPdf, exportTransactionsCsv } from '@/services/export';
+import { forecastCashFlow } from '@/services/forecast';
+import { convertToBase, todayIso } from '@/lib/db';
 import { CategoryLegend, DonutChart, MonthlyBarChart } from './charts';
+import { CashFlowForecastCard } from './cash-flow-forecast';
 import { Card, EmptyState, SectionTitle, SegmentedControl, inputClass } from './ui';
 import { ProgressBar } from './charts';
 
 interface ReportsTabProps {
   transactions: Transaction[];
+  plannedPayments: PlannedPayment[];
+  settings: FinanceSettings;
   categories: FinanceCategory[];
   accounts: FinanceAccount[];
   members: ProfileMember[];
@@ -54,6 +61,8 @@ const PRESET_LABELS: { value: PeriodPreset; label: string }[] = [
 
 export function ReportsTab({
   transactions,
+  plannedPayments,
+  settings,
   categories,
   accounts,
   members,
@@ -68,6 +77,20 @@ export function ReportsTab({
 }: ReportsTabProps) {
   const [kind, setKind] = useState<TransactionKind>('EXPENSE');
   const [showCustom, setShowCustom] = useState(preset === 'CUSTOM');
+  const [forecastDays, setForecastDays] = useState(30);
+
+  const forecast = useMemo(
+    () =>
+      forecastCashFlow({
+        accounts,
+        transactions,
+        plannedPayments,
+        days: forecastDays,
+        today: todayIso(),
+        toBase: (amount, currency) => convertToBase(amount, currency, settings).baseAmount,
+      }),
+    [accounts, transactions, plannedPayments, forecastDays, settings]
+  );
 
   const periodTransactions = useMemo(
     () => filterTransactions(transactions, { range }),
@@ -220,6 +243,16 @@ export function ReportsTab({
           </>
         )}
       </Card>
+
+      <div>
+        <SectionTitle title="Прогноз ликвидности" />
+        <CashFlowForecastCard
+          forecast={forecast}
+          currency={baseCurrency}
+          horizon={forecastDays}
+          onHorizonChange={setForecastDays}
+        />
+      </div>
 
       <div>
         <SectionTitle title="Динамика по месяцам" />

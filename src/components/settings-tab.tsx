@@ -52,7 +52,7 @@ import {
 } from '@/constants/categories';
 import { formatMoney } from '@/services/analytics';
 import { downloadFinanceBackupFile } from '@/services/export';
-import { getCustomClientId, setCustomClientId, GOOGLE_OAUTH_CLIENT_ID } from '@/services/backup/google-drive';
+import { GOOGLE_OAUTH_CLIENT_ID } from '@/services/backup/google-drive';
 import {
   authenticateGoogleDrive,
   disconnectGoogleDrive,
@@ -66,7 +66,6 @@ import {
   notificationsPermission,
   requestNotificationsPermission,
 } from '@/services/notifications';
-import { getStoredGeminiKey, setStoredGeminiKey } from '@/services/ai/receipt-parser';
 import { CategoryManagerModal } from './category-manager-modal';
 import {
   Card,
@@ -96,8 +95,6 @@ export function SettingsTab({
   const [showCategories, setShowCategories] = useState(false);
   const [editingAccount, setEditingAccount] = useState<FinanceAccount | 'NEW' | null>(null);
   const [editingMember, setEditingMember] = useState<ProfileMember | 'NEW' | null>(null);
-  const [geminiKey, setGeminiKey] = useState('');
-  const [clientId, setClientId] = useState('');
   const [serverKey, setServerKey] = useState<{
     serverKeyConfigured: boolean;
     keyLooksValid: boolean;
@@ -114,8 +111,6 @@ export function SettingsTab({
   const currentMemberId = getCurrentMemberId();
 
   useEffect(() => {
-    setGeminiKey(getStoredGeminiKey());
-    setClientId(getCustomClientId());
     const state = getGoogleDriveState();
     setDriveState({ isConnected: state.isConnected, userEmail: state.userEmail });
 
@@ -143,7 +138,7 @@ export function SettingsTab({
 
   const handleConnectDrive = () =>
     run('connect', async () => {
-      const result = await authenticateGoogleDrive(clientId.trim() || undefined);
+      const result = await authenticateGoogleDrive();
       const state = getGoogleDriveState();
       setDriveState({ isConnected: state.isConnected, userEmail: state.userEmail });
       return result.success
@@ -465,31 +460,7 @@ export function SettingsTab({
       <div>
         <SectionTitle title="ИИ-сканирование чеков" />
         <Card className="p-4 space-y-2">
-          <Field
-            label="Личный Gemini API Key"
-            hint="Необязательно: без него используется общий ключ приложения на сервере"
-          >
-            <div className="flex gap-2">
-              <input
-                type="password"
-                value={geminiKey}
-                onChange={(e) => setGeminiKey(e.target.value)}
-                placeholder="AQ.… или AIza…"
-                className={`${inputClass} text-xs`}
-              />
-              <button
-                type="button"
-                onClick={() => {
-                  setStoredGeminiKey(geminiKey);
-                  setMessage({ text: 'Ключ сохранён на этом устройстве', kind: 'ok' });
-                }}
-                className="px-4 rounded-2xl bg-slate-100 dark:bg-slate-800 text-slate-500"
-              >
-                <KeyRound className="w-4 h-4" />
-              </button>
-            </div>
-          </Field>
-          {serverKey && (
+          {serverKey ? (
             <div
               className={`flex items-start gap-2 p-2.5 rounded-2xl ${
                 serverKey.serverKeyConfigured && serverKey.keyLooksValid
@@ -499,7 +470,7 @@ export function SettingsTab({
             >
               <ServerCog className="w-3.5 h-3.5 mt-px flex-shrink-0" />
               <p className="text-[10.5px] font-bold leading-relaxed">
-                Общий ключ на сервере:{' '}
+                Ключ Gemini на сервере:{' '}
                 {!serverKey.serverKeyConfigured
                   ? 'не найден'
                   : serverKey.keyLooksValid
@@ -510,12 +481,16 @@ export function SettingsTab({
                 <span className="font-medium">{serverKey.hint}</span>
               </p>
             </div>
+          ) : (
+            <p className="text-[10.5px] font-bold text-slate-400">
+              Проверяем ключ распознавания на сервере…
+            </p>
           )}
 
           <p className="text-[10px] text-slate-400 font-medium flex items-start gap-1.5">
             <Mic className="w-3 h-3 mt-0.5 flex-shrink-0" />
-            Голосовой ввод работает офлайн-независимо через распознавание речи браузера и не
-            отправляет аудио в Gemini.
+            Голосовой ввод работает независимо через распознавание речи браузера и не отправляет
+            аудио в Gemini.
           </p>
         </Card>
       </div>
@@ -647,30 +622,15 @@ export function SettingsTab({
           </div>
 
           {!GOOGLE_OAUTH_CLIENT_ID && (
-            <Field
-              label="Google OAuth Client ID"
-              hint="Web-клиент из Google Cloud Console со scope drive.appdata. Нужен один раз, хранится на устройстве."
-            >
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  value={clientId}
-                  onChange={(e) => setClientId(e.target.value)}
-                  placeholder="…apps.googleusercontent.com"
-                  className={`${inputClass} text-xs`}
-                />
-                <button
-                  type="button"
-                  onClick={() => {
-                    setCustomClientId(clientId);
-                    setMessage({ text: 'Client ID сохранён на этом устройстве', kind: 'ok' });
-                  }}
-                  className="px-4 rounded-2xl bg-slate-100 dark:bg-slate-800 text-slate-500"
-                >
-                  <KeyRound className="w-4 h-4" />
-                </button>
-              </div>
-            </Field>
+            <div className="flex items-start gap-2 p-2.5 rounded-2xl bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400">
+              <ServerCog className="w-3.5 h-3.5 mt-px flex-shrink-0" />
+              <p className="text-[10.5px] font-bold leading-relaxed">
+                Google Drive не настроен: в проекте нет переменной
+                NEXT_PUBLIC_GOOGLE_CLIENT_ID. Добавьте Web OAuth Client ID из Google Cloud
+                Console, разрешите домен приложения в «Authorized JavaScript origins» и
+                передеплойте.
+              </p>
+            </div>
           )}
 
           <label className="block">

@@ -12,6 +12,7 @@ import {
   PlannedPayment,
   ProfileMember,
   Transaction,
+  TransactionSplit,
 } from '@/types';
 import {
   buildDefaultCategories,
@@ -188,13 +189,45 @@ export type NewTransactionInput = Omit<
   'id' | 'createdAt' | 'updatedAt' | 'baseAmount' | 'exchangeRate' | 'authorId'
 > & { authorId?: string };
 
+/**
+ * Slices must add up to the transaction total, otherwise reports would quietly
+ * lose or invent money. The last slice absorbs rounding.
+ */
+export function normalizeSplits(
+  amount: number,
+  splits?: TransactionSplit[]
+): TransactionSplit[] | undefined {
+  if (!splits || splits.length === 0) return undefined;
+
+  const cleaned = splits.filter((part) => part.categoryId && part.amount > 0);
+  if (cleaned.length < 2) return undefined;
+
+  const sum = cleaned.reduce((total, part) => total + part.amount, 0);
+  const drift = Math.round((amount - sum) * 100) / 100;
+  if (drift !== 0) {
+    cleaned[cleaned.length - 1] = {
+      ...cleaned[cleaned.length - 1],
+      amount: Math.round((cleaned[cleaned.length - 1].amount + drift) * 100) / 100,
+    };
+  }
+
+  return cleaned;
+}
+
 export async function addTransaction(input: NewTransactionInput): Promise<Transaction> {
   const settings = await getFinanceSettings();
   const { baseAmount, exchangeRate } = convertToBase(input.amount, input.currency, settings);
   const now = new Date().toISOString();
 
+  const splits = normalizeSplits(input.amount, input.splits);
+
   const tx: Transaction = {
     ...input,
+    splits,
+    // With a split the biggest slice represents the operation in lists.
+    categoryId: splits
+      ? [...splits].sort((a, b) => b.amount - a.amount)[0].categoryId
+      : input.categoryId,
     authorId: input.authorId || getCurrentMemberId(),
     id: newId('tx'),
     baseAmount,
@@ -224,9 +257,24 @@ export async function updateTransaction(
     recalculated = { baseAmount, exchangeRate };
   }
 
+  const nextAmount = updates.amount ?? existing.amount;
+  const splitPatch =
+    'splits' in updates
+      ? (() => {
+          const splits = normalizeSplits(nextAmount, updates.splits ?? undefined);
+          return {
+            splits,
+            categoryId: splits
+              ? [...splits].sort((a, b) => b.amount - a.amount)[0].categoryId
+              : updates.categoryId ?? existing.categoryId,
+          };
+        })()
+      : {};
+
   await financeDb.transactions.update(id, {
     ...updates,
     ...recalculated,
+    ...splitPatch,
     updatedAt: new Date().toISOString(),
   });
 }
@@ -679,4 +727,93 @@ export async function clearAllFinanceData(): Promise<void> {
     financeDb.settings.clear(),
   ]);
   await initializeFinanceDb();
+}
+
+
+/**
+ * Carries each rollover budget's leftover — or overspend — into the current
+ * month. Runs on startup so the user never has to remember to press a button;
+ * `rolloverAppliedFrom` makes it idempotent across restarts, and an existing
+ * carry is refreshed while the source month is still the previous one, so a
+ * late-arriving operation in that month still lands in the carried figure.
+ */
+export async function applyBudgetRollovers(month = currentMonth()): Promise<number> {
+  const previousMonth = shiftMonthKey(month, -1);
+  const [budgets, transactions, categories] = await Promise.all([
+    financeDb.budgets.toArray(),
+    financeDb.transactions.toArray(),
+    financeDb.categories.toArray(),
+  ]);
+
+  const sources = budgets.filter((b) => b.month === previousMonth && b.rolloverEnabled);
+  if (sources.length === 0) return 0;
+
+  const categoryById = new Map(categories.map((c) => [c.id, c]));
+  const monthPrefix = `${previousMonth}-`;
+  let applied = 0;
+
+  for (const source of sources) {
+    let spent = 0;
+
+    for (const t of transactions) {
+      if (t.kind !== 'EXPENSE' || !t.date.startsWith(monthPrefix)) continue;
+      if (source.memberId && t.authorId !== source.memberId) continue;
+
+      const parts =
+        t.splits && t.splits.length > 0
+          ? t.splits.map((part) => ({
+              categoryId: part.categoryId,
+              baseAmount:
+                (part.amount / t.splits!.reduce((sum, p) => sum + p.amount, 0)) * t.baseAmount,
+            }))
+          : [{ categoryId: t.categoryId, baseAmount: t.baseAmount }];
+
+      for (const part of parts) {
+        if (!source.categoryId) {
+          spent += part.baseAmount;
+          continue;
+        }
+        const rootId = categoryById.get(part.categoryId)?.parentId || part.categoryId;
+        if (rootId === source.categoryId || part.categoryId === source.categoryId) {
+          spent += part.baseAmount;
+        }
+      }
+    }
+
+    const limit = source.limitAmount + source.carriedOver;
+    // Negative remainder is intentional: an overspend shrinks the next month.
+    const remainder = Math.round((limit - spent) * 100) / 100;
+
+    const target = budgets.find(
+      (b) =>
+        b.month === month &&
+        (b.categoryId || null) === (source.categoryId || null) &&
+        (b.memberId || null) === (source.memberId || null)
+    );
+
+    if (target && target.rolloverAppliedFrom === previousMonth && target.carriedOver === remainder) {
+      continue;
+    }
+
+    await upsertBudget({
+      id: target?.id,
+      month,
+      categoryId: source.categoryId,
+      memberId: source.memberId,
+      limitAmount: target?.limitAmount ?? source.limitAmount,
+      currency: target?.currency ?? source.currency,
+      rolloverEnabled: true,
+      carriedOver: remainder,
+      rolloverAppliedFrom: previousMonth,
+    });
+    applied += 1;
+  }
+
+  return applied;
+}
+
+function shiftMonthKey(month: string, delta: number): string {
+  const [year, mon] = month.split('-').map(Number);
+  const date = new Date(year, mon - 1 + delta, 1);
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
 }

@@ -65,6 +65,15 @@ export interface ReceiptScanMeta {
   scannedAt: string;
 }
 
+/** One slice of a receipt split across categories (70% продукты / 30% химия). */
+export interface TransactionSplit {
+  categoryId: string;
+  subcategoryId?: string;
+  /** Amount in the transaction's own currency; slices must sum to `amount`. */
+  amount: number;
+  note?: string;
+}
+
 export interface Transaction {
   id: string;
   kind: TransactionKind;
@@ -73,8 +82,11 @@ export interface Transaction {
   /** amount converted into the profile's base currency at the time of saving */
   baseAmount: number;
   exchangeRate: number; // 1 unit of `currency` in base currency
+  /** Primary category; with splits it is the largest slice, kept for list rows. */
   categoryId: string;
   subcategoryId?: string;
+  /** Present when the receipt was divided between categories. */
+  splits?: TransactionSplit[];
   accountId: string;
   date: string; // YYYY-MM-DD
   note?: string;
@@ -218,9 +230,66 @@ export interface Budget {
   currency: CurrencyCode;
   /** carry the unspent remainder into next month's limit */
   rolloverEnabled: boolean;
-  /** amount carried in from the previous month (computed on rollover) */
+  /** amount carried in from the previous month; negative after an overspend */
   carriedOver: number;
+  /** month the carry-over came from — guards against applying it twice */
+  rolloverAppliedFrom?: string;
   createdAt: string;
+}
+
+/** «Доступно до конца месяца»: what is left once commitments are set aside. */
+export interface SafeToSpend {
+  /** Budget or income the calculation starts from. */
+  planned: number;
+  spent: number;
+  /** Recurring payments still due before the month ends. */
+  upcomingCommitted: number;
+  available: number;
+  daysLeft: number;
+  perDay: number;
+  /** How `planned` was derived, so the UI can explain the number. */
+  basis: 'BUDGET' | 'INCOME' | 'NONE';
+}
+
+export interface ForecastPoint {
+  date: string; // YYYY-MM-DD
+  balance: number;
+  /** Scheduled movements landing on this date. */
+  events: ForecastEvent[];
+}
+
+export interface ForecastEvent {
+  date: string;
+  title: string;
+  amount: number; // positive income, negative expense
+  planKind: PlanKind;
+  categoryId: string;
+}
+
+export interface CashFlowForecast {
+  startBalance: number;
+  points: ForecastPoint[];
+  minimum: { date: string; balance: number };
+  /** First day the projected balance goes negative, if any. */
+  shortfallDate?: string;
+  totalIncome: number;
+  totalExpense: number;
+}
+
+export interface PacingPoint {
+  day: number;
+  current?: number;
+  previous: number;
+}
+
+export interface PacingComparison {
+  currentTotal: number;
+  previousTotal: number;
+  /** Positive = spending faster than the previous month by this share. */
+  deltaShare: number;
+  dayOfMonth: number;
+  points: PacingPoint[];
+  previousMonthTotal: number;
 }
 
 export interface BudgetProgress {

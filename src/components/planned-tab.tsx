@@ -25,8 +25,9 @@ import {
 import {
   addPlannedPayment,
   convertToBase,
-  deletePlannedPayment,
+  currentMonth,
   todayIso,
+  deletePlannedPayment,
   updatePlannedPayment,
 } from '@/lib/db';
 import {
@@ -37,11 +38,13 @@ import {
   recurringTotals,
 } from '@/services/planned';
 import { formatDateHuman, formatMoney } from '@/services/analytics';
+import { paymentCalendar } from '@/services/forecast';
 import {
   getCategoryIcon,
   INVESTMENT_CATEGORY_ID,
   SUBSCRIPTION_CATEGORY_ID,
 } from '@/constants/categories';
+import { PaymentCalendar } from './payment-calendar';
 import {
   Card,
   EmptyState,
@@ -124,6 +127,20 @@ export function PlannedTab({
     [plannedPayments, planKind, settings]
   );
 
+  // Every scheduled charge of the month, whatever section it belongs to — a cash
+  // gap does not care whether it was rent or Netflix.
+  const calendarDays = useMemo(
+    () =>
+      paymentCalendar({
+        month: currentMonth(),
+        plannedPayments,
+        transactions: [],
+        today: todayIso(),
+        toBase: (amount, currency) => convertToBase(amount, currency, settings).baseAmount,
+      }),
+    [plannedPayments, settings]
+  );
+
   const overdue = states.filter((s) => s.payment.isActive && s.isOverdue);
   const upcoming = states.filter((s) => s.payment.isActive && !s.isOverdue);
   const inactive = states.filter((s) => !s.payment.isActive);
@@ -139,6 +156,10 @@ export function PlannedTab({
           { value: 'INVESTMENT', label: 'ИНВЕСТИЦИИ' },
         ]}
       />
+
+      {planKind === 'PAYMENT' && (
+        <PaymentCalendar days={calendarDays} month={currentMonth()} currency={baseCurrency} />
+      )}
 
       {totals.rows.length > 0 && (
         <Card className="p-4 space-y-2">

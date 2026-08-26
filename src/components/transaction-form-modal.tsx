@@ -4,6 +4,7 @@ import React, { useMemo, useState } from 'react';
 import {
   Coins,
   ImagePlus,
+  Scissors,
   Loader2,
   Save,
   Sparkles,
@@ -19,6 +20,7 @@ import {
   ReceiptScanMeta,
   Transaction,
   TransactionKind,
+  TransactionSplit,
 } from '@/types';
 import {
   addTransaction,
@@ -39,6 +41,7 @@ import {
 import { CURRENCIES } from '@/constants/categories';
 import { CategoryEditorModal } from './category-manager-modal';
 import { GeminiKeyPrompt } from './gemini-key-prompt';
+import { SplitEditor } from './split-editor';
 import {
   analyzeReceiptWithAI,
   ReceiptScanError,
@@ -108,6 +111,7 @@ export function TransactionFormModal({
   const [receiptScan, setReceiptScan] = useState<ReceiptScanMeta | undefined>(
     existing?.receiptScan || prefill?.receiptScan
   );
+  const [splits, setSplits] = useState<TransactionSplit[]>(existing?.splits || []);
   const [uncertainFields, setUncertainFields] = useState<ReceiptFieldFlag[]>(
     prefill?.uncertainFields || existing?.receiptScan?.uncertainFields || []
   );
@@ -196,6 +200,7 @@ export function TransactionFormModal({
         currency,
         categoryId,
         subcategoryId,
+        splits: splits.length > 1 ? splits : undefined,
         accountId,
         date,
         note: note.trim() || undefined,
@@ -335,6 +340,44 @@ export function TransactionFormModal({
             ))}
           </div>
         </Field>
+      )}
+
+      {splits.length > 0 ? (
+        <Field
+          label="Разделение чека"
+          hint="Одна покупка распределяется между категориями — в отчётах и бюджетах учтётся каждая часть"
+        >
+          <SplitEditor
+            amount={parseFloat(amount.replace(',', '.')) || 0}
+            currency={currency}
+            categories={rootCategories}
+            splits={splits}
+            onChange={setSplits}
+          />
+          <button
+            type="button"
+            onClick={() => setSplits([])}
+            className="mt-2 w-full py-2 rounded-2xl bg-slate-100 dark:bg-slate-800 text-slate-500 text-[11px] font-black"
+          >
+            Отменить разделение
+          </button>
+        </Field>
+      ) : (
+        <button
+          type="button"
+          onClick={() => {
+            const total = parseFloat(amount.replace(',', '.')) || 0;
+            const majority = Math.round(total * 0.7 * 100) / 100;
+            setSplits([
+              { categoryId, amount: majority },
+              { categoryId: '', amount: Math.round((total - majority) * 100) / 100 },
+            ]);
+          }}
+          className="w-full py-2.5 rounded-2xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-[11px] font-black flex items-center justify-center gap-1.5"
+        >
+          <Scissors className="w-3.5 h-3.5" />
+          Разделить чек между категориями
+        </button>
       )}
 
       <div className="grid grid-cols-2 gap-3">

@@ -130,7 +130,15 @@ export async function authenticateGoogleDrive(
     return {
       success: false,
       error:
-        'Не указан Google OAuth Client ID. Добавьте NEXT_PUBLIC_GOOGLE_CLIENT_ID или введите ID в настройках.',
+        'Google Drive не настроен: в проекте нет переменной NEXT_PUBLIC_GOOGLE_CLIENT_ID. Добавьте Web OAuth Client ID из Google Cloud Console и передеплойте.',
+    };
+  }
+
+  if (!clientId.endsWith('.apps.googleusercontent.com')) {
+    return {
+      success: false,
+      error:
+        'NEXT_PUBLIC_GOOGLE_CLIENT_ID не похож на Client ID: он должен заканчиваться на .apps.googleusercontent.com (это не ключ Gemini).',
     };
   }
 
@@ -164,6 +172,22 @@ export async function authenticateGoogleDrive(
           resolve({ success: true, token: response.access_token });
         },
       });
+
+      // A blocked popup never calls back at all; without this the button would
+      // just spin forever with no explanation.
+      const popupTimeout = setTimeout(() => {
+        resolve({
+          success: false,
+          error:
+            'Окно Google не открылось. Разрешите всплывающие окна для этого сайта и попробуйте снова.',
+        });
+      }, 60000);
+
+      const originalResolve = resolve;
+      resolve = ((value: any) => {
+        clearTimeout(popupTimeout);
+        originalResolve(value);
+      }) as typeof resolve;
 
       tokenClient.requestAccessToken({ prompt: '' });
     } catch (err: any) {

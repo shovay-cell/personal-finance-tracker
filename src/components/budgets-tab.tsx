@@ -13,21 +13,26 @@ import {
 import {
   Budget,
   BudgetProgress,
-  CurrencyCode,
   FinanceCategory,
+  FinanceSettings,
+  PlannedPayment,
   ProfileMember,
   Transaction,
 } from '@/types';
-import { deleteBudget, upsertBudget } from '@/lib/db';
+import { convertToBase, deleteBudget, upsertBudget } from '@/lib/db';
 import {
   budgetProgress,
   computeRollover,
   formatMoney,
   monthLabel,
+  pacingComparison,
+  safeToSpend,
   shiftMonth,
 } from '@/services/analytics';
 import { getCategoryIcon } from '@/constants/categories';
 import { ProgressBar } from './charts';
+import { SafeToSpendCard } from './safe-to-spend-card';
+import { PacingChart } from './pacing-chart';
 import {
   Card,
   EmptyState,
@@ -37,13 +42,15 @@ import {
   SectionTitle,
   inputClass,
 } from './ui';
+import { CurrencyCode } from '@/types';
 
 interface BudgetsTabProps {
   budgets: Budget[];
   transactions: Transaction[];
   categories: FinanceCategory[];
   members: ProfileMember[];
-  baseCurrency: CurrencyCode;
+  plannedPayments: PlannedPayment[];
+  settings: FinanceSettings;
   month: string;
   onMonthChange: (month: string) => void;
   rolloverDefault: boolean;
@@ -54,17 +61,33 @@ export function BudgetsTab({
   transactions,
   categories,
   members,
-  baseCurrency,
+  plannedPayments,
+  settings,
   month,
   onMonthChange,
   rolloverDefault,
 }: BudgetsTabProps) {
   const [editing, setEditing] = useState<Budget | 'NEW' | null>(null);
+  const baseCurrency = settings.baseCurrency;
 
   const progress = useMemo(
     () => budgetProgress(budgets, transactions, categories, month),
     [budgets, transactions, categories, month]
   );
+
+  const safeToSpendData = useMemo(
+    () =>
+      safeToSpend({
+        month,
+        transactions,
+        budgets,
+        plannedPayments,
+        toBase: (amount, currency) => convertToBase(amount, currency, settings).baseAmount,
+      }),
+    [month, transactions, budgets, plannedPayments, settings]
+  );
+
+  const pacing = useMemo(() => pacingComparison(transactions, month), [transactions, month]);
 
   const totalBudget = progress.find((p) => !p.budget.categoryId && !p.budget.memberId);
   const categoryBudgets = progress.filter((p) => p.budget.categoryId && !p.budget.memberId);
@@ -85,7 +108,9 @@ export function BudgetsTab({
         limitAmount: item.budget.limitAmount,
         currency: item.budget.currency,
         rolloverEnabled: true,
-        carriedOver: computeRollover(item),
+        // Same rule as the automatic pass: an overspend carries as a negative.
+        carriedOver: Math.round((item.effectiveLimit - item.spent) * 100) / 100,
+        rolloverAppliedFrom: month,
       });
     }
     onMonthChange(nextMonth);
@@ -112,6 +137,14 @@ export function BudgetsTab({
           <ChevronRight className="w-4 h-4" />
         </button>
       </Card>
+
+      <SafeToSpendCard
+        data={safeToSpendData}
+        currency={baseCurrency}
+        onSetBudget={() => setEditing('NEW')}
+      />
+
+      <PacingChart data={pacing} currency={baseCurrency} />
 
       {totalBudget ? (
         <Card className="p-4 space-y-3">
@@ -245,14 +278,22 @@ export function BudgetsTab({
       )}
 
       {progress.some((p) => p.budget.rolloverEnabled) && (
-        <button
-          type="button"
-          onClick={handleCarryOver}
-          className="w-full py-3 rounded-2xl bg-sky-50 dark:bg-sky-950/40 text-sky-600 dark:text-sky-400 text-[11px] font-black flex items-center justify-center gap-2 active:scale-95 transition-transform"
-        >
-          <PiggyBank className="w-4 h-4" />
-          Перенести остаток в {monthLabel(shiftMonth(month, 1))}
-        </button>
+        <div className="space-y-2">
+          <div className="flex items-start gap-2 p-3 rounded-2xl bg-sky-50 dark:bg-sky-950/40 text-sky-700 dark:text-sky-400">
+            <PiggyBank className="w-4 h-4 mt-px flex-shrink-0" />
+            <p className="text-[10.5px] font-bold leading-relaxed">
+              Остатки переносятся автоматически при наступлении нового месяца:
+              неизрасходованный лимит увеличивает следующий месяц, перерасход — уменьшает.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={handleCarryOver}
+            className="w-full py-2.5 rounded-2xl bg-slate-100 dark:bg-slate-800 text-slate-500 text-[11px] font-black active:scale-95 transition-transform"
+          >
+            Перенести сейчас в {monthLabel(shiftMonth(month, 1))}
+          </button>
+        </div>
       )}
 
       {editing && (

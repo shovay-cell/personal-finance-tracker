@@ -1,5 +1,9 @@
 import {
   Budget,
+  PlannedPayment,
+  SafeToSpend,
+  PacingComparison,
+  PacingPoint,
   BudgetProgress,
   CategoryBreakdownRow,
   CurrencyCode,
@@ -14,6 +18,7 @@ import {
 } from '@/types';
 import { CURRENCIES } from '@/constants/categories';
 import { computeObligationStatus, todayIso } from '@/lib/db';
+import { monthlyEquivalent, planKindOf } from './planned';
 
 export type PeriodPreset = 'WEEK' | 'MONTH' | 'QUARTER' | 'YEAR' | 'CUSTOM';
 
@@ -82,7 +87,13 @@ export function filterTransactions(
     if (options.kind && t.kind !== options.kind) return false;
     if (options.memberId && t.authorId !== options.memberId) return false;
     if (options.accountId && t.accountId !== options.accountId) return false;
-    if (options.categoryId && t.categoryId !== options.categoryId && t.subcategoryId !== options.categoryId)
+    if (
+      options.categoryId &&
+      !transactionParts(t).some(
+        (part) =>
+          part.categoryId === options.categoryId || part.subcategoryId === options.categoryId
+      )
+    )
       return false;
     if (search) {
       const haystack = `${t.note || ''} ${t.merchant || ''} ${t.amount}`.toLowerCase();
@@ -90,6 +101,41 @@ export function filterTransactions(
     }
     return true;
   });
+}
+
+export interface TransactionPart {
+  categoryId: string;
+  subcategoryId?: string;
+  amount: number;
+  baseAmount: number;
+}
+
+/**
+ * A transaction as the reports see it: a split receipt contributes one part per
+ * slice, everything else contributes a single part. Keeps every aggregation from
+ * having to know whether splits exist.
+ */
+export function transactionParts(transaction: Transaction): TransactionPart[] {
+  const splits = transaction.splits;
+  if (!splits || splits.length === 0) {
+    return [
+      {
+        categoryId: transaction.categoryId,
+        subcategoryId: transaction.subcategoryId,
+        amount: transaction.amount,
+        baseAmount: transaction.baseAmount,
+      },
+    ];
+  }
+
+  const splitTotal = splits.reduce((sum, part) => sum + part.amount, 0) || 1;
+  return splits.map((part) => ({
+    categoryId: part.categoryId,
+    subcategoryId: part.subcategoryId,
+    amount: part.amount,
+    // Base amounts follow the same proportion, so rounding never invents money.
+    baseAmount: Math.round(((part.amount / splitTotal) * transaction.baseAmount) * 100) / 100,
+  }));
 }
 
 export function sumBase(transactions: Transaction[]): number {
@@ -110,12 +156,14 @@ export function categoryBreakdown(
 
   for (const t of transactions) {
     if (t.kind !== kind) continue;
-    const category = byId.get(t.categoryId);
-    const rootId = category?.parentId || t.categoryId;
-    const entry = totals.get(rootId) || { total: 0, count: 0 };
-    entry.total += t.baseAmount;
-    entry.count += 1;
-    totals.set(rootId, entry);
+    for (const part of transactionParts(t)) {
+      const category = byId.get(part.categoryId);
+      const rootId = category?.parentId || part.categoryId;
+      const entry = totals.get(rootId) || { total: 0, count: 0 };
+      entry.total += part.baseAmount;
+      entry.count += 1;
+      totals.set(rootId, entry);
+    }
   }
 
   const grandTotal = Array.from(totals.values()).reduce((s, e) => s + e.total, 0);
@@ -168,15 +216,23 @@ export function budgetProgress(
   return budgets
     .filter((b) => b.month === month)
     .map((budget) => {
-      const relevant = monthExpenses.filter((t) => {
-        if (budget.memberId && t.authorId !== budget.memberId) return false;
-        if (!budget.categoryId) return true;
-        const category = byId.get(t.categoryId);
-        const rootId = category?.parentId || t.categoryId;
-        return rootId === budget.categoryId || t.categoryId === budget.categoryId;
-      });
+      let spent = 0;
+      for (const t of monthExpenses) {
+        if (budget.memberId && t.authorId !== budget.memberId) continue;
 
-      const spent = sumBase(relevant);
+        for (const part of transactionParts(t)) {
+          if (!budget.categoryId) {
+            spent += part.baseAmount;
+            continue;
+          }
+          const category = byId.get(part.categoryId);
+          const rootId = category?.parentId || part.categoryId;
+          if (rootId === budget.categoryId || part.categoryId === budget.categoryId) {
+            spent += part.baseAmount;
+          }
+        }
+      }
+      spent = Math.round(spent * 100) / 100;
       const effectiveLimit =
         Math.round((budget.limitAmount + (budget.rolloverEnabled ? budget.carriedOver : 0)) * 100) /
         100;
@@ -282,3 +338,142 @@ export function shiftMonth(month: string, delta: number): string {
 export function baseCurrencyOf(settings: FinanceSettings | null | undefined): CurrencyCode {
   return settings?.baseCurrency || 'ILS';
 }
+
+
+// ------------------------------------------------- «Доступно до конца месяца»
+
+function daysInMonth(month: string): number {
+  const [year, mon] = month.split('-').map(Number);
+  return new Date(year, mon, 0).getDate();
+}
+
+/**
+ * Safe-to-Spend: what is left for discretionary spending once the money already
+ * spent and the recurring payments still due this month are set aside, divided
+ * by the days remaining. Starts from the monthly budget; without one it falls
+ * back to the income actually booked this month.
+ */
+export function safeToSpend(input: {
+  month: string;
+  today?: string;
+  transactions: Transaction[];
+  budgets: Budget[];
+  plannedPayments: PlannedPayment[];
+  toBase: (amount: number, currency: CurrencyCode) => number;
+}): SafeToSpend {
+  const { month, transactions, budgets, plannedPayments, toBase } = input;
+  const today = input.today || todayIso();
+  const range = monthRange(month);
+  const inMonth = transactions.filter((t) => isWithin(t.date, range));
+
+  const spent = sumBase(inMonth.filter((t) => t.kind === 'EXPENSE'));
+  const income = sumBase(inMonth.filter((t) => t.kind === 'INCOME'));
+
+  const totalBudget = budgets.find((b) => b.month === month && !b.categoryId && !b.memberId);
+  const planned = totalBudget
+    ? totalBudget.limitAmount + (totalBudget.rolloverEnabled ? totalBudget.carriedOver : 0)
+    : income;
+  const basis: SafeToSpend['basis'] = totalBudget ? 'BUDGET' : income > 0 ? 'INCOME' : 'NONE';
+
+  // Recurring commitments whose due date still lies ahead inside this month, and
+  // which have not been booked yet — those already paid are inside `spent`.
+  const upcomingCommitted = plannedPayments.reduce((sum, payment) => {
+    if (!payment.isActive || payment.kind !== 'EXPENSE') return sum;
+    if (payment.nextDueDate < today || payment.nextDueDate > range.to) return sum;
+    const alreadyBooked = inMonth.some(
+      (t) => t.plannedPaymentId === payment.id && t.date === payment.nextDueDate
+    );
+    return alreadyBooked ? sum : sum + toBase(payment.amount, payment.currency);
+  }, 0);
+
+  const total = daysInMonth(month);
+  const currentDay = today.slice(0, 7) === month ? Number(today.slice(8, 10)) : total;
+  // The current day still counts: money can be spent today.
+  const daysLeft = Math.max(1, total - currentDay + 1);
+
+  const available = Math.round((planned - spent - upcomingCommitted) * 100) / 100;
+
+  return {
+    planned: Math.round(planned * 100) / 100,
+    spent,
+    upcomingCommitted: Math.round(upcomingCommitted * 100) / 100,
+    available,
+    daysLeft,
+    perDay: Math.round((available / daysLeft) * 100) / 100,
+    basis,
+  };
+}
+
+// ------------------------------------------------------------------ pacing
+
+/**
+ * Cumulative spending this month against the previous one, compared at the same
+ * day of the month — the honest way to answer "трачу быстрее или медленнее".
+ */
+export function pacingComparison(
+  transactions: Transaction[],
+  month: string,
+  today = todayIso()
+): PacingComparison {
+  const previousMonth = shiftMonth(month, -1);
+  const dayOfMonth =
+    today.slice(0, 7) === month ? Number(today.slice(8, 10)) : daysInMonth(month);
+
+  const cumulative = (targetMonth: string): number[] => {
+    const days = daysInMonth(targetMonth);
+    const perDay = new Array(days + 1).fill(0);
+
+    for (const t of transactions) {
+      if (t.kind !== 'EXPENSE' || t.date.slice(0, 7) !== targetMonth) continue;
+      const day = Number(t.date.slice(8, 10));
+      if (day >= 1 && day <= days) perDay[day] += t.baseAmount;
+    }
+
+    const out: number[] = [];
+    let running = 0;
+    for (let day = 1; day <= days; day++) {
+      running += perDay[day];
+      out.push(Math.round(running * 100) / 100);
+    }
+    return out;
+  };
+
+  const currentSeries = cumulative(month);
+  const previousSeries = cumulative(previousMonth);
+
+  const points: PacingPoint[] = [];
+  const span = Math.max(currentSeries.length, previousSeries.length);
+  for (let day = 1; day <= span; day++) {
+    points.push({
+      day,
+      // Future days of the running month stay empty instead of drawing a flat line.
+      current: day <= dayOfMonth ? currentSeries[day - 1] ?? 0 : undefined,
+      previous: previousSeries[day - 1] ?? previousSeries[previousSeries.length - 1] ?? 0,
+    });
+  }
+
+  const currentTotal = currentSeries[Math.min(dayOfMonth, currentSeries.length) - 1] ?? 0;
+  const previousTotal = previousSeries[Math.min(dayOfMonth, previousSeries.length) - 1] ?? 0;
+
+  return {
+    currentTotal,
+    previousTotal,
+    deltaShare: previousTotal > 0 ? (currentTotal - previousTotal) / previousTotal : 0,
+    dayOfMonth,
+    points,
+    previousMonthTotal: previousSeries[previousSeries.length - 1] ?? 0,
+  };
+}
+
+/** Total recurring monthly commitment across payments, subscriptions and investments. */
+export function monthlyCommitments(
+  plannedPayments: PlannedPayment[],
+  toBase: (amount: number, currency: CurrencyCode) => number
+): number {
+  const total = plannedPayments
+    .filter((p) => p.isActive && p.kind === 'EXPENSE' && p.recurrence !== 'ONCE')
+    .reduce((sum, p) => sum + toBase(monthlyEquivalent(p), p.currency), 0);
+  return Math.round(total * 100) / 100;
+}
+
+export { planKindOf };
