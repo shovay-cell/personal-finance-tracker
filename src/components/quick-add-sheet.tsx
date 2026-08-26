@@ -1,0 +1,413 @@
+'use client';
+
+import React, { useEffect, useRef, useState } from 'react';
+import { Delete, Loader2, Mic, MicOff, ScanLine, Sparkles, Wallet } from 'lucide-react';
+import {
+  CurrencyCode,
+  FinanceAccount,
+  FinanceCategory,
+  SpeechLocale,
+  TransactionKind,
+} from '@/types';
+import { addTransaction } from '@/lib/db';
+import {
+  CategoryGrid,
+  CurrencySelector,
+  ModalShell,
+  PrimaryButton,
+  SegmentedControl,
+} from './ui';
+import { TransactionPrefill } from './transaction-form-modal';
+import {
+  analyzeReceiptWithAI,
+  compressForStorage,
+  readFileAsDataUrl,
+  resolveCategoryId,
+} from '@/services/ai/receipt-parser';
+import {
+  isVoiceInputSupported,
+  parseVoiceTransaction,
+  startVoiceCapture,
+  VoiceSession,
+} from '@/services/voice/voice-input';
+
+type QuickMode = 'MANUAL' | 'SCAN' | 'VOICE';
+
+interface QuickAddSheetProps {
+  categories: FinanceCategory[];
+  accounts: FinanceAccount[];
+  baseCurrency: CurrencyCode;
+  speechLocale: SpeechLocale;
+  initialMode?: QuickMode;
+  onClose: () => void;
+  /** Hands an AI/voice draft over to the full form for confirmation. */
+  onOpenFullForm: (prefill: TransactionPrefill) => void;
+  onSaved?: () => void;
+}
+
+/**
+ * The sticky quick-entry surface: two taps from opening the app to a saved
+ * expense (amount on the keypad → category chip). Scan and voice are alternate
+ * entry modes on the same sheet, and both hand off to the full form so nothing
+ * an AI guessed is saved without a look.
+ */
+export function QuickAddSheet({
+  categories,
+  accounts,
+  baseCurrency,
+  speechLocale,
+  initialMode = 'MANUAL',
+  onClose,
+  onOpenFullForm,
+  onSaved,
+}: QuickAddSheetProps) {
+  const [mode, setMode] = useState<QuickMode>(initialMode);
+  const [kind, setKind] = useState<TransactionKind>('EXPENSE');
+  const [amount, setAmount] = useState('');
+  const [currency, setCurrency] = useState<CurrencyCode>(baseCurrency);
+  const [categoryId, setCategoryId] = useState('');
+  const [accountId, setAccountId] = useState(accounts[0]?.id || '');
+  const [isBusy, setIsBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const [isListening, setIsListening] = useState(false);
+  const [transcript, setTranscript] = useState('');
+  const voiceSession = useRef<VoiceSession | null>(null);
+  const scanInputRef = useRef<HTMLInputElement>(null);
+
+  const visibleCategories = categories.filter((c) => c.kind === kind && !c.parentId && !c.isHidden);
+
+  useEffect(() => {
+    if (initialMode === 'SCAN') {
+      // Deep link from a home-screen shortcut: open the camera immediately.
+      scanInputRef.current?.click();
+    }
+    if (initialMode === 'VOICE') {
+      handleVoiceToggle();
+    }
+    return () => voiceSession.current?.stop();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const pressKey = (key: string) => {
+    setError(null);
+    if (key === 'DEL') {
+      setAmount((prev) => prev.slice(0, -1));
+      return;
+    }
+    if (key === '.') {
+      setAmount((prev) => (prev.includes('.') ? prev : prev === '' ? '0.' : `${prev}.`));
+      return;
+    }
+    setAmount((prev) => {
+      const next = prev + key;
+      // Two decimals max, and no absurdly long inputs from a stuck key.
+      if (next.includes('.') && next.split('.')[1].length > 2) return prev;
+      return next.length > 12 ? prev : next;
+    });
+  };
+
+  const handleSave = async () => {
+    const numericAmount = parseFloat(amount);
+    if (!Number.isFinite(numericAmount) || numericAmount <= 0) {
+      setError('Введите сумму');
+      return;
+    }
+    if (!categoryId) {
+      setError('Выберите категорию');
+      return;
+    }
+
+    setIsBusy(true);
+    try {
+      await addTransaction({
+        kind,
+        amount: numericAmount,
+        currency,
+        categoryId,
+        accountId: accountId || accounts[0]?.id,
+        date: new Date().toISOString().slice(0, 10),
+        source: 'MANUAL',
+      } as any);
+      onSaved?.();
+      onClose();
+    } catch (err: any) {
+      setError(err.message || 'Не удалось сохранить');
+    } finally {
+      setIsBusy(false);
+    }
+  };
+
+  const handleScan = async (file: File | null) => {
+    if (!file) return;
+    setIsBusy(true);
+    setError(null);
+
+    try {
+      const dataUrl = await readFileAsDataUrl(file);
+      const [stored, parsed] = await Promise.all([
+        compressForStorage(dataUrl),
+        analyzeReceiptWithAI(dataUrl, file.type || 'image/jpeg'),
+      ]);
+
+      onOpenFullForm({
+        kind: 'EXPENSE',
+        amount: parsed.amount,
+        currency: parsed.currency || baseCurrency,
+        date: parsed.date,
+        merchant: parsed.merchant,
+        categoryId: resolveCategoryId(parsed.suggestedCategoryName, parsed.merchant, categories),
+        receiptPhoto: stored,
+        receiptScan: {
+          merchant: parsed.merchant,
+          lineItems: parsed.lineItems,
+          rawText: parsed.rawText,
+          uncertainFields: parsed.uncertainFields,
+          modelConfidence: parsed.modelConfidence,
+          scannedAt: new Date().toISOString(),
+        },
+        uncertainFields: parsed.uncertainFields,
+        source: 'RECEIPT_SCAN',
+      });
+      onClose();
+    } catch (err: any) {
+      setError(err.message || 'Не удалось распознать чек');
+      setIsBusy(false);
+    }
+  };
+
+  function handleVoiceToggle() {
+    if (isListening) {
+      voiceSession.current?.stop();
+      setIsListening(false);
+      return;
+    }
+
+    setError(null);
+    setTranscript('');
+    setIsListening(true);
+
+    voiceSession.current = startVoiceCapture(speechLocale, {
+      onInterim: setTranscript,
+      onResult: (text) => {
+        setTranscript(text);
+        const parsed = parseVoiceTransaction(text, categories, baseCurrency);
+        onOpenFullForm({
+          kind: parsed.kind,
+          amount: parsed.amount,
+          currency: parsed.currency,
+          categoryId: parsed.categoryId,
+          date: parsed.date,
+          note: parsed.note,
+          uncertainFields: parsed.uncertainFields,
+          source: 'VOICE',
+        });
+        onClose();
+      },
+      onError: (message) => {
+        setError(message);
+        setIsListening(false);
+      },
+      onEnd: () => setIsListening(false),
+    });
+  }
+
+  const keypadKeys = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '.', '0', 'DEL'];
+
+  return (
+    <ModalShell
+      title="Быстрый ввод"
+      subtitle="Сумма и категория — операция записана"
+      icon={<Wallet className="w-5 h-5" />}
+      onClose={onClose}
+      footer={
+        mode === 'MANUAL' ? (
+          <div className="space-y-2">
+            {error && <p className="text-[11px] font-bold text-rose-500 text-center">{error}</p>}
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() =>
+                  onOpenFullForm({
+                    kind,
+                    amount: parseFloat(amount) || undefined,
+                    currency,
+                    categoryId: categoryId || undefined,
+                    accountId,
+                  })
+                }
+                className="px-4 py-3 rounded-2xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-[11px] font-black active:scale-95 transition-transform whitespace-nowrap"
+              >
+                Детали
+              </button>
+              <PrimaryButton
+                onClick={handleSave}
+                disabled={isBusy}
+                variant={kind === 'EXPENSE' ? 'primary' : 'success'}
+              >
+                {isBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+                Записать
+              </PrimaryButton>
+            </div>
+          </div>
+        ) : undefined
+      }
+    >
+      <div className="flex gap-1.5">
+        {(
+          [
+            { value: 'MANUAL' as QuickMode, label: 'Вручную', icon: Wallet },
+            { value: 'SCAN' as QuickMode, label: 'Чек', icon: ScanLine },
+            { value: 'VOICE' as QuickMode, label: 'Голос', icon: Mic },
+          ]
+        ).map((option) => {
+          const Icon = option.icon;
+          const isActive = mode === option.value;
+          return (
+            <button
+              key={option.value}
+              type="button"
+              onClick={() => {
+                setMode(option.value);
+                setError(null);
+                if (option.value === 'SCAN') scanInputRef.current?.click();
+              }}
+              className={`flex-1 flex flex-col items-center gap-1 py-2.5 rounded-2xl border text-[10px] font-black transition-all ${
+                isActive
+                  ? 'bg-sky-500 text-white border-transparent shadow-md shadow-sky-500/25'
+                  : 'bg-slate-50 dark:bg-slate-800 text-slate-500 border-slate-200 dark:border-slate-700'
+              }`}
+            >
+              <Icon className="w-4 h-4" />
+              {option.label}
+            </button>
+          );
+        })}
+      </div>
+
+      <input
+        ref={scanInputRef}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        className="hidden"
+        onChange={(e) => handleScan(e.target.files?.[0] || null)}
+      />
+
+      {mode === 'SCAN' && (
+        <div className="py-6 text-center space-y-3">
+          {isBusy ? (
+            <>
+              <Loader2 className="w-9 h-9 mx-auto text-sky-500 animate-spin" />
+              <p className="text-xs font-black text-slate-600 dark:text-slate-300">
+                Gemini распознаёт чек…
+              </p>
+              <p className="text-[11px] text-slate-400 font-medium px-6">
+                Дата, сумма, магазин и позиции подставятся в форму. Поля, в которых ИИ не уверен,
+                будут подсвечены.
+              </p>
+            </>
+          ) : (
+            <>
+              <Sparkles className="w-9 h-9 mx-auto text-sky-500" />
+              <PrimaryButton onClick={() => scanInputRef.current?.click()}>
+                <ScanLine className="w-4 h-4" />
+                Сфотографировать чек
+              </PrimaryButton>
+              {error && <p className="text-[11px] font-bold text-rose-500">{error}</p>}
+            </>
+          )}
+        </div>
+      )}
+
+      {mode === 'VOICE' && (
+        <div className="py-6 text-center space-y-4">
+          {!isVoiceInputSupported() ? (
+            <p className="text-xs font-bold text-slate-500 px-6">
+              Голосовой ввод не поддерживается этим браузером. Откройте приложение в Chrome или
+              Safari.
+            </p>
+          ) : (
+            <>
+              <button
+                type="button"
+                onClick={handleVoiceToggle}
+                className={`w-24 h-24 mx-auto rounded-full flex items-center justify-center transition-all active:scale-95 ${
+                  isListening
+                    ? 'bg-rose-500 text-white shadow-xl shadow-rose-500/40 animate-pulse'
+                    : 'bg-gradient-to-tr from-sky-500 to-cyan-400 text-white shadow-xl shadow-sky-500/30'
+                }`}
+              >
+                {isListening ? <MicOff className="w-9 h-9" /> : <Mic className="w-9 h-9" />}
+              </button>
+              <p className="text-xs font-black text-slate-600 dark:text-slate-300">
+                {isListening ? 'Говорите…' : 'Нажмите и надиктуйте операцию'}
+              </p>
+              <p className="text-[11px] text-slate-400 font-medium px-6">
+                Например: «потратил 50 на кафе». Язык распознавания — из настроек профиля.
+              </p>
+              {transcript && (
+                <p className="text-xs font-bold text-sky-600 dark:text-sky-400 px-6">«{transcript}»</p>
+              )}
+              {error && <p className="text-[11px] font-bold text-rose-500 px-6">{error}</p>}
+            </>
+          )}
+        </div>
+      )}
+
+      {mode === 'MANUAL' && (
+        <>
+          <SegmentedControl<TransactionKind>
+            value={kind}
+            onChange={(next) => {
+              setKind(next);
+              setCategoryId('');
+            }}
+            options={[
+              {
+                value: 'EXPENSE',
+                label: 'РАСХОД',
+                activeClass: 'bg-white dark:bg-slate-900 text-rose-600 dark:text-rose-400 shadow-sm',
+              },
+              {
+                value: 'INCOME',
+                label: 'ДОХОД',
+                activeClass:
+                  'bg-white dark:bg-slate-900 text-emerald-600 dark:text-emerald-400 shadow-sm',
+              },
+            ]}
+          />
+
+          <div className="text-center py-2">
+            <span
+              className={`text-4xl font-black tabular-nums ${
+                kind === 'EXPENSE'
+                  ? 'text-slate-900 dark:text-slate-100'
+                  : 'text-emerald-600 dark:text-emerald-400'
+              }`}
+            >
+              {amount || '0'}
+            </span>
+          </div>
+
+          <CurrencySelector value={currency} onChange={setCurrency} />
+
+          <div className="grid grid-cols-3 gap-2">
+            {keypadKeys.map((key) => (
+              <button
+                key={key}
+                type="button"
+                onClick={() => pressKey(key)}
+                className="py-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800 text-lg font-black text-slate-700 dark:text-slate-200 active:scale-95 active:bg-slate-100 transition-all flex items-center justify-center"
+              >
+                {key === 'DEL' ? <Delete className="w-5 h-5" /> : key}
+              </button>
+            ))}
+          </div>
+
+          <CategoryGrid categories={visibleCategories} selectedId={categoryId} onSelect={setCategoryId} />
+        </>
+      )}
+    </ModalShell>
+  );
+}

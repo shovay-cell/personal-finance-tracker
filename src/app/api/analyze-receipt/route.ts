@@ -1,0 +1,154 @@
+import { NextRequest, NextResponse } from 'next/server';
+
+/** Kept in sync with the client fallback in services/ai/receipt-parser.ts. */
+const RECEIPT_PROMPT = `Ты — ИИ-бухгалтер приложения FinTrack.
+Проанализируй фото/скан кассового чека, квитанции или расписки.
+Документ может быть на иврите (עברית), русском или английском.
+
+ПРАВИЛА:
+1. Извлекай ТОЛЬКО то, что реально напечатано на изображении. НИКОГДА не выдумывай суммы, даты и названия.
+2. total — ИТОГОВАЯ сумма к оплате (סה"כ לתשלום / TOTAL / ИТОГО), а не сумма одной позиции и не сумма НДС.
+3. Если чек в шекелях (₪ / ש"ח / ILS) — currency: "ILS". Доллар ($ / USD) — "USD". Евро (€ / EUR) — "EUR".
+4. date — дата чека в формате YYYY-MM-DD. Формат в Израиле обычно DD/MM/YYYY: 03/04/2026 — это 2026-04-03.
+5. category — предполагаемая категория расхода одним словом из списка:
+   Продукты, Кафе и рестораны, Машина, Транспорт, Здоровье, Дом/уют, Покупки, Коммуналка,
+   Развлечения, Дети, Спорт, Образование, Путешествия, Подписки, Платежи, комиссии, Другое.
+6. confidence — твоя общая уверенность в распознавании от 0 до 1.
+7. uncertainFields — массив имён полей ("amount", "date", "merchant", "category", "currency"),
+   в которых ты НЕ уверен (плохо видно, затёрто, неоднозначно). Пустой массив, если всё читается чётко.
+   Это критично: непроверенные поля пользователь подтверждает вручную.
+
+Верни СТРОГО валидный JSON:
+{
+  "merchant": "Название магазина/продавца как на чеке",
+  "total": 0.0,
+  "currency": "ILS" | "USD" | "EUR",
+  "date": "YYYY-MM-DD",
+  "category": "Категория из списка выше",
+  "items": [{ "name": "Позиция", "quantity": 1, "price": 0.0 }],
+  "rawText": "Распознанный текст чека",
+  "confidence": 0.0,
+  "uncertainFields": ["amount"]
+}
+
+Верни ИСКЛЮЧИТЕЛЬНО валидный JSON без markdown-обёрток и пояснений.`;
+
+export async function POST(req: NextRequest) {
+  try {
+    const body = await req.json();
+    const { base64Data, mimeType = 'image/jpeg', apiKey: clientApiKey } = body;
+
+    if (!base64Data) {
+      return NextResponse.json(
+        { success: false, error: 'MISSING_DATA', message: 'Отсутствует изображение чека для анализа' },
+        { status: 400 }
+      );
+    }
+
+    // Only a key the user typed in themselves may arrive from the browser; the
+    // shared default key stays server-side in this env var.
+    const apiKey = (clientApiKey || process.env.GEMINI_API_KEY || '').trim();
+
+    if (!apiKey) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'NO_API_KEY',
+          message: 'API Key для Gemini не указан. Добавьте ключ в настройках или в .env',
+        },
+        { status: 400 }
+      );
+    }
+
+    const cleanBase64 = base64Data.includes('base64,')
+      ? base64Data.split('base64,')[1]
+      : base64Data;
+
+    let cleanMimeType = mimeType;
+    if (base64Data.startsWith('data:')) {
+      const match = base64Data.match(/data:([^;]+);/);
+      if (match) cleanMimeType = match[1];
+    }
+    if (!cleanMimeType || cleanMimeType === 'application/octet-stream') {
+      cleanMimeType = 'image/jpeg';
+    }
+
+    const modelsToTry = ['gemini-3.6-flash', 'gemini-3.7-flash', 'gemini-3.5-flash'];
+    let geminiJson: any = null;
+    let lastError = '';
+
+    for (const model of modelsToTry) {
+      try {
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [
+              {
+                parts: [
+                  { inline_data: { mime_type: cleanMimeType, data: cleanBase64 } },
+                  { text: RECEIPT_PROMPT },
+                ],
+              },
+            ],
+            generationConfig: { temperature: 0.1, responseMimeType: 'application/json' },
+          }),
+        });
+
+        if (res.ok) {
+          geminiJson = await res.json();
+          break;
+        }
+
+        lastError = `${model} returned ${res.status}: ${await res.text()}`;
+        console.warn(`Gemini receipt model ${model} error:`, lastError);
+      } catch (err: any) {
+        lastError = err.message || String(err);
+        console.warn(`Gemini receipt fetch error on ${model}:`, err);
+      }
+    }
+
+    if (!geminiJson) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'GEMINI_API_ERROR',
+          message: `Ошибка обращения к Gemini API: ${lastError}`,
+        },
+        { status: 502 }
+      );
+    }
+
+    const textContent = geminiJson.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    if (!textContent) {
+      return NextResponse.json(
+        { success: false, error: 'EMPTY_RESPONSE', message: 'Модель Gemini вернула пустой ответ' },
+        { status: 500 }
+      );
+    }
+
+    let cleanJsonString = textContent.trim();
+    if (cleanJsonString.startsWith('```json')) {
+      cleanJsonString = cleanJsonString.replace(/^```json\s*/, '').replace(/\s*```$/, '');
+    } else if (cleanJsonString.startsWith('```')) {
+      cleanJsonString = cleanJsonString.replace(/^```\s*/, '').replace(/\s*```$/, '');
+    }
+
+    return NextResponse.json({
+      success: true,
+      data: JSON.parse(cleanJsonString),
+      source: 'gemini_multimodal_api',
+    });
+  } catch (error: any) {
+    console.error('Server analyze-receipt error:', error);
+    return NextResponse.json(
+      {
+        success: false,
+        error: 'SERVER_ERROR',
+        message: error.message || 'Внутренняя ошибка сервера при анализе чека',
+      },
+      { status: 500 }
+    );
+  }
+}
