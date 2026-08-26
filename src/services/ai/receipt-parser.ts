@@ -4,6 +4,9 @@ import {
   CurrencyCode,
   FinanceCategory,
   ParsedReceiptResult,
+  ParsedStatement,
+  ParsedStatementRow,
+  TransactionKind,
   ReceiptFieldFlag,
   ReceiptLineItem,
 } from '@/types';
@@ -435,4 +438,137 @@ export async function analyzeReceiptWithAI(
     'UNKNOWN',
     'Не удалось распознать чек. Попробуйте ещё раз или запишите операцию вручную.'
   );
+}
+
+
+// ------------------------------------------------- statement (list) parsing
+
+interface RawStatementResponse {
+  rows?: {
+    date?: string;
+    amount?: number | string;
+    currency?: string;
+    kind?: string;
+    description?: string;
+    category?: string;
+    uncertainFields?: string[];
+  }[];
+  rawText?: string;
+  confidence?: number;
+}
+
+function normalizeStatement(raw: RawStatementResponse): ParsedStatement {
+  const rows: ParsedStatementRow[] = (raw.rows || [])
+    .map((row) => {
+      const amount = normalizeAmount(row.amount);
+      const date = normalizeDate(row.date);
+      const uncertain = new Set<ReceiptFieldFlag>(
+        (row.uncertainFields || []).filter((f): f is ReceiptFieldFlag =>
+          ['amount', 'date', 'merchant', 'category', 'currency'].includes(f)
+        )
+      );
+
+      // A row the model could not read fully still gets imported — flagged, so
+      // the user fixes it in the review list instead of losing the row entirely.
+      if (amount === undefined || amount === 0) uncertain.add('amount');
+      if (!date) uncertain.add('date');
+      if (!row.category) uncertain.add('category');
+
+      const kind: TransactionKind = /expense|расход|списан/i.test(row.kind || '')
+        ? 'EXPENSE'
+        : 'INCOME';
+
+      return {
+        date,
+        amount,
+        currency: normalizeCurrency(row.currency),
+        kind,
+        description: row.description?.trim() || undefined,
+        suggestedCategoryName: row.category?.trim() || undefined,
+        uncertainFields: Array.from(uncertain),
+      };
+    })
+    // Rows with neither a sum nor a date are noise (headers, page numbers).
+    .filter((row) => row.amount !== undefined || row.date !== undefined);
+
+  return {
+    rows,
+    rawText: raw.rawText,
+    modelConfidence: typeof raw.confidence === 'number' ? raw.confidence : undefined,
+  };
+}
+
+/** Reads a photographed list of bank operations into separate rows. */
+export async function analyzeStatementWithAI(
+  base64DataUrl: string,
+  mimeType = 'image/jpeg',
+  userKey?: string
+): Promise<ParsedStatement> {
+  const apiKey = (userKey || getStoredGeminiKey() || '').trim();
+
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+    throw new ReceiptScanError('OFFLINE', 'Нет подключения к сети — список нельзя распознать.');
+  }
+
+  // Statements are dense text: keep more pixels than a receipt scan does.
+  const payload = mimeType.startsWith('image/')
+    ? await compressImage(base64DataUrl, 2200)
+    : base64DataUrl;
+
+  const res = await fetch('/api/analyze-statement', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ base64Data: payload, mimeType: 'image/jpeg', apiKey }),
+  }).catch(() => null);
+
+  if (!res) {
+    throw new ReceiptScanError(
+      'OFFLINE',
+      'Сервер распознавания недоступен. Проверьте соединение и попробуйте ещё раз.'
+    );
+  }
+
+  const json = await res.json().catch(() => null);
+
+  if (res.ok && json?.success && json.data) {
+    const parsed = normalizeStatement(json.data as RawStatementResponse);
+    if (parsed.rows.length === 0) {
+      throw new ReceiptScanError(
+        'MODEL_ERROR',
+        'В списке не распознано ни одной операции. Снимите список крупнее и без бликов.'
+      );
+    }
+    return parsed;
+  }
+
+  throw classifyServerError(json?.error, json?.message);
+}
+
+/** Maps a statement row onto a category id, honouring the operation direction. */
+export function resolveStatementCategoryId(
+  row: ParsedStatementRow,
+  categories: FinanceCategory[]
+): string | undefined {
+  const pool = categories.filter((c) => c.kind === row.kind && !c.parentId && !c.isHidden);
+  const needle = row.suggestedCategoryName?.trim().toLowerCase();
+
+  if (needle) {
+    const exact = pool.find((c) => c.name.toLowerCase() === needle);
+    if (exact) return exact.id;
+    const partial = pool.find(
+      (c) => c.name.toLowerCase().includes(needle) || needle.includes(c.name.toLowerCase())
+    );
+    if (partial) return partial.id;
+  }
+
+  if (row.kind === 'EXPENSE') {
+    return resolveCategoryId(row.suggestedCategoryName, row.description, categories);
+  }
+
+  // Salary is the overwhelmingly common income row in a bank list.
+  if (/משכורת|salary|зарплат|שכר/i.test(row.description || '')) {
+    return pool.find((c) => c.id === 'cat-salary')?.id;
+  }
+
+  return undefined;
 }

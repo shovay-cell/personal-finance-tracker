@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useRef, useState } from 'react';
-import { Delete, Loader2, Mic, MicOff, ScanLine, Sparkles, Wallet } from 'lucide-react';
+import { Delete, Layers, Loader2, Mic, MicOff, ScanLine, Sparkles, Wallet } from 'lucide-react';
 import {
   CurrencyCode,
   FinanceAccount,
@@ -34,7 +34,7 @@ import {
   VoiceSession,
 } from '@/services/voice/voice-input';
 
-type QuickMode = 'MANUAL' | 'SCAN' | 'VOICE';
+type QuickMode = 'MANUAL' | 'SCAN' | 'VOICE' | 'STATEMENT';
 
 interface QuickAddSheetProps {
   categories: FinanceCategory[];
@@ -45,6 +45,8 @@ interface QuickAddSheetProps {
   onClose: () => void;
   /** Hands an AI/voice draft over to the full form for confirmation. */
   onOpenFullForm: (prefill: TransactionPrefill) => void;
+  /** Opens the batch importer for a photographed list of bank operations. */
+  onOpenStatementImport: () => void;
   onSaved?: () => void;
 }
 
@@ -62,6 +64,7 @@ export function QuickAddSheet({
   initialMode = 'MANUAL',
   onClose,
   onOpenFullForm,
+  onOpenStatementImport,
   onSaved,
 }: QuickAddSheetProps) {
   const [mode, setMode] = useState<QuickMode>(initialMode);
@@ -90,6 +93,10 @@ export function QuickAddSheet({
     }
     if (initialMode === 'VOICE') {
       handleVoiceToggle();
+    }
+    if (initialMode === 'STATEMENT') {
+      onOpenStatementImport();
+      onClose();
     }
     return () => voiceSession.current?.stop();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -271,6 +278,7 @@ export function QuickAddSheet({
           [
             { value: 'MANUAL' as QuickMode, label: 'Вручную', icon: Wallet },
             { value: 'SCAN' as QuickMode, label: 'Чек', icon: ScanLine },
+            { value: 'STATEMENT' as QuickMode, label: 'Список', icon: Layers },
             { value: 'VOICE' as QuickMode, label: 'Голос', icon: Mic },
           ]
         ).map((option) => {
@@ -281,8 +289,15 @@ export function QuickAddSheet({
               key={option.value}
               type="button"
               onClick={() => {
-                setMode(option.value);
                 setError(null);
+                // The statement importer owns its own review flow — hand over
+                // instead of stacking it inside the quick-entry sheet.
+                if (option.value === 'STATEMENT') {
+                  onOpenStatementImport();
+                  onClose();
+                  return;
+                }
+                setMode(option.value);
                 if (option.value === 'SCAN') scanInputRef.current?.click();
               }}
               className={`flex-1 flex flex-col items-center gap-1 py-2.5 rounded-2xl border text-[10px] font-black transition-all ${

@@ -350,6 +350,23 @@ export interface ParsedReceiptResult {
   modelConfidence?: number;
 }
 
+/** One recognised row of a photographed bank statement. */
+export interface ParsedStatementRow {
+  date?: string;
+  amount?: number;
+  currency?: CurrencyCode;
+  kind: TransactionKind;
+  description?: string;
+  suggestedCategoryName?: string;
+  uncertainFields: ReceiptFieldFlag[];
+}
+
+export interface ParsedStatement {
+  rows: ParsedStatementRow[];
+  rawText?: string;
+  modelConfidence?: number;
+}
+
 export interface ParsedVoiceResult {
   kind: TransactionKind;
   amount?: number;

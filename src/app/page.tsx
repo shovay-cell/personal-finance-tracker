@@ -22,6 +22,7 @@ import {
   rangeForPreset,
   monthLabel,
   formatMoney,
+  pluralRu,
 } from '@/services/analytics';
 import {
   materializePlannedPayment,
@@ -41,6 +42,7 @@ import { ObligationsTab } from '@/components/obligations-tab';
 import { ReportsTab } from '@/components/reports-tab';
 import { SettingsTab } from '@/components/settings-tab';
 import { QuickAddSheet } from '@/components/quick-add-sheet';
+import { StatementImportModal } from '@/components/statement-import-modal';
 import {
   TransactionFormModal,
   TransactionPrefill,
@@ -54,7 +56,10 @@ function FinanceApp() {
   const [preset, setPreset] = useState<PeriodPreset>('MONTH');
   const [range, setRange] = useState<DateRange>(() => rangeForPreset('MONTH'));
 
-  const [quickAddMode, setQuickAddMode] = useState<'MANUAL' | 'SCAN' | 'VOICE' | null>(null);
+  const [quickAddMode, setQuickAddMode] = useState<
+    'MANUAL' | 'SCAN' | 'VOICE' | 'STATEMENT' | null
+  >(null);
+  const [isImportingStatement, setIsImportingStatement] = useState(false);
   const [formPrefill, setFormPrefill] = useState<TransactionPrefill | null>(null);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
   const [pendingPlanned, setPendingPlanned] = useState<PlannedPayment[]>([]);
@@ -113,6 +118,7 @@ function FinanceApp() {
     if (!mounted || !quick) return;
     if (quick === 'scan') setQuickAddMode('SCAN');
     else if (quick === 'voice') setQuickAddMode('VOICE');
+    else if (quick === 'list' || quick === 'statement') setIsImportingStatement(true);
     else if (quick === 'expense' || quick === 'add') setQuickAddMode('MANUAL');
   }, [searchParams, mounted]);
 
@@ -333,7 +339,23 @@ function FinanceApp() {
           initialMode={quickAddMode}
           onClose={() => setQuickAddMode(null)}
           onOpenFullForm={(prefill) => setFormPrefill(prefill)}
+          onOpenStatementImport={() => setIsImportingStatement(true)}
           onSaved={() => setToast('Операция записана')}
+        />
+      )}
+
+      {isImportingStatement && (
+        <StatementImportModal
+          categories={categories}
+          accounts={accounts}
+          transactions={transactions}
+          baseCurrency={settings.baseCurrency}
+          onClose={() => setIsImportingStatement(false)}
+          onImported={(count) =>
+            setToast(
+              `Внесено ${count} ${pluralRu(count, 'операция', 'операции', 'операций')}`
+            )
+          }
         />
       )}
 
