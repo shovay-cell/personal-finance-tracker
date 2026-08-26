@@ -221,9 +221,45 @@ const CLIENT_PROMPT = `Ты — ИИ-бухгалтер приложения Fin
 {"merchant":"","total":0.0,"currency":"ILS"|"USD"|"EUR","date":"YYYY-MM-DD","category":"","items":[{"name":"","quantity":1,"price":0.0}],"rawText":"","confidence":0.0,"uncertainFields":[]}
 uncertainFields — поля ("amount","date","merchant","category","currency"), в которых ты не уверен.`;
 
+/** Google issues two key shapes: legacy `AIza…` and current auth keys `AQ.…`. */
+export function looksLikeGeminiKey(key: string): boolean {
+  const trimmed = key.trim();
+  return trimmed.startsWith('AIza') || trimmed.startsWith('AQ.');
+}
+
+/**
+ * One Gemini call, trying the `x-goog-api-key` header first and retrying through
+ * the `?key=` query parameter when the header form is refused as unauthenticated.
+ */
+async function callGeminiDirect(
+  model: string,
+  apiKey: string,
+  buildBody: () => string
+): Promise<Response> {
+  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
+  const body = buildBody();
+
+  const withHeader = await fetch(endpoint, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
+    body,
+  });
+
+  if (withHeader.ok || (withHeader.status !== 401 && withHeader.status !== 403)) {
+    return withHeader;
+  }
+
+  return fetch(`${endpoint}?key=${encodeURIComponent(apiKey)}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body,
+  });
+}
+
 export type ReceiptScanErrorCode =
   | 'NO_API_KEY'
   | 'INVALID_KEY'
+  | 'KEY_TYPE_UNSUPPORTED'
   | 'QUOTA'
   | 'OFFLINE'
   | 'MODEL_ERROR'
@@ -244,7 +280,12 @@ export class ReceiptScanError extends Error {
 
   /** True when the user can fix it by pasting a personal Gemini key. */
   get needsApiKey(): boolean {
-    return this.code === 'NO_API_KEY' || this.code === 'INVALID_KEY' || this.code === 'QUOTA';
+    return (
+      this.code === 'NO_API_KEY' ||
+      this.code === 'INVALID_KEY' ||
+      this.code === 'KEY_TYPE_UNSUPPORTED' ||
+      this.code === 'QUOTA'
+    );
   }
 }
 
@@ -256,6 +297,15 @@ function classifyServerError(error?: string, message?: string): ReceiptScanError
     return new ReceiptScanError(
       'NO_API_KEY',
       'Ключ Gemini не настроен. Вставьте свой ключ — он сохранится только на этом устройстве.'
+    );
+  }
+
+  // Google rejects some new-format keys on this endpoint with a dedicated code;
+  // saying "ключ неверный" there would send the user chasing the wrong problem.
+  if (/ACCESS_TOKEN_TYPE_UNSUPPORTED/i.test(text)) {
+    return new ReceiptScanError(
+      'KEY_TYPE_UNSUPPORTED',
+      'Google не принимает этот ключ для Gemini API (ACCESS_TOKEN_TYPE_UNSUPPORTED). Создайте ключ в проекте, где включён Generative Language API, и попробуйте снова.'
     );
   }
 
@@ -335,23 +385,20 @@ export async function analyzeReceiptWithAI(
 
     for (const model of models) {
       try {
-        const res = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
-          {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              contents: [
-                {
-                  parts: [
-                    { inline_data: { mime_type: payloadMime, data: cleanBase64 } },
-                    { text: CLIENT_PROMPT },
-                  ],
-                },
-              ],
-              generationConfig: { temperature: 0.1, responseMimeType: 'application/json' },
-            }),
-          }
+        // Header first: it keeps the key out of URLs and proxy logs. Some keys are
+        // only accepted through the query parameter, so that stays as a fallback.
+        const res = await callGeminiDirect(model, apiKey, () =>
+          JSON.stringify({
+            contents: [
+              {
+                parts: [
+                  { inline_data: { mime_type: payloadMime, data: cleanBase64 } },
+                  { text: CLIENT_PROMPT },
+                ],
+              },
+            ],
+            generationConfig: { temperature: 0.1, responseMimeType: 'application/json' },
+          })
         );
 
         if (!res.ok) {

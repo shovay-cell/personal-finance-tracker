@@ -2,7 +2,11 @@
 
 import React, { useState } from 'react';
 import { ExternalLink, KeyRound, RefreshCw } from 'lucide-react';
-import { getStoredGeminiKey, setStoredGeminiKey } from '@/services/ai/receipt-parser';
+import {
+  getStoredGeminiKey,
+  looksLikeGeminiKey,
+  setStoredGeminiKey,
+} from '@/services/ai/receipt-parser';
 import { inputClass } from './ui';
 
 /**
@@ -20,9 +24,10 @@ export function GeminiKeyPrompt({
   const [saved, setSaved] = useState(false);
 
   const trimmed = key.trim();
-  // Google's Gemini keys are all AIza-prefixed; catching that here saves a round
-  // trip that would come back as the same failure.
-  const looksWrong = trimmed.length > 0 && !trimmed.startsWith('AIza');
+  // Only a warning, never a block: Google changes key shapes (legacy `AIza…`,
+  // current `AQ.…`), and refusing to save an unfamiliar one would lock the user
+  // out of a perfectly valid key.
+  const looksWrong = trimmed.length > 0 && !looksLikeGeminiKey(trimmed);
 
   return (
     <div className="rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900 p-3.5 space-y-2.5 text-left">
@@ -38,13 +43,13 @@ export function GeminiKeyPrompt({
             setKey(e.target.value);
             setSaved(false);
           }}
-          placeholder="AIza…"
+          placeholder="AQ.… или AIza…"
           className={`${inputClass} text-xs`}
           autoComplete="off"
         />
         <button
           type="button"
-          disabled={!trimmed || looksWrong}
+          disabled={!trimmed}
           onClick={() => {
             setStoredGeminiKey(trimmed);
             setSaved(true);
@@ -58,8 +63,9 @@ export function GeminiKeyPrompt({
       </div>
 
       {looksWrong && (
-        <p className="text-[10px] font-bold text-rose-500">
-          Ключ Gemini начинается с «AIza». Похоже, скопировано что-то другое.
+        <p className="text-[10px] font-bold text-amber-600 dark:text-amber-400">
+          Обычно ключ Gemini начинается с «AQ.» или «AIza» — проверьте, что скопирован
+          весь ключ. Сохранить всё равно можно.
         </p>
       )}
 

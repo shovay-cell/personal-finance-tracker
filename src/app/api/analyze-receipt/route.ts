@@ -39,6 +39,47 @@ const RECEIPT_PROMPT = `Ты — ИИ-бухгалтер приложения Fi
  * reporting a missing key — a variable added in Vercel reaches the function only
  * after a redeploy, and only in the environments it was ticked for.
  */
+/**
+ * Sends the key in the `x-goog-api-key` header — the form Google documents for
+ * current auth keys — and retries through `?key=` when the header is refused,
+ * since some keys are still only accepted that way.
+ */
+async function callGemini(
+  model: string,
+  apiKey: string,
+  mimeType: string,
+  base64: string
+): Promise<Response> {
+  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
+  const body = JSON.stringify({
+    contents: [
+      {
+        parts: [
+          { inline_data: { mime_type: mimeType, data: base64 } },
+          { text: RECEIPT_PROMPT },
+        ],
+      },
+    ],
+    generationConfig: { temperature: 0.1, responseMimeType: 'application/json' },
+  });
+
+  const withHeader = await fetch(endpoint, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
+    body,
+  });
+
+  if (withHeader.ok || (withHeader.status !== 401 && withHeader.status !== 403)) {
+    return withHeader;
+  }
+
+  return fetch(`${endpoint}?key=${encodeURIComponent(apiKey)}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body,
+  });
+}
+
 export async function GET() {
   const rawKey = process.env.GEMINI_API_KEY || '';
   const key = rawKey.trim();
@@ -49,12 +90,15 @@ export async function GET() {
     deploymentUrl: process.env.VERCEL_URL || null,
     // Shape hints only — enough to spot a truncated paste or a wrong secret,
     // never enough to reconstruct the key.
-    keyLooksValid: key.startsWith('AIza'),
+    // Google issues legacy `AIza…` keys and current auth keys `AQ.…`.
+    keyLooksValid: key.startsWith('AIza') || key.startsWith('AQ.'),
     keyLength: key.length,
     hadSurroundingWhitespace: rawKey.length !== key.length,
-    hint: key.length
-      ? 'Ключ найден на сервере. Если сканирование всё равно не работает — проверьте квоту ключа в Google AI Studio.'
-      : 'Переменная GEMINI_API_KEY не видна этому деплою: добавьте её в этот проект Vercel (Production и Preview) и передеплойте.',
+    hint: !key.length
+      ? 'Переменная GEMINI_API_KEY не видна этому деплою: добавьте её в этот проект Vercel (Production и Preview) и передеплойте.'
+      : !(key.startsWith('AIza') || key.startsWith('AQ.'))
+      ? 'Значение не похоже на ключ Gemini: ключ из Google AI Studio начинается с «AQ.» (новый формат) или «AIza» (прежний). Похоже, вставлен другой токен.'
+      : 'Ключ найден на сервере. Если сканирование всё равно не работает — проверьте квоту ключа в Google AI Studio.',
   });
 }
 
@@ -107,22 +151,7 @@ export async function POST(req: NextRequest) {
 
     for (const model of modelsToTry) {
       try {
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
-        const res = await fetch(url, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            contents: [
-              {
-                parts: [
-                  { inline_data: { mime_type: cleanMimeType, data: cleanBase64 } },
-                  { text: RECEIPT_PROMPT },
-                ],
-              },
-            ],
-            generationConfig: { temperature: 0.1, responseMimeType: 'application/json' },
-          }),
-        });
+        const res = await callGemini(model, apiKey, cleanMimeType, cleanBase64);
 
         if (res.ok) {
           geminiJson = await res.json();

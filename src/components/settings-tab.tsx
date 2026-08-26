@@ -100,6 +100,7 @@ export function SettingsTab({
   const [clientId, setClientId] = useState('');
   const [serverKey, setServerKey] = useState<{
     serverKeyConfigured: boolean;
+    keyLooksValid: boolean;
     environment: string;
     hint: string;
   } | null>(null);
@@ -473,7 +474,7 @@ export function SettingsTab({
                 type="password"
                 value={geminiKey}
                 onChange={(e) => setGeminiKey(e.target.value)}
-                placeholder="AIza…"
+                placeholder="AQ.… или AIza…"
                 className={`${inputClass} text-xs`}
               />
               <button
@@ -491,7 +492,7 @@ export function SettingsTab({
           {serverKey && (
             <div
               className={`flex items-start gap-2 p-2.5 rounded-2xl ${
-                serverKey.serverKeyConfigured
+                serverKey.serverKeyConfigured && serverKey.keyLooksValid
                   ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400'
                   : 'bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400'
               }`}
@@ -499,7 +500,11 @@ export function SettingsTab({
               <ServerCog className="w-3.5 h-3.5 mt-px flex-shrink-0" />
               <p className="text-[10.5px] font-bold leading-relaxed">
                 Общий ключ на сервере:{' '}
-                {serverKey.serverKeyConfigured ? 'настроен' : 'не найден'}
+                {!serverKey.serverKeyConfigured
+                  ? 'не найден'
+                  : serverKey.keyLooksValid
+                  ? 'настроен'
+                  : 'задан, но не похож на ключ Gemini'}
                 <span className="font-medium opacity-80"> ({serverKey.environment})</span>
                 <br />
                 <span className="font-medium">{serverKey.hint}</span>
