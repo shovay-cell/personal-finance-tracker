@@ -33,6 +33,31 @@ const RECEIPT_PROMPT = `Ты — ИИ-бухгалтер приложения Fi
 
 Верни ИСКЛЮЧИТЕЛЬНО валидный JSON без markdown-обёрток и пояснений.`;
 
+/**
+ * Diagnostics: says whether THIS deployment can see a server-side Gemini key,
+ * without ever echoing the key itself. Open it in a browser when scanning keeps
+ * reporting a missing key — a variable added in Vercel reaches the function only
+ * after a redeploy, and only in the environments it was ticked for.
+ */
+export async function GET() {
+  const rawKey = process.env.GEMINI_API_KEY || '';
+  const key = rawKey.trim();
+
+  return NextResponse.json({
+    serverKeyConfigured: key.length > 0,
+    environment: process.env.VERCEL_ENV || 'local',
+    deploymentUrl: process.env.VERCEL_URL || null,
+    // Shape hints only — enough to spot a truncated paste or a wrong secret,
+    // never enough to reconstruct the key.
+    keyLooksValid: key.startsWith('AIza'),
+    keyLength: key.length,
+    hadSurroundingWhitespace: rawKey.length !== key.length,
+    hint: key.length
+      ? 'Ключ найден на сервере. Если сканирование всё равно не работает — проверьте квоту ключа в Google AI Studio.'
+      : 'Переменная GEMINI_API_KEY не видна этому деплою: добавьте её в этот проект Vercel (Production и Preview) и передеплойте.',
+  });
+}
+
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
@@ -54,7 +79,10 @@ export async function POST(req: NextRequest) {
         {
           success: false,
           error: 'NO_API_KEY',
-          message: 'API Key для Gemini не указан. Добавьте ключ в настройках или в .env',
+          message:
+            'Ключ Gemini не найден на сервере этого деплоя. Добавьте переменную GEMINI_API_KEY в проект и передеплойте — или вставьте свой личный ключ здесь.',
+          serverKeyConfigured: false,
+          environment: process.env.VERCEL_ENV || 'local',
         },
         { status: 400 }
       );

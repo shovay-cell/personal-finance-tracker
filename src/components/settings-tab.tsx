@@ -13,6 +13,7 @@ import {
   Loader2,
   Mic,
   RefreshCw,
+  ServerCog,
   Shapes,
   Trash2,
   UserPlus,
@@ -97,6 +98,11 @@ export function SettingsTab({
   const [editingMember, setEditingMember] = useState<ProfileMember | 'NEW' | null>(null);
   const [geminiKey, setGeminiKey] = useState('');
   const [clientId, setClientId] = useState('');
+  const [serverKey, setServerKey] = useState<{
+    serverKeyConfigured: boolean;
+    environment: string;
+    hint: string;
+  } | null>(null);
   const [driveState, setDriveState] = useState(() => ({
     isConnected: false,
     userEmail: null as string | null,
@@ -111,6 +117,14 @@ export function SettingsTab({
     setClientId(getCustomClientId());
     const state = getGoogleDriveState();
     setDriveState({ isConnected: state.isConnected, userEmail: state.userEmail });
+
+    // Asks the deployment itself whether it has a shared key, so a variable that
+    // never reached the running build is visible here instead of surfacing as a
+    // puzzling scan failure.
+    fetch('/api/analyze-receipt')
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => data && setServerKey(data))
+      .catch(() => setServerKey(null));
   }, []);
 
   const run = async (key: string, action: () => Promise<{ ok: boolean; text: string }>) => {
@@ -474,6 +488,25 @@ export function SettingsTab({
               </button>
             </div>
           </Field>
+          {serverKey && (
+            <div
+              className={`flex items-start gap-2 p-2.5 rounded-2xl ${
+                serverKey.serverKeyConfigured
+                  ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400'
+                  : 'bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400'
+              }`}
+            >
+              <ServerCog className="w-3.5 h-3.5 mt-px flex-shrink-0" />
+              <p className="text-[10.5px] font-bold leading-relaxed">
+                Общий ключ на сервере:{' '}
+                {serverKey.serverKeyConfigured ? 'настроен' : 'не найден'}
+                <span className="font-medium opacity-80"> ({serverKey.environment})</span>
+                <br />
+                <span className="font-medium">{serverKey.hint}</span>
+              </p>
+            </div>
+          )}
+
           <p className="text-[10px] text-slate-400 font-medium flex items-start gap-1.5">
             <Mic className="w-3 h-3 mt-0.5 flex-shrink-0" />
             Голосовой ввод работает офлайн-независимо через распознавание речи браузера и не
