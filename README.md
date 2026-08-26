@@ -61,12 +61,12 @@ npm start
 | Переменная | Назначение |
 |---|---|
 | `GEMINI_API_KEY` | Общий серверный ключ Gemini для распознавания чеков. Ключ из Google AI Studio: новый формат начинается с `AQ.`, прежний — с `AIza`; поддерживаются оба. **Только серверный** — префикс `NEXT_PUBLIC_` использовать нельзя, ключ попал бы в клиентский бандл. |
-| `NEXT_PUBLIC_GOOGLE_CLIENT_ID` | Web OAuth Client ID из Google Cloud Console для бэкапа в Drive. Это публичный идентификатор, а не секрет. |
+| `NEXT_PUBLIC_GOOGLE_CLIENT_ID` | Web OAuth Client ID из Google Cloud Console для бэкапа в Drive. Это публичный идентификатор, а не секрет: любая переменная с префиксом `NEXT_PUBLIC_` вшивается в клиентский бандл при сборке, поэтому на Vercel её тип — **Config**, а не Secret, и после добавления обязателен **передеплой**. |
 
 Обе переменные необязательны:
 
 - без `GEMINI_API_KEY` не работает только распознавание чеков — статус ключа виден в **Настройки → ИИ-сканирование чеков**;
-- без `NEXT_PUBLIC_GOOGLE_CLIENT_ID` не работает бэкап в Google Drive. Client ID берётся в Google Cloud Console (тип «Web application»), а домен приложения нужно добавить в **Authorized JavaScript origins** этого клиента — иначе Google не откроет окно доступа.
+- без `NEXT_PUBLIC_GOOGLE_CLIENT_ID` не работает бэкап в Google Drive. Текущее состояние (загружен ли Client ID и какой домен нужно разрешить) показано в **Настройки → Резервное копирование**. Client ID берётся в Google Cloud Console (тип «Web application»), а домен приложения нужно добавить в **Authorized JavaScript origins** этого клиента — иначе Google не откроет окно доступа.
 
 Ключи задаются только переменными окружения: полей для ручного ввода ключей в приложении нет.
 

@@ -621,17 +621,7 @@ export function SettingsTab({
             </button>
           </div>
 
-          {!GOOGLE_OAUTH_CLIENT_ID && (
-            <div className="flex items-start gap-2 p-2.5 rounded-2xl bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400">
-              <ServerCog className="w-3.5 h-3.5 mt-px flex-shrink-0" />
-              <p className="text-[10.5px] font-bold leading-relaxed">
-                Google Drive не настроен: в проекте нет переменной
-                NEXT_PUBLIC_GOOGLE_CLIENT_ID. Добавьте Web OAuth Client ID из Google Cloud
-                Console, разрешите домен приложения в «Authorized JavaScript origins» и
-                передеплойте.
-              </p>
-            </div>
-          )}
+          <DriveSetupStatus />
 
           <label className="block">
             <span className="text-[10px] font-black text-slate-400 uppercase tracking-wide">
@@ -721,6 +711,54 @@ export function SettingsTab({
           onClose={() => setEditingMember(null)}
         />
       )}
+    </div>
+  );
+}
+
+/**
+ * Tells the user what this build actually loaded and which exact origin Google
+ * has to trust — the two facts that decide whether the Drive popup can open, and
+ * the two that are impossible to guess from a failed login.
+ */
+function DriveSetupStatus() {
+  const [origin, setOrigin] = useState('');
+  useEffect(() => setOrigin(window.location.origin), []);
+
+  const clientId = GOOGLE_OAUTH_CLIENT_ID.trim();
+  const looksValid = clientId.endsWith('.apps.googleusercontent.com');
+
+  if (clientId && looksValid) {
+    return (
+      <div className="flex items-start gap-2 p-2.5 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400">
+        <ServerCog className="w-3.5 h-3.5 mt-px flex-shrink-0" />
+        <p className="text-[10.5px] font-bold leading-relaxed break-all">
+          Client ID загружен: …{clientId.slice(-32)}
+          <br />
+          <span className="font-medium">
+            Если окно Google не открывается — добавьте {origin} в «Authorized JavaScript
+            origins» этого OAuth-клиента.
+          </span>
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex items-start gap-2 p-2.5 rounded-2xl bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400">
+      <ServerCog className="w-3.5 h-3.5 mt-px flex-shrink-0" />
+      <p className="text-[10.5px] font-bold leading-relaxed break-all">
+        {!clientId
+          ? 'Google Drive не настроен: этот деплой не видит NEXT_PUBLIC_GOOGLE_CLIENT_ID. Переменная попадает в приложение только при новой сборке — после добавления нужен передеплой.'
+          : 'NEXT_PUBLIC_GOOGLE_CLIENT_ID не похож на Client ID: он должен заканчиваться на .apps.googleusercontent.com.'}
+        {origin && (
+          <>
+            <br />
+            <span className="font-medium">
+              Домен для «Authorized JavaScript origins»: {origin}
+            </span>
+          </>
+        )}
+      </p>
     </div>
   );
 }
