@@ -18,6 +18,7 @@ import {
   SegmentedControl,
 } from './ui';
 import { TransactionPrefill } from './transaction-form-modal';
+import { CategoryEditorModal } from './category-manager-modal';
 import {
   analyzeReceiptWithAI,
   compressForStorage,
@@ -68,6 +69,7 @@ export function QuickAddSheet({
   const [categoryId, setCategoryId] = useState('');
   const [accountId, setAccountId] = useState(accounts[0]?.id || '');
   const [isBusy, setIsBusy] = useState(false);
+  const [isCreatingCategory, setIsCreatingCategory] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const [isListening, setIsListening] = useState(false);
@@ -227,15 +229,18 @@ export function QuickAddSheet({
             <div className="flex gap-2">
               <button
                 type="button"
-                onClick={() =>
+                onClick={() => {
                   onOpenFullForm({
                     kind,
                     amount: parseFloat(amount) || undefined,
                     currency,
                     categoryId: categoryId || undefined,
                     accountId,
-                  })
-                }
+                  });
+                  // Hand over to the full form instead of stacking on top of it,
+                  // so saving there does not drop the user back on this sheet.
+                  onClose();
+                }}
                 className="px-4 py-3 rounded-2xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-[11px] font-black active:scale-95 transition-transform whitespace-nowrap"
               >
                 Детали
@@ -405,8 +410,23 @@ export function QuickAddSheet({
             ))}
           </div>
 
-          <CategoryGrid categories={visibleCategories} selectedId={categoryId} onSelect={setCategoryId} />
+          <CategoryGrid
+            categories={visibleCategories}
+            selectedId={categoryId}
+            onSelect={setCategoryId}
+            onCreate={() => setIsCreatingCategory(true)}
+          />
         </>
+      )}
+
+      {isCreatingCategory && (
+        <CategoryEditorModal
+          category={null}
+          defaultKind={kind}
+          categories={categories}
+          onClose={() => setIsCreatingCategory(false)}
+          onCreated={(created) => setCategoryId(created.id)}
+        />
       )}
     </ModalShell>
   );

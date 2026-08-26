@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect } from 'react';
-import { X } from 'lucide-react';
+import { Plus, X } from 'lucide-react';
 import { CATEGORY_COLORS, CURRENCY_LIST, getCategoryIcon } from '@/constants/categories';
 import { CurrencyCode, FinanceCategory, ReceiptFieldFlag } from '@/types';
 
@@ -186,11 +186,14 @@ export function CategoryGrid({
   categories,
   selectedId,
   onSelect,
+  onCreate,
   columns = 4,
 }: {
   categories: FinanceCategory[];
   selectedId?: string;
   onSelect: (id: string) => void;
+  /** When given, a «Создать» tile is appended for making a category on the spot. */
+  onCreate?: () => void;
   columns?: number;
 }) {
   return (
@@ -230,6 +233,19 @@ export function CategoryGrid({
           </button>
         );
       })}
+
+      {onCreate && (
+        <button
+          type="button"
+          onClick={onCreate}
+          className="flex flex-col items-center gap-1.5 py-2.5 px-1 rounded-2xl border border-dashed border-slate-300 dark:border-slate-600 text-slate-400 hover:text-sky-500 hover:border-sky-400 transition-all active:scale-95"
+        >
+          <span className="w-9 h-9 rounded-xl flex items-center justify-center bg-slate-100 dark:bg-slate-800">
+            <Plus className="w-4 h-4" />
+          </span>
+          <span className="text-[9.5px] font-bold leading-tight text-center">Создать</span>
+        </button>
+      )}
     </div>
   );
 }

@@ -14,6 +14,7 @@ import {
   Gift,
   Repeat,
   ShoppingBag,
+  Shirt,
   Plane,
   Clapperboard,
   Palette,
@@ -79,6 +80,7 @@ export const CATEGORY_ICONS: Record<string, LucideIcon> = {
   Gift,
   Repeat,
   ShoppingBag,
+  Shirt,
   Plane,
   Clapperboard,
   Palette,
@@ -125,6 +127,8 @@ interface CategorySeed {
   name: string;
   iconName: string;
   colorHex: string;
+  /** Pinned position; defaults to the seed's index in the list. */
+  order?: number;
   children?: { key: string; name: string }[];
 }
 
@@ -168,6 +172,18 @@ const EXPENSE_SEEDS: CategorySeed[] = [
   { key: 'gifts', name: 'Подарки', iconName: 'Gift', colorHex: '#F43F5E' },
   { key: 'subscriptions', name: 'Подписки', iconName: 'Repeat', colorHex: '#8B5CF6' },
   { key: 'shopping', name: 'Покупки', iconName: 'ShoppingBag', colorHex: '#EAB308' },
+  {
+    key: 'clothing',
+    name: 'Одежда',
+    iconName: 'Shirt',
+    colorHex: '#F472B6',
+    order: 155,
+    children: [
+      { key: 'clothing_shoes', name: 'Обувь' },
+      { key: 'clothing_kids', name: 'Детская одежда' },
+      { key: 'clothing_accessories', name: 'Аксессуары' },
+    ],
+  },
   { key: 'travel', name: 'Путешествия', iconName: 'Plane', colorHex: '#06B6D4' },
   { key: 'entertainment', name: 'Развлечения', iconName: 'Clapperboard', colorHex: '#D946EF' },
   { key: 'leisure', name: 'Досуг', iconName: 'Palette', colorHex: '#F59E0B' },
@@ -213,7 +229,7 @@ function buildSeedCategories(seeds: CategorySeed[], kind: TransactionKind): Fina
       colorHex: seed.colorHex,
       isSystem: true,
       isHidden: false,
-      sortOrder: index * 10,
+      sortOrder: seed.order ?? index * 10,
       createdAt: now,
     });
     (seed.children || []).forEach((child, childIndex) => {
@@ -226,7 +242,7 @@ function buildSeedCategories(seeds: CategorySeed[], kind: TransactionKind): Fina
         parentId: id,
         isSystem: true,
         isHidden: false,
-        sortOrder: index * 10 + childIndex + 1,
+        sortOrder: (seed.order ?? index * 10) + childIndex + 1,
         createdAt: now,
       });
     });
@@ -288,7 +304,8 @@ export const VOICE_CATEGORY_KEYWORDS: { categoryKey: string; words: string[] }[]
   { categoryKey: 'utilities', words: ['коммуналк', 'электричеств', 'вода', 'газ', 'интернет', 'utility', 'electric', 'חשמל', 'ארנונה'] },
   { categoryKey: 'kids', words: ['дет', 'садик', 'школ', 'ребен', 'kids', 'child', 'ילד', 'גן'] },
   { categoryKey: 'entertainment', words: ['развлеч', 'кино', 'театр', 'концерт', 'cinema', 'movie', 'קולנוע'] },
-  { categoryKey: 'shopping', words: ['покупк', 'одежд', 'обув', 'shopping', 'clothes', 'בגדים', 'קניות'] },
+  { categoryKey: 'clothing', words: ['одежд', 'обув', 'куртк', 'плать', 'джинс', 'clothes', 'shoes', 'בגדים', 'נעליים'] },
+  { categoryKey: 'shopping', words: ['покупк', 'shopping', 'קניות'] },
   { categoryKey: 'travel', words: ['путешеств', 'отпуск', 'билет', 'отель', 'travel', 'hotel', 'flight', 'טיסה', 'מלון'] },
   { categoryKey: 'subscriptions', words: ['подписк', 'netflix', 'spotify', 'subscription', 'מנוי'] },
   { categoryKey: 'education', words: ['образован', 'курс', 'учеб', 'книг', 'education', 'course', 'לימודים'] },
@@ -305,6 +322,7 @@ export const RECEIPT_CATEGORY_HINTS: { categoryKey: string; words: string[] }[] 
   { categoryKey: 'car', words: ['paz', 'delek', 'sonol', 'fuel', 'бензин', 'дор алон', 'דלק', 'פז'] },
   { categoryKey: 'health', words: ['pharm', 'аптек', 'super-pharm', 'сперфарм', 'clalit', 'maccabi', 'בית מרקחת', 'סופר פארם'] },
   { categoryKey: 'utilities', words: ['electric', 'חשמל', 'water', 'мэй', 'arnona', 'ארנונה', 'bezeq', 'hot', 'partner'] },
-  { categoryKey: 'shopping', words: ['fashion', 'zara', 'castro', 'renuar', 'одежд', 'ikea', 'ace'] },
+  { categoryKey: 'clothing', words: ['fashion', 'zara', 'castro', 'renuar', 'fox', 'одежд', 'h&m', 'shoes'] },
+  { categoryKey: 'shopping', words: ['ikea', 'ace', 'покупк'] },
   { categoryKey: 'transport', words: ['rav kav', 'רב קו', 'egged', 'dan', 'такси', 'gett', 'yango'] },
 ];

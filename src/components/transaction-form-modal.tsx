@@ -36,6 +36,7 @@ import {
   fieldClass,
   inputClass,
 } from './ui';
+import { CategoryEditorModal } from './category-manager-modal';
 import {
   analyzeReceiptWithAI,
   compressForStorage,
@@ -110,6 +111,7 @@ export function TransactionFormModal({
   const [authorId, setAuthorId] = useState(existing?.authorId || getCurrentMemberId());
   const [isSaving, setIsSaving] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
+  const [isCreatingCategory, setIsCreatingCategory] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const rootCategories = useMemo(
@@ -302,6 +304,7 @@ export function TransactionFormModal({
             setSubcategoryId(undefined);
             confirmField('category');
           }}
+          onCreate={() => setIsCreatingCategory(true)}
         />
       </Field>
 
@@ -469,6 +472,20 @@ export function TransactionFormModal({
           </div>
         )}
       </Field>
+
+      {isCreatingCategory && (
+        <CategoryEditorModal
+          category={null}
+          defaultKind={kind}
+          categories={categories}
+          onClose={() => setIsCreatingCategory(false)}
+          onCreated={(created) => {
+            setCategoryId(created.id);
+            setSubcategoryId(undefined);
+            confirmField('category');
+          }}
+        />
+      )}
 
       {existing && (
         <button

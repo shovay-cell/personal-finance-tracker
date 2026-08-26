@@ -88,8 +88,15 @@ export const DEFAULT_SETTINGS: FinanceSettings = {
 export async function initializeFinanceDb(): Promise<void> {
   const now = new Date().toISOString();
 
-  if ((await financeDb.categories.count()) === 0) {
-    await financeDb.categories.bulkPut(buildDefaultCategories());
+  // Add every default category that is missing — on a fresh database that seeds
+  // the whole list, and on an existing one it back-fills categories shipped in a
+  // later version. Only absent ids are written, so renamed, recoloured or hidden
+  // categories the user already has are left exactly as they are.
+  const defaultCategories = buildDefaultCategories();
+  const existingCategoryIds = new Set(await financeDb.categories.toCollection().primaryKeys());
+  const missingCategories = defaultCategories.filter((c) => !existingCategoryIds.has(c.id));
+  if (missingCategories.length > 0) {
+    await financeDb.categories.bulkPut(missingCategories);
   }
 
   if ((await financeDb.accounts.count()) === 0) {

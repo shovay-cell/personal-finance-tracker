@@ -173,16 +173,23 @@ export function CategoryManagerModal({
   );
 }
 
-function CategoryEditorModal({
+/**
+ * Also used straight from the category pickers, so a category can be created
+ * without leaving the operation form.
+ */
+export function CategoryEditorModal({
   category,
   defaultKind,
   categories,
   onClose,
+  onCreated,
 }: {
   category: FinanceCategory | null;
   defaultKind: TransactionKind;
   categories: FinanceCategory[];
   onClose: () => void;
+  /** Fires with the freshly created category so the caller can select it. */
+  onCreated?: (category: FinanceCategory) => void;
 }) {
   const [name, setName] = useState(category?.name || '');
   const [kind, setKind] = useState<TransactionKind>(category?.kind || defaultKind);
@@ -206,8 +213,12 @@ function CategoryEditorModal({
       parentId: parentId || undefined,
     };
 
-    if (category) await updateCategory(category.id, payload);
-    else await addCategory(payload);
+    if (category) {
+      await updateCategory(category.id, payload);
+    } else {
+      const created = await addCategory(payload);
+      onCreated?.(created);
+    }
     onClose();
   };
 
