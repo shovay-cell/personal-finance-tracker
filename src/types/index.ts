@@ -93,11 +93,29 @@ export interface Transaction {
   updatedAt: string;
 }
 
-export type RecurrenceKind = 'ONCE' | 'WEEKLY' | 'MONTHLY' | 'YEARLY' | 'CUSTOM_DAYS';
+export type RecurrenceKind =
+  | 'ONCE'
+  | 'WEEKLY'
+  | 'MONTHLY'
+  | 'QUARTERLY'
+  | 'SEMIANNUAL'
+  | 'YEARLY'
+  | 'CUSTOM_DAYS';
+
+/**
+ * What a scheduled entry represents. All three share the same recurrence engine
+ * and book the same kind of transaction; the split only drives grouping and the
+ * "постоянные траты" totals.
+ */
+export type PlanKind = 'PAYMENT' | 'SUBSCRIPTION' | 'INVESTMENT';
 
 export interface PlannedPayment {
   id: string;
   title: string;
+  /** Missing on rows written before subscriptions existed — treat as PAYMENT. */
+  planKind?: PlanKind;
+  /** Service or broker name, shown instead of a bare category for subscriptions. */
+  provider?: string;
   kind: TransactionKind;
   amount: number;
   currency: CurrencyCode;
@@ -117,6 +135,19 @@ export interface PlannedPayment {
   note?: string;
   lastRunDate?: string;
   createdAt: string;
+}
+
+/** One recurring entry with its cost normalised to a month and a year. */
+export interface RecurringCostRow {
+  payment: PlannedPayment;
+  monthlyBase: number;
+  yearlyBase: number;
+}
+
+export interface RecurringTotals {
+  monthly: number;
+  yearly: number;
+  rows: RecurringCostRow[];
 }
 
 export type ObligationStatus = 'ISSUED' | 'PARTIALLY_SETTLED' | 'SETTLED' | 'OVERDUE';

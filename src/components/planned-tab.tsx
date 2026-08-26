@@ -8,18 +8,23 @@ import {
   Pause,
   Play,
   Plus,
+  Repeat,
   Trash2,
+  TrendingUp,
 } from 'lucide-react';
 import {
   CurrencyCode,
   FinanceAccount,
   FinanceCategory,
+  FinanceSettings,
+  PlanKind,
   PlannedPayment,
   RecurrenceKind,
   TransactionKind,
 } from '@/types';
 import {
   addPlannedPayment,
+  convertToBase,
   deletePlannedPayment,
   todayIso,
   updatePlannedPayment,
@@ -27,13 +32,18 @@ import {
 import {
   describeRecurrence,
   materializePlannedPayment,
+  planKindOf,
   plannedPaymentState,
+  recurringTotals,
 } from '@/services/planned';
 import { formatDateHuman, formatMoney } from '@/services/analytics';
-import { getCategoryIcon } from '@/constants/categories';
+import {
+  getCategoryIcon,
+  INVESTMENT_CATEGORY_ID,
+  SUBSCRIPTION_CATEGORY_ID,
+} from '@/constants/categories';
 import {
   Card,
-  CurrencySelector,
   EmptyState,
   Field,
   ModalShell,
@@ -47,25 +57,71 @@ interface PlannedTabProps {
   plannedPayments: PlannedPayment[];
   categories: FinanceCategory[];
   accounts: FinanceAccount[];
-  baseCurrency: CurrencyCode;
+  settings: FinanceSettings;
   autoCreateDefault: boolean;
 }
+
+const PLAN_KIND_META: Record<
+  PlanKind,
+  { label: string; addLabel: string; emptyTitle: string; emptyText: string; defaultCategoryId?: string }
+> = {
+  PAYMENT: {
+    label: 'Платежи',
+    addLabel: 'Новый плановый платёж',
+    emptyTitle: 'Плановых платежей нет',
+    emptyText:
+      'Добавьте аренду, страховку или налог — приложение напомнит заранее и создаст операцию в день платежа.',
+  },
+  SUBSCRIPTION: {
+    label: 'Подписки',
+    addLabel: 'Новая подписка',
+    emptyTitle: 'Подписок нет',
+    emptyText:
+      'Добавьте сервисы: Netflix, iCloud, спортзал, страховку. Годовые и квартальные подписки пересчитываются в стоимость за месяц.',
+    defaultCategoryId: SUBSCRIPTION_CATEGORY_ID,
+  },
+  INVESTMENT: {
+    label: 'Инвестиции',
+    addLabel: 'Новое регулярное вложение',
+    emptyTitle: 'Регулярных вложений нет',
+    emptyText:
+      'Добавьте суммы, которые регулярно откладываете: биржа, пенсионные накопления, криптовалюта.',
+    defaultCategoryId: INVESTMENT_CATEGORY_ID,
+  },
+};
 
 export function PlannedTab({
   plannedPayments,
   categories,
   accounts,
-  baseCurrency,
+  settings,
   autoCreateDefault,
 }: PlannedTabProps) {
+  const [planKind, setPlanKind] = useState<PlanKind>('PAYMENT');
   const [editing, setEditing] = useState<PlannedPayment | 'NEW' | null>(null);
+
+  const baseCurrency = settings.baseCurrency;
+  const meta = PLAN_KIND_META[planKind];
+
+  const ofKind = useMemo(
+    () => plannedPayments.filter((p) => planKindOf(p) === planKind),
+    [plannedPayments, planKind]
+  );
 
   const states = useMemo(
     () =>
-      plannedPayments
+      ofKind
         .map((payment) => plannedPaymentState(payment))
         .sort((a, b) => a.payment.nextDueDate.localeCompare(b.payment.nextDueDate)),
-    [plannedPayments]
+    [ofKind]
+  );
+
+  const totals = useMemo(
+    () =>
+      recurringTotals(plannedPayments, planKind, (amount, currency) =>
+        convertToBase(amount, currency, settings).baseAmount
+      ),
+    [plannedPayments, planKind, settings]
   );
 
   const overdue = states.filter((s) => s.payment.isActive && s.isOverdue);
@@ -74,13 +130,48 @@ export function PlannedTab({
 
   return (
     <div className="space-y-4">
+      <SegmentedControl<PlanKind>
+        value={planKind}
+        onChange={setPlanKind}
+        options={[
+          { value: 'PAYMENT', label: 'ПЛАТЕЖИ' },
+          { value: 'SUBSCRIPTION', label: 'ПОДПИСКИ' },
+          { value: 'INVESTMENT', label: 'ИНВЕСТИЦИИ' },
+        ]}
+      />
+
+      {totals.rows.length > 0 && (
+        <Card className="p-4 space-y-2">
+          <p className="text-[10px] font-black uppercase tracking-wide text-slate-400">
+            {planKind === 'INVESTMENT' ? 'Регулярно откладываю' : 'Постоянные траты'}
+          </p>
+          <div className="flex items-end gap-3">
+            <div>
+              <p className="text-2xl font-black text-slate-900 dark:text-slate-100 tabular-nums leading-tight">
+                {formatMoney(totals.monthly, baseCurrency)}
+              </p>
+              <p className="text-[10px] font-bold text-slate-400">в месяц</p>
+            </div>
+            <div className="pb-0.5">
+              <p className="text-sm font-black text-slate-500 dark:text-slate-400 tabular-nums leading-tight">
+                {formatMoney(totals.yearly, baseCurrency)}
+              </p>
+              <p className="text-[10px] font-bold text-slate-400">в год</p>
+            </div>
+          </div>
+          <p className="text-[10px] text-slate-400 font-medium">
+            {totals.rows.length} активных · годовые и квартальные пересчитаны в месячную стоимость
+          </p>
+        </Card>
+      )}
+
       <button
         type="button"
         onClick={() => setEditing('NEW')}
         className="w-full py-3 rounded-2xl bg-gradient-to-tr from-sky-500 to-cyan-400 text-white text-xs font-black flex items-center justify-center gap-2 shadow-lg shadow-sky-500/25 active:scale-[0.98] transition-transform"
       >
         <Plus className="w-4 h-4" />
-        Новый плановый платёж
+        {meta.addLabel}
       </button>
 
       {overdue.length > 0 && (
@@ -92,6 +183,8 @@ export function PlannedTab({
                 key={state.payment.id}
                 payment={state.payment}
                 categories={categories}
+                baseCurrency={baseCurrency}
+                settings={settings}
                 daysUntilDue={state.daysUntilDue}
                 isOverdue
                 onEdit={() => setEditing(state.payment)}
@@ -102,12 +195,20 @@ export function PlannedTab({
       )}
 
       <div>
-        <SectionTitle title="Предстоящие" />
+        <SectionTitle title={planKind === 'PAYMENT' ? 'Предстоящие' : 'Активные'} />
         {upcoming.length === 0 && overdue.length === 0 ? (
           <EmptyState
-            icon={<CalendarClock className="w-7 h-7" />}
-            title="Плановых платежей нет"
-            description="Добавьте регулярную аренду, страховку или подписку — приложение напомнит заранее и создаст операцию в день платежа."
+            icon={
+              planKind === 'SUBSCRIPTION' ? (
+                <Repeat className="w-7 h-7" />
+              ) : planKind === 'INVESTMENT' ? (
+                <TrendingUp className="w-7 h-7" />
+              ) : (
+                <CalendarClock className="w-7 h-7" />
+              )
+            }
+            title={meta.emptyTitle}
+            description={meta.emptyText}
           />
         ) : (
           <div className="space-y-2">
@@ -116,6 +217,8 @@ export function PlannedTab({
                 key={state.payment.id}
                 payment={state.payment}
                 categories={categories}
+                baseCurrency={baseCurrency}
+                settings={settings}
                 daysUntilDue={state.daysUntilDue}
                 onEdit={() => setEditing(state.payment)}
               />
@@ -133,6 +236,8 @@ export function PlannedTab({
                 key={state.payment.id}
                 payment={state.payment}
                 categories={categories}
+                baseCurrency={baseCurrency}
+                settings={settings}
                 daysUntilDue={state.daysUntilDue}
                 onEdit={() => setEditing(state.payment)}
               />
@@ -144,6 +249,7 @@ export function PlannedTab({
       {editing && (
         <PlannedPaymentModal
           payment={editing === 'NEW' ? null : editing}
+          planKind={editing === 'NEW' ? planKind : planKindOf(editing)}
           categories={categories}
           accounts={accounts}
           baseCurrency={baseCurrency}
@@ -158,18 +264,41 @@ export function PlannedTab({
 function PlannedRow({
   payment,
   categories,
+  baseCurrency,
+  settings,
   daysUntilDue,
   isOverdue,
   onEdit,
 }: {
   payment: PlannedPayment;
   categories: FinanceCategory[];
+  baseCurrency: CurrencyCode;
+  settings: FinanceSettings;
   daysUntilDue: number;
   isOverdue?: boolean;
   onEdit: () => void;
 }) {
   const category = categories.find((c) => c.id === payment.categoryId);
   const Icon = getCategoryIcon(category?.iconName || 'CalendarClock');
+  const isRecurring = payment.recurrence !== 'ONCE';
+
+  // Only long billing periods need the "≈ per month" hint — a monthly plan
+  // already shows its monthly cost in the amount itself.
+  const showsMonthlyHint =
+    isRecurring && payment.recurrence !== 'MONTHLY' && payment.recurrence !== 'WEEKLY';
+  const monthlyBase = showsMonthlyHint
+    ? convertToBase(
+        payment.recurrence === 'QUARTERLY'
+          ? payment.amount / 3
+          : payment.recurrence === 'SEMIANNUAL'
+          ? payment.amount / 6
+          : payment.recurrence === 'YEARLY'
+          ? payment.amount / 12
+          : (payment.amount * 30.44) / Math.max(1, payment.intervalDays || 30),
+        payment.currency,
+        settings
+      ).baseAmount
+    : 0;
 
   return (
     <Card
@@ -193,7 +322,9 @@ function PlannedRow({
           {payment.title}
         </p>
         <p className="text-[10.5px] text-slate-400 font-medium truncate">
-          {describeRecurrence(payment)} · {formatDateHuman(payment.nextDueDate)}
+          {[payment.provider, describeRecurrence(payment), formatDateHuman(payment.nextDueDate)]
+            .filter(Boolean)
+            .join(' · ')}
           {payment.autoCreate ? ' · авто' : ''}
         </p>
       </div>
@@ -209,17 +340,27 @@ function PlannedRow({
           {payment.kind === 'EXPENSE' ? '−' : '+'}
           {formatMoney(payment.amount, payment.currency)}
         </p>
-        <p
-          className={`text-[10px] font-black ${
-            isOverdue ? 'text-rose-500' : daysUntilDue <= payment.remindDaysBefore ? 'text-amber-500' : 'text-slate-400'
-          }`}
-        >
-          {isOverdue
-            ? `просрочен на ${Math.abs(daysUntilDue)} дн.`
-            : daysUntilDue === 0
-            ? 'сегодня'
-            : `через ${daysUntilDue} дн.`}
-        </p>
+        {showsMonthlyHint ? (
+          <p className="text-[10px] font-bold text-slate-400 tabular-nums">
+            ≈ {formatMoney(monthlyBase, baseCurrency)}/мес
+          </p>
+        ) : (
+          <p
+            className={`text-[10px] font-black ${
+              isOverdue
+                ? 'text-rose-500'
+                : daysUntilDue <= payment.remindDaysBefore
+                ? 'text-amber-500'
+                : 'text-slate-400'
+            }`}
+          >
+            {isOverdue
+              ? `просрочен на ${Math.abs(daysUntilDue)} дн.`
+              : daysUntilDue === 0
+              ? 'сегодня'
+              : `через ${daysUntilDue} дн.`}
+          </p>
+        )}
       </div>
     </Card>
   );
@@ -227,6 +368,7 @@ function PlannedRow({
 
 function PlannedPaymentModal({
   payment,
+  planKind,
   categories,
   accounts,
   baseCurrency,
@@ -234,19 +376,30 @@ function PlannedPaymentModal({
   onClose,
 }: {
   payment: PlannedPayment | null;
+  planKind: PlanKind;
   categories: FinanceCategory[];
   accounts: FinanceAccount[];
   baseCurrency: CurrencyCode;
   autoCreateDefault: boolean;
   onClose: () => void;
 }) {
+  const meta = PLAN_KIND_META[planKind];
+  const isPayment = planKind === 'PAYMENT';
+
   const [title, setTitle] = useState(payment?.title || '');
+  const [provider, setProvider] = useState(payment?.provider || '');
   const [kind, setKind] = useState<TransactionKind>(payment?.kind || 'EXPENSE');
   const [amount, setAmount] = useState(payment ? String(payment.amount) : '');
-  const [currency, setCurrency] = useState<CurrencyCode>(payment?.currency || baseCurrency);
-  const [categoryId, setCategoryId] = useState(payment?.categoryId || '');
+  const [categoryId, setCategoryId] = useState(
+    payment?.categoryId ||
+      (meta.defaultCategoryId && categories.some((c) => c.id === meta.defaultCategoryId)
+        ? meta.defaultCategoryId
+        : '')
+  );
   const [accountId, setAccountId] = useState(payment?.accountId || accounts[0]?.id || '');
-  const [recurrence, setRecurrence] = useState<RecurrenceKind>(payment?.recurrence || 'MONTHLY');
+  const [recurrence, setRecurrence] = useState<RecurrenceKind>(
+    payment?.recurrence || (isPayment ? 'MONTHLY' : 'MONTHLY')
+  );
   const [intervalDays, setIntervalDays] = useState(String(payment?.intervalDays || 30));
   const [nextDueDate, setNextDueDate] = useState(payment?.nextDueDate || todayIso());
   const [endDate, setEndDate] = useState(payment?.endDate || '');
@@ -254,16 +407,21 @@ function PlannedPaymentModal({
   const [autoCreate, setAutoCreate] = useState(payment?.autoCreate ?? autoCreateDefault);
   const [error, setError] = useState<string | null>(null);
 
+  // The plan books an operation in the profile's base currency; a different
+  // currency stays only on entries created before it was switched.
+  const currency: CurrencyCode = payment?.currency || baseCurrency;
   const relevantCategories = categories.filter((c) => c.kind === kind && !c.parentId && !c.isHidden);
 
   const handleSave = async () => {
     const numericAmount = parseFloat(amount.replace(',', '.'));
-    if (!title.trim()) return setError('Укажите название платежа');
+    if (!title.trim()) return setError('Укажите название');
     if (!Number.isFinite(numericAmount) || numericAmount <= 0) return setError('Укажите сумму');
     if (!categoryId) return setError('Выберите категорию');
 
     const payload = {
       title: title.trim(),
+      planKind,
+      provider: provider.trim() || undefined,
       kind,
       amount: numericAmount,
       currency,
@@ -286,8 +444,23 @@ function PlannedPaymentModal({
 
   return (
     <ModalShell
-      title={payment ? 'Плановый платёж' : 'Новый плановый платёж'}
-      icon={<CalendarClock className="w-5 h-5" />}
+      title={payment ? meta.label : meta.addLabel}
+      subtitle={
+        planKind === 'SUBSCRIPTION'
+          ? 'Стоимость за длинный период пересчитается в месячную'
+          : planKind === 'INVESTMENT'
+          ? 'Регулярное вложение попадёт в постоянные траты'
+          : undefined
+      }
+      icon={
+        planKind === 'SUBSCRIPTION' ? (
+          <Repeat className="w-5 h-5" />
+        ) : planKind === 'INVESTMENT' ? (
+          <TrendingUp className="w-5 h-5" />
+        ) : (
+          <CalendarClock className="w-5 h-5" />
+        )
+      }
       onClose={onClose}
       footer={
         <div className="space-y-2">
@@ -305,7 +478,7 @@ function PlannedPaymentModal({
                 className="flex-1 py-2.5 rounded-2xl text-[11px] font-black text-emerald-600 bg-emerald-50 dark:bg-emerald-950/40 flex items-center justify-center gap-1.5"
               >
                 <CheckCircle2 className="w-3.5 h-3.5" />
-                Оплачен
+                {planKind === 'INVESTMENT' ? 'Вложено' : 'Оплачен'}
               </button>
               <button
                 type="button"
@@ -333,44 +506,62 @@ function PlannedPaymentModal({
         </div>
       }
     >
-      <Field label="Название">
+      <Field label={planKind === 'SUBSCRIPTION' ? 'Сервис' : 'Название'}>
         <input
           type="text"
           value={title}
           onChange={(e) => setTitle(e.target.value)}
-          placeholder="Аренда квартиры"
+          placeholder={
+            planKind === 'SUBSCRIPTION'
+              ? 'Netflix'
+              : planKind === 'INVESTMENT'
+              ? 'Пополнение брокерского счёта'
+              : 'Аренда квартиры'
+          }
           className={inputClass}
           autoFocus
         />
       </Field>
 
-      <SegmentedControl<TransactionKind>
-        value={kind}
-        onChange={(next) => {
-          setKind(next);
-          setCategoryId('');
-        }}
-        options={[
-          { value: 'EXPENSE', label: 'РАСХОД' },
-          { value: 'INCOME', label: 'ДОХОД' },
-        ]}
-      />
-
-      <div className="grid grid-cols-2 gap-3">
-        <Field label="Сумма">
+      {planKind !== 'PAYMENT' && (
+        <Field
+          label={planKind === 'INVESTMENT' ? 'Брокер / фонд' : 'Провайдер'}
+          hint="Необязательно"
+        >
           <input
             type="text"
-            inputMode="decimal"
-            value={amount}
-            onChange={(e) => setAmount(e.target.value)}
-            placeholder="4500"
-            className={`${inputClass} text-lg font-black`}
+            value={provider}
+            onChange={(e) => setProvider(e.target.value)}
+            placeholder={planKind === 'INVESTMENT' ? 'Interactive Brokers' : 'Apple, Google, банк'}
+            className={inputClass}
           />
         </Field>
-        <Field label="Валюта">
-          <CurrencySelector value={currency} onChange={setCurrency} />
-        </Field>
-      </div>
+      )}
+
+      {isPayment && (
+        <SegmentedControl<TransactionKind>
+          value={kind}
+          onChange={(next) => {
+            setKind(next);
+            setCategoryId('');
+          }}
+          options={[
+            { value: 'EXPENSE', label: 'РАСХОД' },
+            { value: 'INCOME', label: 'ДОХОД' },
+          ]}
+        />
+      )}
+
+      <Field label={`Сумма, ${currency}`}>
+        <input
+          type="text"
+          inputMode="decimal"
+          value={amount}
+          onChange={(e) => setAmount(e.target.value)}
+          placeholder="4500"
+          className={`${inputClass} text-lg font-black`}
+        />
+      </Field>
 
       <Field label="Категория">
         <select
@@ -387,7 +578,7 @@ function PlannedPaymentModal({
         </select>
       </Field>
 
-      <Field label="Счёт списания">
+      <Field label={planKind === 'INVESTMENT' ? 'Счёт списания' : 'Счёт'}>
         <select value={accountId} onChange={(e) => setAccountId(e.target.value)} className={inputClass}>
           {accounts.map((account) => (
             <option key={account.id} value={account.id}>
@@ -403,10 +594,12 @@ function PlannedPaymentModal({
           onChange={(e) => setRecurrence(e.target.value as RecurrenceKind)}
           className={inputClass}
         >
-          <option value="ONCE">Разовый</option>
+          {isPayment && <option value="ONCE">Разовый</option>}
           <option value="WEEKLY">Еженедельно</option>
           <option value="MONTHLY">Ежемесячно</option>
-          <option value="YEARLY">Ежегодно</option>
+          <option value="QUARTERLY">Раз в квартал</option>
+          <option value="SEMIANNUAL">Раз в полгода</option>
+          <option value="YEARLY">Раз в год</option>
           <option value="CUSTOM_DAYS">Произвольный интервал</option>
         </select>
       </Field>
@@ -424,7 +617,7 @@ function PlannedPaymentModal({
       )}
 
       <div className="grid grid-cols-2 gap-3">
-        <Field label="Дата платежа">
+        <Field label={planKind === 'PAYMENT' ? 'Дата платежа' : 'Следующее списание'}>
           <input
             type="date"
             value={nextDueDate}
@@ -475,7 +668,7 @@ function PlannedPaymentModal({
               Создавать операцию автоматически
             </span>
             <span className="block text-[10px] text-slate-400 font-medium">
-              Иначе приложение спросит подтверждение в день платежа
+              Иначе приложение спросит подтверждение в день списания
             </span>
           </span>
         </span>

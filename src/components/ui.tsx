@@ -2,8 +2,8 @@
 
 import React, { useEffect } from 'react';
 import { Plus, X } from 'lucide-react';
-import { CATEGORY_COLORS, CURRENCY_LIST, getCategoryIcon } from '@/constants/categories';
-import { CurrencyCode, FinanceCategory, ReceiptFieldFlag } from '@/types';
+import { CATEGORY_COLORS, getCategoryIcon } from '@/constants/categories';
+import { FinanceCategory, ReceiptFieldFlag } from '@/types';
 
 interface ModalShellProps {
   title: string;
@@ -246,33 +246,6 @@ export function CategoryGrid({
           <span className="text-[9.5px] font-bold leading-tight text-center">Создать</span>
         </button>
       )}
-    </div>
-  );
-}
-
-export function CurrencySelector({
-  value,
-  onChange,
-}: {
-  value: CurrencyCode;
-  onChange: (value: CurrencyCode) => void;
-}) {
-  return (
-    <div className="flex gap-1.5">
-      {CURRENCY_LIST.map((currency) => (
-        <button
-          key={currency.code}
-          type="button"
-          onClick={() => onChange(currency.code)}
-          className={`flex-1 py-2 rounded-xl text-xs font-black border transition-all ${
-            value === currency.code
-              ? 'bg-sky-500 text-white border-transparent shadow-md shadow-sky-500/25'
-              : 'bg-slate-50 dark:bg-slate-800 text-slate-500 border-slate-200 dark:border-slate-700'
-          }`}
-        >
-          {currency.symbol} {currency.code}
-        </button>
-      ))}
     </div>
   );
 }

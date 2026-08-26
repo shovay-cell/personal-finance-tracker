@@ -1,4 +1,10 @@
-import { PlannedPayment, Transaction } from '@/types';
+import {
+  PlanKind,
+  PlannedPayment,
+  RecurringCostRow,
+  RecurringTotals,
+  Transaction,
+} from '@/types';
 import {
   addTransaction,
   financeDb,
@@ -43,10 +49,13 @@ export function nextOccurrence(payment: PlannedPayment, from: string): string | 
     case 'WEEKLY':
       date.setDate(date.getDate() + 7);
       break;
-    case 'MONTHLY': {
+    case 'MONTHLY':
+    case 'QUARTERLY':
+    case 'SEMIANNUAL': {
+      const monthStep = payment.recurrence === 'MONTHLY' ? 1 : payment.recurrence === 'QUARTERLY' ? 3 : 6;
       const day = date.getDate();
       date.setDate(1);
-      date.setMonth(date.getMonth() + 1);
+      date.setMonth(date.getMonth() + monthStep);
       const lastDay = new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
       date.setDate(Math.min(day, lastDay));
       break;
@@ -72,6 +81,10 @@ export function describeRecurrence(payment: PlannedPayment): string {
       return 'Каждую неделю';
     case 'MONTHLY':
       return 'Каждый месяц';
+    case 'QUARTERLY':
+      return 'Раз в квартал';
+    case 'SEMIANNUAL':
+      return 'Раз в полгода';
     case 'YEARLY':
       return 'Раз в год';
     case 'CUSTOM_DAYS':
@@ -154,4 +167,70 @@ export async function processDuePlannedPayments(
   }
 
   return { created, awaitingConfirmation };
+}
+
+
+/** Average days per month, used to normalise week- and day-based intervals. */
+const DAYS_PER_MONTH = 365.25 / 12;
+
+/**
+ * How much a recurring entry costs per month on average. A yearly subscription
+ * is a twelfth of its price each month, a quarterly one a third — that is what
+ * makes plans on different billing periods comparable in one total.
+ */
+export function monthlyEquivalent(payment: PlannedPayment): number {
+  const amount = payment.amount;
+
+  switch (payment.recurrence) {
+    case 'WEEKLY':
+      return (amount * 52) / 12;
+    case 'MONTHLY':
+      return amount;
+    case 'QUARTERLY':
+      return amount / 3;
+    case 'SEMIANNUAL':
+      return amount / 6;
+    case 'YEARLY':
+      return amount / 12;
+    case 'CUSTOM_DAYS':
+      return (amount * DAYS_PER_MONTH) / Math.max(1, payment.intervalDays || 30);
+    case 'ONCE':
+    default:
+      // A one-off has no recurring cost — it must not inflate the monthly total.
+      return 0;
+  }
+}
+
+export function planKindOf(payment: PlannedPayment): PlanKind {
+  return payment.planKind || 'PAYMENT';
+}
+
+/**
+ * Rolls active entries of one kind into monthly and yearly commitments,
+ * converted to the profile's base currency via the rate stored on the plan.
+ */
+export function recurringTotals(
+  payments: PlannedPayment[],
+  planKind: PlanKind,
+  toBase: (amount: number, currency: PlannedPayment['currency']) => number
+): RecurringTotals {
+  const rows: RecurringCostRow[] = payments
+    .filter((p) => planKindOf(p) === planKind && p.isActive && p.recurrence !== 'ONCE')
+    .map((payment) => {
+      const monthlyBase = toBase(monthlyEquivalent(payment), payment.currency);
+      return {
+        payment,
+        monthlyBase: Math.round(monthlyBase * 100) / 100,
+        yearlyBase: Math.round(monthlyBase * 12 * 100) / 100,
+      };
+    })
+    .sort((a, b) => b.monthlyBase - a.monthlyBase);
+
+  const monthly = rows.reduce((sum, row) => sum + row.monthlyBase, 0);
+
+  return {
+    rows,
+    monthly: Math.round(monthly * 100) / 100,
+    yearly: Math.round(monthly * 12 * 100) / 100,
+  };
 }

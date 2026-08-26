@@ -15,6 +15,7 @@ import {
   Repeat,
   ShoppingBag,
   Shirt,
+  TrendingUp,
   Plane,
   Clapperboard,
   Palette,
@@ -81,6 +82,7 @@ export const CATEGORY_ICONS: Record<string, LucideIcon> = {
   Repeat,
   ShoppingBag,
   Shirt,
+  TrendingUp,
   Plane,
   Clapperboard,
   Palette,
@@ -171,6 +173,18 @@ const EXPENSE_SEEDS: CategorySeed[] = [
   { key: 'fees', name: 'Платежи, комиссии', iconName: 'Receipt', colorHex: '#78716C' },
   { key: 'gifts', name: 'Подарки', iconName: 'Gift', colorHex: '#F43F5E' },
   { key: 'subscriptions', name: 'Подписки', iconName: 'Repeat', colorHex: '#8B5CF6' },
+  {
+    key: 'investments',
+    name: 'Инвестиции',
+    iconName: 'TrendingUp',
+    colorHex: '#059669',
+    order: 145,
+    children: [
+      { key: 'investments_market', name: 'Акции и фонды' },
+      { key: 'investments_pension', name: 'Пенсия и накопления' },
+      { key: 'investments_crypto', name: 'Криптовалюта' },
+    ],
+  },
   { key: 'shopping', name: 'Покупки', iconName: 'ShoppingBag', colorHex: '#EAB308' },
   {
     key: 'clothing',
@@ -212,6 +226,8 @@ const INCOME_SEEDS: CategorySeed[] = [
 
 /** Stable id for the income category that bearer-cheque settlements post to. */
 export const OBLIGATION_INCOME_CATEGORY_ID = 'cat-obligation_settlement';
+export const SUBSCRIPTION_CATEGORY_ID = 'cat-subscriptions';
+export const INVESTMENT_CATEGORY_ID = 'cat-investments';
 export const ADJUSTMENT_CATEGORY_ID = 'cat-adjustment';
 export const FALLBACK_EXPENSE_CATEGORY_ID = 'cat-other_expense';
 export const FALLBACK_INCOME_CATEGORY_ID = 'cat-other_income';
@@ -308,6 +324,7 @@ export const VOICE_CATEGORY_KEYWORDS: { categoryKey: string; words: string[] }[]
   { categoryKey: 'shopping', words: ['покупк', 'shopping', 'קניות'] },
   { categoryKey: 'travel', words: ['путешеств', 'отпуск', 'билет', 'отель', 'travel', 'hotel', 'flight', 'טיסה', 'מלון'] },
   { categoryKey: 'subscriptions', words: ['подписк', 'netflix', 'spotify', 'subscription', 'מנוי'] },
+  { categoryKey: 'investments', words: ['инвестиц', 'вложил', 'акци', 'етф', 'etf', 'биржа', 'пенси', 'крипт', 'invest', 'השקעה', 'קרן'] },
   { categoryKey: 'education', words: ['образован', 'курс', 'учеб', 'книг', 'education', 'course', 'לימודים'] },
   { categoryKey: 'gifts', words: ['подар', 'gift', 'מתנה'] },
   { categoryKey: 'home', words: ['дом', 'уют', 'мебель', 'ремонт', 'home', 'furniture', 'בית'] },
@@ -325,4 +342,6 @@ export const RECEIPT_CATEGORY_HINTS: { categoryKey: string; words: string[] }[] 
   { categoryKey: 'clothing', words: ['fashion', 'zara', 'castro', 'renuar', 'fox', 'одежд', 'h&m', 'shoes'] },
   { categoryKey: 'shopping', words: ['ikea', 'ace', 'покупк'] },
   { categoryKey: 'transport', words: ['rav kav', 'רב קו', 'egged', 'dan', 'такси', 'gett', 'yango'] },
+  { categoryKey: 'subscriptions', words: ['netflix', 'spotify', 'youtube premium', 'icloud', 'google one', 'openai', 'yes', 'hot'] },
+  { categoryKey: 'investments', words: ['interactive brokers', 'etoro', 'blink', 'meitav', 'altshuler', 'קרן השתלמות', 'binance'] },
 ];

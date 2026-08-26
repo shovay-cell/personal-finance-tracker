@@ -2,6 +2,7 @@
 
 import React, { useMemo, useState } from 'react';
 import {
+  Coins,
   ImagePlus,
   Loader2,
   Save,
@@ -28,7 +29,6 @@ import {
 } from '@/lib/db';
 import {
   CategoryGrid,
-  CurrencySelector,
   Field,
   ModalShell,
   PrimaryButton,
@@ -36,6 +36,7 @@ import {
   fieldClass,
   inputClass,
 } from './ui';
+import { CURRENCIES } from '@/constants/categories';
 import { CategoryEditorModal } from './category-manager-modal';
 import {
   analyzeReceiptWithAI,
@@ -268,7 +269,7 @@ export function TransactionFormModal({
         ]}
       />
 
-      <Field label="Сумма" warn={uncertainFields.includes('amount')}>
+      <Field label={`Сумма, ${CURRENCIES[currency].symbol}`} warn={uncertainFields.includes('amount')}>
         <div className="flex gap-2">
           <input
             type="text"
@@ -285,15 +286,15 @@ export function TransactionFormModal({
         </div>
       </Field>
 
-      <Field label="Валюта" warn={uncertainFields.includes('currency')}>
-        <CurrencySelector
-          value={currency}
-          onChange={(next) => {
-            setCurrency(next);
-            confirmField('currency');
-          }}
-        />
-      </Field>
+      {currency !== baseCurrency && (
+        <div className="flex items-start gap-2 p-3 rounded-2xl bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400">
+          <Coins className="w-4 h-4 flex-shrink-0 mt-px" />
+          <p className="text-[11px] font-bold leading-relaxed">
+            Операция в {CURRENCIES[currency].name} ({CURRENCIES[currency].symbol}) — в отчётах
+            пересчитывается в {baseCurrency} по курсу из настроек.
+          </p>
+        </div>
+      )}
 
       <Field label="Категория" warn={uncertainFields.includes('category')}>
         <CategoryGrid

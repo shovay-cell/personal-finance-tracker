@@ -45,7 +45,6 @@ import {
 } from '@/services/ai/receipt-parser';
 import {
   Card,
-  CurrencySelector,
   EmptyState,
   Field,
   ModalShell,
@@ -300,7 +299,7 @@ function ObligationModal({
   onClose: () => void;
 }) {
   const [amount, setAmount] = useState(obligation ? String(obligation.amount) : '');
-  const [currency, setCurrency] = useState<CurrencyCode>(obligation?.currency || baseCurrency);
+  const currency: CurrencyCode = obligation?.currency || baseCurrency;
   const [issueDate, setIssueDate] = useState(obligation?.issueDate || todayIso());
   const [dueDate, setDueDate] = useState(obligation?.dueDate || '');
   const [payeeKind, setPayeeKind] = useState<PayeeKind>(obligation?.payeeKind || 'LANDLORD');
@@ -363,22 +362,17 @@ function ObligationModal({
         </div>
       }
     >
-      <div className="grid grid-cols-2 gap-3">
-        <Field label="Сумма чека">
-          <input
-            type="text"
-            inputMode="decimal"
-            value={amount}
-            onChange={(e) => setAmount(e.target.value)}
-            placeholder="5000"
-            className={`${inputClass} text-lg font-black`}
-            autoFocus
-          />
-        </Field>
-        <Field label="Валюта">
-          <CurrencySelector value={currency} onChange={setCurrency} />
-        </Field>
-      </div>
+      <Field label={`Сумма чека, ${currency}`}>
+        <input
+          type="text"
+          inputMode="decimal"
+          value={amount}
+          onChange={(e) => setAmount(e.target.value)}
+          placeholder="5000"
+          className={`${inputClass} text-lg font-black`}
+          autoFocus
+        />
+      </Field>
 
       <Field label="Кому / на что выписано">
         <div className="space-y-1.5">

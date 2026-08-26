@@ -260,7 +260,7 @@ function FinanceApp() {
             plannedPayments={plannedPayments}
             categories={categories}
             accounts={accounts}
-            baseCurrency={settings.baseCurrency}
+            settings={settings}
             autoCreateDefault={settings.plannedPaymentAutoCreate}
           />
         )}

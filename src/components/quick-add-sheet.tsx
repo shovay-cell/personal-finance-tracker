@@ -12,13 +12,13 @@ import {
 import { addTransaction } from '@/lib/db';
 import {
   CategoryGrid,
-  CurrencySelector,
   ModalShell,
   PrimaryButton,
   SegmentedControl,
 } from './ui';
 import { TransactionPrefill } from './transaction-form-modal';
 import { CategoryEditorModal } from './category-manager-modal';
+import { CURRENCIES } from '@/constants/categories';
 import {
   analyzeReceiptWithAI,
   compressForStorage,
@@ -65,7 +65,7 @@ export function QuickAddSheet({
   const [mode, setMode] = useState<QuickMode>(initialMode);
   const [kind, setKind] = useState<TransactionKind>('EXPENSE');
   const [amount, setAmount] = useState('');
-  const [currency, setCurrency] = useState<CurrencyCode>(baseCurrency);
+  const currency: CurrencyCode = baseCurrency;
   const [categoryId, setCategoryId] = useState('');
   const [accountId, setAccountId] = useState(accounts[0]?.id || '');
   const [isBusy, setIsBusy] = useState(false);
@@ -392,10 +392,11 @@ export function QuickAddSheet({
               }`}
             >
               {amount || '0'}
+              <span className="text-2xl text-slate-400 font-bold ml-1">
+                {CURRENCIES[currency].symbol}
+              </span>
             </span>
           </div>
-
-          <CurrencySelector value={currency} onChange={setCurrency} />
 
           <div className="grid grid-cols-3 gap-2">
             {keypadKeys.map((key) => (
