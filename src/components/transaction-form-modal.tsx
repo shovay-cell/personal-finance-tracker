@@ -38,8 +38,10 @@ import {
 } from './ui';
 import { CURRENCIES } from '@/constants/categories';
 import { CategoryEditorModal } from './category-manager-modal';
+import { GeminiKeyPrompt } from './gemini-key-prompt';
 import {
   analyzeReceiptWithAI,
+  ReceiptScanError,
   compressForStorage,
   readFileAsDataUrl,
   resolveCategoryId,
@@ -114,6 +116,8 @@ export function TransactionFormModal({
   const [isScanning, setIsScanning] = useState(false);
   const [isCreatingCategory, setIsCreatingCategory] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [keyError, setKeyError] = useState<string | null>(null);
+  const [lastScanFile, setLastScanFile] = useState<File | null>(null);
 
   const rootCategories = useMemo(
     () => categories.filter((c) => c.kind === kind && !c.parentId && !c.isHidden),
@@ -131,6 +135,8 @@ export function TransactionFormModal({
   const handlePhoto = async (file: File | null, analyze: boolean) => {
     if (!file) return;
     setError(null);
+    setKeyError(null);
+    setLastScanFile(file);
 
     try {
       const dataUrl = await readFileAsDataUrl(file);
@@ -160,7 +166,8 @@ export function TransactionFormModal({
         scannedAt: new Date().toISOString(),
       });
     } catch (err: any) {
-      setError(err.message || 'Не удалось распознать чек');
+      if (err instanceof ReceiptScanError && err.needsApiKey) setKeyError(err.message);
+      else setError(err.message || 'Не удалось распознать чек');
     } finally {
       setIsScanning(false);
     }
@@ -428,6 +435,15 @@ export function TransactionFormModal({
           <div className="mt-2 flex items-center gap-2 text-[11px] font-bold text-sky-600 dark:text-sky-400">
             <Loader2 className="w-3.5 h-3.5 animate-spin" />
             Gemini распознаёт чек…
+          </div>
+        )}
+
+        {keyError && (
+          <div className="mt-2">
+            <GeminiKeyPrompt
+              message={keyError}
+              onRetry={() => lastScanFile && handlePhoto(lastScanFile, true)}
+            />
           </div>
         )}
 

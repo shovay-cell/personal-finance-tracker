@@ -221,6 +221,64 @@ const CLIENT_PROMPT = `Ты — ИИ-бухгалтер приложения Fin
 {"merchant":"","total":0.0,"currency":"ILS"|"USD"|"EUR","date":"YYYY-MM-DD","category":"","items":[{"name":"","quantity":1,"price":0.0}],"rawText":"","confidence":0.0,"uncertainFields":[]}
 uncertainFields — поля ("amount","date","merchant","category","currency"), в которых ты не уверен.`;
 
+export type ReceiptScanErrorCode =
+  | 'NO_API_KEY'
+  | 'INVALID_KEY'
+  | 'QUOTA'
+  | 'OFFLINE'
+  | 'MODEL_ERROR'
+  | 'UNKNOWN';
+
+/**
+ * Carries why the scan failed instead of one catch-all sentence: the UI needs to
+ * tell "no key configured" (fixable right here) apart from "no network".
+ */
+export class ReceiptScanError extends Error {
+  code: ReceiptScanErrorCode;
+
+  constructor(code: ReceiptScanErrorCode, message: string) {
+    super(message);
+    this.name = 'ReceiptScanError';
+    this.code = code;
+  }
+
+  /** True when the user can fix it by pasting a personal Gemini key. */
+  get needsApiKey(): boolean {
+    return this.code === 'NO_API_KEY' || this.code === 'INVALID_KEY' || this.code === 'QUOTA';
+  }
+}
+
+/** Maps the API route's structured failure onto a code the UI can act on. */
+function classifyServerError(error?: string, message?: string): ReceiptScanError {
+  const text = `${error || ''} ${message || ''}`;
+
+  if (error === 'NO_API_KEY') {
+    return new ReceiptScanError(
+      'NO_API_KEY',
+      'Ключ Gemini не настроен. Вставьте свой ключ — он сохранится только на этом устройстве.'
+    );
+  }
+
+  if (/\b(400|401|403)\b/.test(text) || /API[_ ]?key not valid|invalid.*key|PERMISSION_DENIED/i.test(text)) {
+    return new ReceiptScanError(
+      'INVALID_KEY',
+      'Google отклонил ключ Gemini. Проверьте, что ключ активен и скопирован целиком.'
+    );
+  }
+
+  if (/\b429\b/.test(text) || /quota|RESOURCE_EXHAUSTED/i.test(text)) {
+    return new ReceiptScanError(
+      'QUOTA',
+      'Исчерпан лимит запросов к Gemini. Попробуйте позже или используйте свой ключ.'
+    );
+  }
+
+  return new ReceiptScanError(
+    'MODEL_ERROR',
+    message || 'Gemini не смог обработать снимок. Попробуйте переснять чек при хорошем освещении.'
+  );
+}
+
 /**
  * Server route first (it owns the shared key), then a direct Gemini call with the
  * user's personal key as a fallback for offline-ish/proxy failures.
@@ -232,12 +290,24 @@ export async function analyzeReceiptWithAI(
 ): Promise<ParsedReceiptResult> {
   const apiKey = (userKey || getStoredGeminiKey() || '').trim();
 
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+    throw new ReceiptScanError(
+      'OFFLINE',
+      'Нет подключения к сети. Запишите операцию вручную — чек можно распознать позже.'
+    );
+  }
+
   let payload = base64DataUrl;
   let payloadMime = mimeType;
   if (mimeType.startsWith('image/')) {
     payload = await compressImage(base64DataUrl);
     payloadMime = 'image/jpeg';
   }
+
+  // Remembered so a failing route can still report its real reason after the
+  // direct-call fallback has also been exhausted.
+  let serverError: ReceiptScanError | null = null;
+  let routeUnreachable = false;
 
   try {
     const res = await fetch('/api/analyze-receipt', {
@@ -246,17 +316,22 @@ export async function analyzeReceiptWithAI(
       body: JSON.stringify({ base64Data: payload, mimeType: payloadMime, apiKey }),
     });
 
-    if (res.ok) {
-      const json = await res.json();
-      if (json.success && json.data) return normalizeResult(json.data as RawReceiptResponse);
+    const json = await res.json().catch(() => null);
+
+    if (res.ok && json?.success && json.data) {
+      return normalizeResult(json.data as RawReceiptResponse);
     }
+
+    serverError = classifyServerError(json?.error, json?.message);
   } catch (err) {
+    routeUnreachable = true;
     console.warn('Receipt API route unavailable, trying direct Gemini call:', err);
   }
 
   if (apiKey) {
     const cleanBase64 = payload.includes('base64,') ? payload.split('base64,')[1] : payload;
     const models = ['gemini-3.6-flash', 'gemini-3.7-flash', 'gemini-3.5-flash'];
+    let directError: ReceiptScanError | null = null;
 
     for (const model of models) {
       try {
@@ -279,7 +354,11 @@ export async function analyzeReceiptWithAI(
           }
         );
 
-        if (!res.ok) continue;
+        if (!res.ok) {
+          directError = classifyServerError(String(res.status), await res.text());
+          continue;
+        }
+
         const json = await res.json();
         const text = json.candidates?.[0]?.content?.parts?.[0]?.text;
         if (!text) continue;
@@ -292,9 +371,21 @@ export async function analyzeReceiptWithAI(
         console.warn(`Direct Gemini receipt call failed on ${model}:`, err);
       }
     }
+
+    if (directError) throw directError;
   }
 
-  throw new Error(
-    'Не удалось распознать чек. Проверьте подключение к сети или укажите Gemini API ключ в настройках.'
+  if (serverError) throw serverError;
+
+  if (routeUnreachable) {
+    throw new ReceiptScanError(
+      'OFFLINE',
+      'Сервер распознавания недоступен. Проверьте соединение и попробуйте ещё раз.'
+    );
+  }
+
+  throw new ReceiptScanError(
+    'UNKNOWN',
+    'Не удалось распознать чек. Попробуйте ещё раз или запишите операцию вручную.'
   );
 }

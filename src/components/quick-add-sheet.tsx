@@ -19,8 +19,10 @@ import {
 import { TransactionPrefill } from './transaction-form-modal';
 import { CategoryEditorModal } from './category-manager-modal';
 import { CURRENCIES } from '@/constants/categories';
+import { GeminiKeyPrompt } from './gemini-key-prompt';
 import {
   analyzeReceiptWithAI,
+  ReceiptScanError,
   compressForStorage,
   readFileAsDataUrl,
   resolveCategoryId,
@@ -71,6 +73,8 @@ export function QuickAddSheet({
   const [isBusy, setIsBusy] = useState(false);
   const [isCreatingCategory, setIsCreatingCategory] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [keyError, setKeyError] = useState<string | null>(null);
+  const [lastScanFile, setLastScanFile] = useState<File | null>(null);
 
   const [isListening, setIsListening] = useState(false);
   const [transcript, setTranscript] = useState('');
@@ -144,6 +148,9 @@ export function QuickAddSheet({
     if (!file) return;
     setIsBusy(true);
     setError(null);
+    setKeyError(null);
+    // Kept so «повторить» after entering a key does not ask for the photo again.
+    setLastScanFile(file);
 
     try {
       const dataUrl = await readFileAsDataUrl(file);
@@ -173,7 +180,8 @@ export function QuickAddSheet({
       });
       onClose();
     } catch (err: any) {
-      setError(err.message || 'Не удалось распознать чек');
+      if (err instanceof ReceiptScanError && err.needsApiKey) setKeyError(err.message);
+      else setError(err.message || 'Не удалось распознать чек');
       setIsBusy(false);
     }
   };
@@ -314,12 +322,21 @@ export function QuickAddSheet({
             </>
           ) : (
             <>
-              <Sparkles className="w-9 h-9 mx-auto text-sky-500" />
+              {!keyError && <Sparkles className="w-9 h-9 mx-auto text-sky-500" />}
               <PrimaryButton onClick={() => scanInputRef.current?.click()}>
                 <ScanLine className="w-4 h-4" />
                 Сфотографировать чек
               </PrimaryButton>
               {error && <p className="text-[11px] font-bold text-rose-500">{error}</p>}
+              {keyError && (
+                <GeminiKeyPrompt
+                  message={keyError}
+                  onRetry={() => {
+                    if (lastScanFile) handleScan(lastScanFile);
+                    else scanInputRef.current?.click();
+                  }}
+                />
+              )}
             </>
           )}
         </div>
