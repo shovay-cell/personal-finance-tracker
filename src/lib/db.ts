@@ -13,6 +13,8 @@ import {
   ProfileMember,
   Transaction,
   TransactionSplit,
+  VatPayment,
+  VatSummary,
 } from '@/types';
 import {
   buildDefaultCategories,
@@ -31,6 +33,7 @@ export class FinanceDatabase extends Dexie {
   obligationSettlements!: Table<ObligationSettlement, string>;
   budgets!: Table<Budget, string>;
   members!: Table<ProfileMember, string>;
+  vatPayments!: Table<VatPayment, string>;
   settings!: Table<FinanceSettings, string>;
 
   constructor() {
@@ -45,6 +48,11 @@ export class FinanceDatabase extends Dexie {
       budgets: 'id, month, categoryId, memberId',
       members: 'id, email, role',
       settings: 'id',
+    });
+
+    // v2 adds VAT remittances; existing tables carry over untouched.
+    this.version(2).stores({
+      vatPayments: 'id, date',
     });
   }
 }
@@ -83,6 +91,11 @@ export const DEFAULT_SETTINGS: FinanceSettings = {
   budgetRolloverEnabled: false,
   notifyAtPercent: [80, 100],
   plannedPaymentAutoCreate: false,
+  vatEnabled: false,
+  vatRate: 18,
+  vatSeparateByDefault: true,
+  showTransactionAuthor: true,
+  pinEnabled: false,
   updatedAt: new Date().toISOString(),
 };
 
@@ -816,4 +829,62 @@ function shiftMonthKey(month: string, delta: number): string {
   const [year, mon] = month.split('-').map(Number);
   const date = new Date(year, mon - 1 + delta, 1);
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+}
+
+
+// ---------------------------------------------------------------- VAT
+
+export async function addVatPayment(
+  input: Omit<VatPayment, 'id' | 'createdAt'>
+): Promise<VatPayment> {
+  const payment: VatPayment = {
+    ...input,
+    id: newId('vat'),
+    createdAt: new Date().toISOString(),
+  };
+  await financeDb.vatPayments.put(payment);
+  return payment;
+}
+
+export async function deleteVatPayment(id: string): Promise<void> {
+  const payment = await financeDb.vatPayments.get(id);
+  await financeDb.vatPayments.delete(id);
+  if (payment?.transactionId) {
+    await financeDb.transactions.delete(payment.transactionId);
+  }
+}
+
+/**
+ * VAT owed = what was set aside from income minus what has been remitted.
+ * Income is counted net of its own VAT, so "доступная прибыль" never includes
+ * money that belongs to the tax authority.
+ */
+export function summarizeVat(
+  transactions: Transaction[],
+  vatPayments: VatPayment[],
+  rate: number
+): VatSummary {
+  const incomes = transactions.filter((t) => t.kind === 'INCOME');
+  const withVat = incomes.filter((t) => (t.vatAmount || 0) > 0);
+
+  const grossIncome = incomes.reduce((sum, t) => sum + t.baseAmount, 0);
+  const accrued = withVat.reduce((sum, t) => {
+    // The stored VAT is in the transaction currency; scale it the same way the
+    // base amount was scaled so mixed-currency income still adds up.
+    const share = t.amount > 0 ? (t.vatAmount || 0) / t.amount : 0;
+    return sum + t.baseAmount * share;
+  }, 0);
+  const paid = vatPayments.reduce((sum, p) => sum + p.amount, 0);
+
+  const round = (value: number) => Math.round(value * 100) / 100;
+
+  return {
+    rate,
+    accrued: round(accrued),
+    paid: round(paid),
+    outstanding: round(accrued - paid),
+    grossIncome: round(grossIncome),
+    netIncome: round(grossIncome - accrued),
+    incomeCount: withVat.length,
+  };
 }

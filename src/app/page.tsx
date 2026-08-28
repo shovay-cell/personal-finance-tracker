@@ -11,9 +11,11 @@ import {
   currentMonth,
   getCurrentMemberId,
   refreshObligationStatuses,
+  saveFinanceSettings,
+  summarizeVat,
   DEFAULT_SETTINGS,
 } from '@/lib/db';
-import { PlannedPayment, Transaction } from '@/types';
+import { AuthSession, PlannedPayment, Transaction } from '@/types';
 import {
   DateRange,
   PeriodPreset,
@@ -43,6 +45,14 @@ import { ReportsTab } from '@/components/reports-tab';
 import { SettingsTab } from '@/components/settings-tab';
 import { QuickAddSheet } from '@/components/quick-add-sheet';
 import { StatementImportModal } from '@/components/statement-import-modal';
+import { AuthGate } from '@/components/auth-gate';
+import { OnboardingWizard } from '@/components/onboarding-wizard';
+import { PinLockScreen } from '@/components/pin-lock';
+import {
+  isSessionUnlocked,
+  markSessionUnlocked,
+  subscribeSessionLock,
+} from '@/services/security/session-lock';
 import {
   TransactionFormModal,
   TransactionPrefill,
@@ -64,6 +74,11 @@ function FinanceApp() {
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
   const [pendingPlanned, setPendingPlanned] = useState<PlannedPayment[]>([]);
   const [toast, setToast] = useState<string | null>(null);
+  // Unlocking lives in a module store: it survives re-renders and setting a PIN
+  // from inside the app, but not a reload — which is when the lock should return.
+  const [isUnlocked, setIsUnlocked] = useState(isSessionUnlocked);
+
+  useEffect(() => subscribeSessionLock(() => setIsUnlocked(isSessionUnlocked())), []);
 
   const transactions = useLiveQuery(() => financeDb.transactions.toArray(), [], []);
   // Ordered by sortOrder so pickers keep the seeded category order everywhere.
@@ -74,6 +89,7 @@ function FinanceApp() {
   const plannedPayments = useLiveQuery(() => financeDb.plannedPayments.toArray(), [], []);
   const obligations = useLiveQuery(() => financeDb.obligations.toArray(), [], []);
   const settlements = useLiveQuery(() => financeDb.obligationSettlements.toArray(), [], []);
+  const vatPayments = useLiveQuery(() => financeDb.vatPayments.toArray(), [], []);
   const settingsRow = useLiveQuery(() => financeDb.settings.get('default'), []);
 
   const settings = settingsRow || DEFAULT_SETTINGS;
@@ -122,6 +138,14 @@ function FinanceApp() {
     else if (quick === 'expense' || quick === 'add') setQuickAddMode('MANUAL');
   }, [searchParams, mounted]);
 
+  const vatSummary = useMemo(
+    () =>
+      settings.vatEnabled
+        ? summarizeVat(transactions, vatPayments, settings.vatRate)
+        : undefined,
+    [settings.vatEnabled, settings.vatRate, transactions, vatPayments]
+  );
+
   const monthBudgetProgress = useMemo(
     () => budgetProgress(budgets, transactions, categories, month),
     [budgets, transactions, categories, month]
@@ -168,6 +192,40 @@ function FinanceApp() {
       <div className="min-h-screen flex items-center justify-center">
         <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-sky-500 to-cyan-400 animate-pulse" />
       </div>
+    );
+  }
+
+  const handleSignedIn = async (session: AuthSession) => {
+    await saveFinanceSettings({ session });
+    // A signed-in owner should carry their own name on the operations they add.
+    const owner = members.find((m) => m.role === 'OWNER');
+    if (owner && (owner.displayName === 'Я' || !owner.email)) {
+      await financeDb.members.update(owner.id, {
+        displayName: session.displayName,
+        email: session.email,
+      });
+    }
+  };
+
+  if (!settings.session) {
+    return <AuthGate onSignedIn={handleSignedIn} />;
+  }
+
+  if (settings.pinEnabled && !isUnlocked) {
+    return <PinLockScreen settings={settings} onUnlocked={markSessionUnlocked} />;
+  }
+
+  if (!settings.onboardingCompleted) {
+    return (
+      <OnboardingWizard
+        settings={settings}
+        session={settings.session}
+        onFinish={() => {
+          // The PIN was just chosen here — do not ask for it on the next frame.
+          markSessionUnlocked();
+          setToast('Настройки сохранены');
+        }}
+      />
     );
   }
 
@@ -282,6 +340,8 @@ function FinanceApp() {
             categories={categories}
             accounts={accounts}
             baseCurrency={settings.baseCurrency}
+            vatSummary={vatSummary}
+            vatPayments={vatPayments}
           />
         )}
 
@@ -310,6 +370,7 @@ function FinanceApp() {
         {activeTab === 'settings' && (
           <SettingsTab
             settings={settings}
+            vatSummary={vatSummary}
             categories={categories}
             accounts={accounts}
             members={members}
@@ -365,6 +426,7 @@ function FinanceApp() {
           accounts={accounts}
           members={members}
           baseCurrency={settings.baseCurrency}
+          settings={settings}
           existing={editingTransaction}
           prefill={formPrefill || undefined}
           onClose={() => {

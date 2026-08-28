@@ -143,6 +143,18 @@ export function sumBase(transactions: Transaction[]): number {
 }
 
 /**
+ * Income with its separated VAT taken out: what is actually the user's to spend.
+ * The VAT share is applied to the base amount so mixed currencies stay correct.
+ */
+export function sumNetBase(transactions: Transaction[]): number {
+  const total = transactions.reduce((sum, t) => {
+    const vatShare = t.amount > 0 ? (t.vatAmount || 0) / t.amount : 0;
+    return sum + t.baseAmount * (1 - vatShare);
+  }, 0);
+  return Math.round(total * 100) / 100;
+}
+
+/**
  * Per-category totals in base currency. Subcategory spending rolls up into its
  * parent so a pie chart never double-counts.
  */
@@ -367,7 +379,8 @@ export function safeToSpend(input: {
   const inMonth = transactions.filter((t) => isWithin(t.date, range));
 
   const spent = sumBase(inMonth.filter((t) => t.kind === 'EXPENSE'));
-  const income = sumBase(inMonth.filter((t) => t.kind === 'INCOME'));
+  // Money set aside as VAT belongs to the tax authority — never to the plan.
+  const income = sumNetBase(inMonth.filter((t) => t.kind === 'INCOME'));
 
   const totalBudget = budgets.find((b) => b.month === month && !b.categoryId && !b.memberId);
   const planned = totalBudget

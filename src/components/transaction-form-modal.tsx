@@ -4,6 +4,7 @@ import React, { useMemo, useState } from 'react';
 import {
   Coins,
   ImagePlus,
+  Percent,
   Scissors,
   Loader2,
   Save,
@@ -17,6 +18,7 @@ import {
   FinanceCategory,
   ProfileMember,
   ReceiptFieldFlag,
+  FinanceSettings,
   ReceiptScanMeta,
   Transaction,
   TransactionKind,
@@ -39,6 +41,7 @@ import {
   inputClass,
 } from './ui';
 import { CURRENCIES } from '@/constants/categories';
+import { netFromGross, vatFromGross } from '@/services/vat';
 import { CategoryEditorModal } from './category-manager-modal';
 import { GeminiKeyPrompt } from './gemini-key-prompt';
 import { SplitEditor } from './split-editor';
@@ -69,6 +72,7 @@ interface TransactionFormModalProps {
   categories: FinanceCategory[];
   accounts: FinanceAccount[];
   members: ProfileMember[];
+  settings: FinanceSettings;
   baseCurrency: CurrencyCode;
   existing?: Transaction | null;
   prefill?: TransactionPrefill;
@@ -80,6 +84,7 @@ export function TransactionFormModal({
   categories,
   accounts,
   members,
+  settings,
   baseCurrency,
   existing,
   prefill,
@@ -112,6 +117,9 @@ export function TransactionFormModal({
     existing?.receiptScan || prefill?.receiptScan
   );
   const [splits, setSplits] = useState<TransactionSplit[]>(existing?.splits || []);
+  const [separateVat, setSeparateVat] = useState(
+    existing ? (existing.vatAmount || 0) > 0 : settings.vatEnabled && settings.vatSeparateByDefault
+  );
   const [uncertainFields, setUncertainFields] = useState<ReceiptFieldFlag[]>(
     prefill?.uncertainFields || existing?.receiptScan?.uncertainFields || []
   );
@@ -209,6 +217,14 @@ export function TransactionFormModal({
         receiptScan: receiptScan
           ? { ...receiptScan, uncertainFields }
           : undefined,
+        // VAT belongs to the tax authority from the moment the money arrives —
+        // full payment, partial payment and advance alike.
+        vatAmount:
+          kind === 'INCOME' && settings.vatEnabled && separateVat
+            ? vatFromGross(numericAmount, settings.vatRate)
+            : undefined,
+        vatRate:
+          kind === 'INCOME' && settings.vatEnabled && separateVat ? settings.vatRate : undefined,
         authorId,
         source: existing?.source || prefill?.source || (receiptScan ? 'RECEIPT_SCAN' : 'MANUAL'),
       };
@@ -342,6 +358,52 @@ export function TransactionFormModal({
         </Field>
       )}
 
+      {kind === 'INCOME' && settings.vatEnabled && (
+        <div className="rounded-2xl border border-amber-200 dark:border-amber-900 bg-amber-50/60 dark:bg-amber-950/20 p-3 space-y-2">
+          <button
+            type="button"
+            onClick={() => setSeparateVat((prev) => !prev)}
+            className="w-full flex items-center justify-between gap-3 text-left"
+          >
+            <span className="flex items-start gap-2 min-w-0">
+              <Percent className="w-4 h-4 text-amber-600 dark:text-amber-400 mt-px flex-shrink-0" />
+              <span>
+                <span className="block text-xs font-black text-slate-800 dark:text-slate-100">
+                  Отделить НДС и отложить в сторону
+                </span>
+                <span className="block text-[10px] text-slate-500 dark:text-slate-400 font-medium mt-0.5">
+                  Ставка {settings.vatRate}% · сумма уйдёт из доступной прибыли в обязательства
+                </span>
+              </span>
+            </span>
+            <span
+              className={`w-11 h-6 rounded-full flex items-center px-0.5 transition-colors flex-shrink-0 ${
+                separateVat ? 'bg-amber-500' : 'bg-slate-300 dark:bg-slate-700'
+              }`}
+            >
+              <span
+                className={`w-5 h-5 rounded-full bg-white shadow transition-transform ${
+                  separateVat ? 'translate-x-5' : ''
+                }`}
+              />
+            </span>
+          </button>
+
+          {separateVat && (
+            <div className="flex items-center justify-between pt-2 border-t border-amber-200/70 dark:border-amber-900/70">
+              <span className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400">
+                Прибыль:{' '}
+                {netFromGross(parseFloat(amount.replace(',', '.')) || 0, settings.vatRate).toFixed(2)}
+              </span>
+              <span className="text-[11px] font-bold text-amber-600 dark:text-amber-400">
+                НДС:{' '}
+                {vatFromGross(parseFloat(amount.replace(',', '.')) || 0, settings.vatRate).toFixed(2)}
+              </span>
+            </div>
+          )}
+        </div>
+      )}
+
       {splits.length > 0 ? (
         <Field
           label="Разделение чека"
@@ -433,7 +495,7 @@ export function TransactionFormModal({
         />
       </Field>
 
-      {members.length > 1 && (
+      {members.length > 1 && settings.showTransactionAuthor && (
         <Field label="Автор операции">
           <select
             value={authorId}

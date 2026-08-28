@@ -21,6 +21,8 @@ import {
   ObligationWithBalance,
   PayeeKind,
   Transaction,
+  VatPayment,
+  VatSummary,
 } from '@/types';
 import {
   addObligation,
@@ -43,6 +45,7 @@ import {
   compressForStorage,
   readFileAsDataUrl,
 } from '@/services/ai/receipt-parser';
+import { VatCard } from './vat-card';
 import {
   Card,
   EmptyState,
@@ -59,6 +62,8 @@ interface ObligationsTabProps {
   categories: FinanceCategory[];
   accounts: FinanceAccount[];
   baseCurrency: CurrencyCode;
+  vatSummary?: VatSummary;
+  vatPayments: VatPayment[];
 }
 
 const STATUS_STYLES: Record<string, string> = {
@@ -74,6 +79,8 @@ export function ObligationsTab({
   categories,
   accounts,
   baseCurrency,
+  vatSummary,
+  vatPayments,
 }: ObligationsTabProps) {
   const [editing, setEditing] = useState<Obligation | 'NEW' | null>(null);
   const [settling, setSettling] = useState<ObligationWithBalance | null>(null);
@@ -89,6 +96,16 @@ export function ObligationsTab({
 
   return (
     <div className="space-y-4">
+      {vatSummary && (
+        <VatCard
+          summary={vatSummary}
+          payments={vatPayments}
+          currency={baseCurrency}
+          accounts={accounts}
+          categories={categories}
+        />
+      )}
+
       <Card className="p-4">
         <p className="text-[10px] font-black uppercase tracking-wide text-slate-400">
           Непогашенный остаток по выданным чекам

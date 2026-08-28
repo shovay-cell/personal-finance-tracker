@@ -11,6 +11,9 @@ import {
   Download,
   KeyRound,
   Loader2,
+  Lock,
+  LogOut,
+  Percent,
   Mic,
   RefreshCw,
   ServerCog,
@@ -29,6 +32,7 @@ import {
   ProfileMember,
   SpeechLocale,
   Transaction,
+  VatSummary,
 } from '@/types';
 import {
   addAccount,
@@ -67,6 +71,7 @@ import {
   requestNotificationsPermission,
 } from '@/services/notifications';
 import { CategoryManagerModal } from './category-manager-modal';
+import { ManagePinModal } from './pin-lock';
 import {
   Card,
   ColorPicker,
@@ -79,6 +84,7 @@ import {
 
 interface SettingsTabProps {
   settings: FinanceSettings;
+  vatSummary?: VatSummary;
   categories: FinanceCategory[];
   accounts: FinanceAccount[];
   members: ProfileMember[];
@@ -87,6 +93,7 @@ interface SettingsTabProps {
 
 export function SettingsTab({
   settings,
+  vatSummary,
   categories,
   accounts,
   members,
@@ -108,6 +115,7 @@ export function SettingsTab({
   const [busy, setBusy] = useState<string | null>(null);
   const [message, setMessage] = useState<{ text: string; kind: 'ok' | 'error' } | null>(null);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
+  const [isManagingPin, setIsManagingPin] = useState(false);
   const currentMemberId = getCurrentMemberId();
 
   useEffect(() => {
@@ -235,6 +243,179 @@ export function SettingsTab({
               <option value="en-US">English</option>
             </select>
           </Field>
+        </Card>
+      </div>
+
+      {/* -------------------------------------------------------- account */}
+      <div>
+        <SectionTitle title="Аккаунт" />
+        <Card className="p-4 space-y-3">
+          <div className="flex items-center gap-3">
+            <span className="w-10 h-10 rounded-2xl bg-sky-100 dark:bg-sky-950/50 text-sky-600 dark:text-sky-400 flex items-center justify-center flex-shrink-0 font-black text-xs">
+              {(settings.session?.displayName || '?').slice(0, 2).toUpperCase()}
+            </span>
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-black text-slate-800 dark:text-slate-100 truncate">
+                {settings.session?.displayName || 'Не выполнен вход'}
+              </p>
+              <p className="text-[10px] text-slate-400 font-medium truncate">
+                {settings.session?.email}
+                {settings.session ? ` · ${settings.session.provider === 'GOOGLE' ? 'Google' : 'Email'}` : ''}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => saveFinanceSettings({ session: undefined })}
+              className="px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-[10px] font-black flex-shrink-0 flex items-center gap-1"
+            >
+              <LogOut className="w-3 h-3" />
+              Выйти
+            </button>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setIsManagingPin(true)}
+            className="w-full flex items-center justify-between gap-3 p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/70 text-left"
+          >
+            <span className="flex items-start gap-2">
+              <Lock className="w-4 h-4 text-slate-400 mt-px flex-shrink-0" />
+              <span>
+                <span className="block text-xs font-black text-slate-700 dark:text-slate-200">
+                  Код доступа
+                </span>
+                <span className="block text-[10px] text-slate-400 font-medium">
+                  {settings.pinEnabled
+                    ? 'Включён · сменить или отключить'
+                    : 'Выключен · защитить вход в приложение'}
+                </span>
+              </span>
+            </span>
+            <span
+              className={`px-2 py-1 rounded-lg text-[10px] font-black flex-shrink-0 ${
+                settings.pinEnabled
+                  ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-400'
+                  : 'bg-slate-200 text-slate-500 dark:bg-slate-700'
+              }`}
+            >
+              {settings.pinEnabled ? 'вкл' : 'выкл'}
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() =>
+              saveFinanceSettings({ showTransactionAuthor: !settings.showTransactionAuthor })
+            }
+            className="w-full flex items-center justify-between gap-3 p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/70 text-left"
+          >
+            <span>
+              <span className="block text-xs font-black text-slate-700 dark:text-slate-200">
+                Показывать, кто добавил операцию
+              </span>
+              <span className="block text-[10px] text-slate-400 font-medium">
+                Метка автора в списке, фильтрах и отчётах
+              </span>
+            </span>
+            <span
+              className={`w-11 h-6 rounded-full flex items-center px-0.5 transition-colors flex-shrink-0 ${
+                settings.showTransactionAuthor ? 'bg-emerald-500' : 'bg-slate-300 dark:bg-slate-700'
+              }`}
+            >
+              <span
+                className={`w-5 h-5 rounded-full bg-white shadow transition-transform ${
+                  settings.showTransactionAuthor ? 'translate-x-5' : ''
+                }`}
+              />
+            </span>
+          </button>
+        </Card>
+      </div>
+
+      {/* ------------------------------------------------------------ VAT */}
+      <div>
+        <SectionTitle title="НДС" />
+        <Card className="p-4 space-y-3">
+          <button
+            type="button"
+            onClick={() => saveFinanceSettings({ vatEnabled: !settings.vatEnabled })}
+            className="w-full flex items-center justify-between gap-3 p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/70 text-left"
+          >
+            <span>
+              <span className="block text-xs font-black text-slate-700 dark:text-slate-200">
+                Отделять НДС от доходов
+              </span>
+              <span className="block text-[10px] text-slate-400 font-medium">
+                Налог уходит из доступной прибыли в обязательства сразу при внесении дохода
+              </span>
+            </span>
+            <span
+              className={`w-11 h-6 rounded-full flex items-center px-0.5 transition-colors flex-shrink-0 ${
+                settings.vatEnabled ? 'bg-emerald-500' : 'bg-slate-300 dark:bg-slate-700'
+              }`}
+            >
+              <span
+                className={`w-5 h-5 rounded-full bg-white shadow transition-transform ${
+                  settings.vatEnabled ? 'translate-x-5' : ''
+                }`}
+              />
+            </span>
+          </button>
+
+          {settings.vatEnabled && (
+            <>
+              <Field label="Ставка НДС, %">
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  value={settings.vatRate}
+                  onChange={(e) =>
+                    saveFinanceSettings({ vatRate: parseFloat(e.target.value.replace(',', '.')) || 0 })
+                  }
+                  className={`${inputClass} text-lg font-black`}
+                />
+              </Field>
+
+              <button
+                type="button"
+                onClick={() =>
+                  saveFinanceSettings({ vatSeparateByDefault: !settings.vatSeparateByDefault })
+                }
+                className="w-full flex items-center justify-between gap-3 p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/70 text-left"
+              >
+                <span>
+                  <span className="block text-xs font-black text-slate-700 dark:text-slate-200">
+                    Включать галочку по умолчанию
+                  </span>
+                  <span className="block text-[10px] text-slate-400 font-medium">
+                    Новый доход сразу с отделением НДС
+                  </span>
+                </span>
+                <span
+                  className={`w-11 h-6 rounded-full flex items-center px-0.5 transition-colors flex-shrink-0 ${
+                    settings.vatSeparateByDefault ? 'bg-emerald-500' : 'bg-slate-300 dark:bg-slate-700'
+                  }`}
+                >
+                  <span
+                    className={`w-5 h-5 rounded-full bg-white shadow transition-transform ${
+                      settings.vatSeparateByDefault ? 'translate-x-5' : ''
+                    }`}
+                  />
+                </span>
+              </button>
+
+              {vatSummary && (
+                <div className="flex items-start gap-2 p-2.5 rounded-2xl bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400">
+                  <Percent className="w-3.5 h-3.5 mt-px flex-shrink-0" />
+                  <p className="text-[10.5px] font-bold leading-relaxed">
+                    К выплате: {formatMoney(vatSummary.outstanding, settings.baseCurrency)} ·
+                    отложено {formatMoney(vatSummary.accrued, settings.baseCurrency)} ·
+                    выплачено {formatMoney(vatSummary.paid, settings.baseCurrency)}
+                  </p>
+                </div>
+              )}
+            </>
+          )}
         </Card>
       </div>
 
@@ -690,6 +871,10 @@ export function SettingsTab({
             «Восстановить».
           </p>
         </ModalShell>
+      )}
+
+      {isManagingPin && (
+        <ManagePinModal settings={settings} onClose={() => setIsManagingPin(false)} />
       )}
 
       {showCategories && (

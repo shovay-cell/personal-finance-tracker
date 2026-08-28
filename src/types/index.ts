@@ -100,6 +100,10 @@ export interface Transaction {
   plannedPaymentId?: string;
   /** set when the transaction settles a bearer cheque obligation */
   obligationId?: string;
+  /** VAT separated from this income and owed to the tax authority */
+  vatAmount?: number;
+  /** VAT rate applied, kept so a later rate change cannot rewrite history */
+  vatRate?: number;
   source: 'MANUAL' | 'RECEIPT_SCAN' | 'VOICE' | 'PLANNED';
   createdAt: string;
   updatedAt: string;
@@ -320,6 +324,43 @@ export interface ProfileMember {
 
 export type SpeechLocale = 'ru-RU' | 'he-IL' | 'en-US';
 
+export type AuthProvider = 'GOOGLE' | 'EMAIL';
+
+/** Who is using the app on this device. Identity is local: there is no server. */
+export interface AuthSession {
+  provider: AuthProvider;
+  email: string;
+  displayName: string;
+  pictureUrl?: string;
+  signedInAt: string;
+}
+
+/** A VAT remittance that clears part of the accrued liability. */
+export interface VatPayment {
+  id: string;
+  amount: number;
+  currency: CurrencyCode;
+  date: string; // YYYY-MM-DD
+  periodFrom?: string;
+  periodTo?: string;
+  note?: string;
+  /** Expense transaction created alongside the remittance. */
+  transactionId?: string;
+  createdAt: string;
+}
+
+export interface VatSummary {
+  rate: number;
+  /** VAT set aside from income, in base currency. */
+  accrued: number;
+  paid: number;
+  outstanding: number;
+  /** Income net of the VAT that was set aside. */
+  netIncome: number;
+  grossIncome: number;
+  incomeCount: number;
+}
+
 export interface FinanceSettings {
   id: 'default'; // singleton row
   baseCurrency: CurrencyCode;
@@ -335,6 +376,28 @@ export interface FinanceSettings {
   plannedPaymentAutoCreate: boolean;
   geminiApiKey?: string;
   lastBackupDate?: string;
+
+  /** Set once the first-run wizard has been completed or skipped. */
+  onboardingCompleted?: boolean;
+  /** Signed-in identity; absent means the login screen is shown. */
+  session?: AuthSession;
+
+  /** Business VAT: separated from income the moment it is booked. */
+  vatEnabled: boolean;
+  /** Percent, e.g. 18 for Israel. */
+  vatRate: number;
+  /** Pre-tick «отделить НДС» on new income. */
+  vatSeparateByDefault: boolean;
+
+  /** Author labels on operations — on by default for a shared profile. */
+  showTransactionAuthor: boolean;
+
+  /** Optional local PIN lock; off until the user turns it on. */
+  pinEnabled: boolean;
+  /** SHA-256 of salt + PIN — the PIN itself is never stored. */
+  pinHash?: string;
+  pinSalt?: string;
+
   updatedAt: string;
 }
 
