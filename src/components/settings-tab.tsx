@@ -70,6 +70,8 @@ import {
   notificationsPermission,
   requestNotificationsPermission,
 } from '@/services/notifications';
+import { LANGUAGES, SPEECH_LOCALE_BY_LANGUAGE } from '@/i18n/dictionary';
+import { useT } from '@/i18n/context';
 import { CategoryManagerModal } from './category-manager-modal';
 import { ManagePinModal } from './pin-lock';
 import { JoinProfileModal } from './join-profile-modal';
@@ -119,6 +121,7 @@ export function SettingsTab({
   const [isManagingPin, setIsManagingPin] = useState(false);
   const [isJoining, setIsJoining] = useState(false);
   const currentMemberId = getCurrentMemberId();
+  const { t, language } = useT();
 
   useEffect(() => {
     const state = getGoogleDriveState();
@@ -174,9 +177,35 @@ export function SettingsTab({
 
       {/* ------------------------------------------------------- profile */}
       <div>
-        <SectionTitle title="Профиль" />
+        <SectionTitle title={t('settings.profile')} />
         <Card className="p-4 space-y-3">
-          <Field label="Название профиля">
+          <Field label={t('settings.language')} hint={t('settings.languageHint')}>
+            <div className="grid grid-cols-2 gap-1.5">
+              {LANGUAGES.map((option) => (
+                <button
+                  key={option.code}
+                  type="button"
+                  onClick={() =>
+                    // The dictation language follows the interface: choosing
+                    // Hebrew and then dictating in Russian is nobody's intent.
+                    saveFinanceSettings({
+                      language: option.code,
+                      speechLocale: SPEECH_LOCALE_BY_LANGUAGE[option.code] as SpeechLocale,
+                    })
+                  }
+                  className={`py-2.5 rounded-xl text-xs font-black border transition-all ${
+                    language === option.code
+                      ? 'bg-sky-500 text-white border-transparent'
+                      : 'bg-slate-50 dark:bg-slate-800 text-slate-500 border-slate-200 dark:border-slate-700'
+                  }`}
+                >
+                  {option.nativeLabel}
+                </button>
+              ))}
+            </div>
+          </Field>
+
+          <Field label={t('settings.profileName')}>
             <input
               type="text"
               value={settings.profileName}
@@ -185,7 +214,7 @@ export function SettingsTab({
             />
           </Field>
 
-          <Field label="Базовая валюта" hint="К ней приводятся все суммы в отчётах">
+          <Field label={t('settings.baseCurrency')} hint={t('settings.baseCurrencyHint')}>
             <div className="flex gap-1.5">
               {CURRENCY_LIST.map((currency) => (
                 <button
@@ -234,23 +263,12 @@ export function SettingsTab({
             </div>
           </Field>
 
-          <Field label="Язык голосового ввода">
-            <select
-              value={settings.speechLocale}
-              onChange={(e) => saveFinanceSettings({ speechLocale: e.target.value as SpeechLocale })}
-              className={inputClass}
-            >
-              <option value="ru-RU">Русский</option>
-              <option value="he-IL">עברית</option>
-              <option value="en-US">English</option>
-            </select>
-          </Field>
         </Card>
       </div>
 
       {/* -------------------------------------------------------- account */}
       <div>
-        <SectionTitle title="Аккаунт" />
+        <SectionTitle title={t('settings.account')} />
         <Card className="p-4 space-y-3">
           <div className="flex items-center gap-3">
             <span className="w-10 h-10 rounded-2xl bg-sky-100 dark:bg-sky-950/50 text-sky-600 dark:text-sky-400 flex items-center justify-center flex-shrink-0 font-black text-xs">
@@ -336,7 +354,7 @@ export function SettingsTab({
 
       {/* ------------------------------------------------------------ VAT */}
       <div>
-        <SectionTitle title="НДС" />
+        <SectionTitle title={t('settings.vat')} />
         <Card className="p-4 space-y-3">
           <button
             type="button"
@@ -366,7 +384,7 @@ export function SettingsTab({
 
           {settings.vatEnabled && (
             <>
-              <Field label="Ставка НДС, %">
+              <Field label={t('settings.vatRate')}>
                 <input
                   type="text"
                   inputMode="decimal"
@@ -424,7 +442,7 @@ export function SettingsTab({
       {/* ------------------------------------------------------ accounts */}
       <div>
         <SectionTitle
-          title="Счета и кошельки"
+          title={t('tx.accounts')}
           action={
             <button
               type="button"
@@ -488,7 +506,7 @@ export function SettingsTab({
       {/* -------------------------------------------------- family sync */}
       <div>
         <SectionTitle
-          title="Семейный доступ"
+          title={t('settings.family')}
           action={
             members.length < 2 ? (
               <button
@@ -591,7 +609,7 @@ export function SettingsTab({
 
       {/* ------------------------------------------------- notifications */}
       <div>
-        <SectionTitle title="Уведомления" />
+        <SectionTitle title={t('settings.notifications')} />
         <Card className="p-4 space-y-3">
           <div className="flex items-center gap-3">
             <Bell className="w-4 h-4 text-slate-400 flex-shrink-0" />
@@ -651,7 +669,7 @@ export function SettingsTab({
 
       {/* ---------------------------------------------------------- AI */}
       <div>
-        <SectionTitle title="ИИ-сканирование чеков" />
+        <SectionTitle title={t('settings.ai')} />
         <Card className="p-4 space-y-2">
           {serverKey ? (
             <div
@@ -690,7 +708,7 @@ export function SettingsTab({
 
       {/* ------------------------------------------------------- backup */}
       <div>
-        <SectionTitle title="Резервное копирование" />
+        <SectionTitle title={t('settings.backup')} />
         <Card className="p-4 space-y-3">
           <div className="flex items-center gap-3">
             <span

@@ -322,7 +322,10 @@ export interface ProfileMember {
   joinedAt: string;
 }
 
-export type SpeechLocale = 'ru-RU' | 'he-IL' | 'en-US';
+export type SpeechLocale = 'ru-RU' | 'he-IL' | 'uk-UA' | 'en-US';
+
+/** Interface language; Hebrew also switches the layout to right-to-left. */
+export type UiLanguage = 'ru' | 'he' | 'uk' | 'en';
 
 export type AuthProvider = 'GOOGLE' | 'EMAIL';
 
@@ -370,6 +373,7 @@ export interface FinanceSettings {
   /** invite code a second device redeems to join this profile */
   inviteCode?: string;
   profileName: string;
+  language: UiLanguage;
   speechLocale: SpeechLocale;
   budgetRolloverEnabled: boolean;
   notifyAtPercent: number[]; // e.g. [80, 100]

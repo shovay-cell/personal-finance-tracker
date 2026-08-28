@@ -19,6 +19,7 @@ import {
 import { TransactionPrefill } from './transaction-form-modal';
 import { CategoryEditorModal } from './category-manager-modal';
 import { CURRENCIES } from '@/constants/categories';
+import { useT } from '@/i18n/context';
 import { GeminiKeyPrompt } from './gemini-key-prompt';
 import {
   analyzeReceiptWithAI,
@@ -75,6 +76,7 @@ export function QuickAddSheet({
   const [accountId, setAccountId] = useState(accounts[0]?.id || '');
   const [isBusy, setIsBusy] = useState(false);
   const [isCreatingCategory, setIsCreatingCategory] = useState(false);
+  const { t } = useT();
   const [error, setError] = useState<string | null>(null);
   const [keyError, setKeyError] = useState<string | null>(null);
   const [lastScanFile, setLastScanFile] = useState<File | null>(null);
@@ -233,8 +235,8 @@ export function QuickAddSheet({
 
   return (
     <ModalShell
-      title="Быстрый ввод"
-      subtitle="Сумма и категория — операция записана"
+      title={t('quick.title')}
+      subtitle={t('quick.subtitle')}
       icon={<Wallet className="w-5 h-5" />}
       onClose={onClose}
       footer={
@@ -258,7 +260,7 @@ export function QuickAddSheet({
                 }}
                 className="px-4 py-3 rounded-2xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-[11px] font-black active:scale-95 transition-transform whitespace-nowrap"
               >
-                Детали
+                {t('common.details')}
               </button>
               <PrimaryButton
                 onClick={handleSave}
@@ -266,7 +268,7 @@ export function QuickAddSheet({
                 variant={kind === 'EXPENSE' ? 'primary' : 'success'}
               >
                 {isBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-                Записать
+                {t('common.record')}
               </PrimaryButton>
             </div>
           </div>
@@ -276,10 +278,10 @@ export function QuickAddSheet({
       <div className="flex gap-1.5">
         {(
           [
-            { value: 'MANUAL' as QuickMode, label: 'Вручную', icon: Wallet },
-            { value: 'SCAN' as QuickMode, label: 'Чек', icon: ScanLine },
-            { value: 'STATEMENT' as QuickMode, label: 'Список', icon: Layers },
-            { value: 'VOICE' as QuickMode, label: 'Голос', icon: Mic },
+            { value: 'MANUAL' as QuickMode, label: t('quick.manual'), icon: Wallet },
+            { value: 'SCAN' as QuickMode, label: t('quick.receipt'), icon: ScanLine },
+            { value: 'STATEMENT' as QuickMode, label: t('quick.list'), icon: Layers },
+            { value: 'VOICE' as QuickMode, label: t('quick.voice'), icon: Mic },
           ]
         ).map((option) => {
           const Icon = option.icon;
@@ -328,7 +330,7 @@ export function QuickAddSheet({
             <>
               <Loader2 className="w-9 h-9 mx-auto text-sky-500 animate-spin" />
               <p className="text-xs font-black text-slate-600 dark:text-slate-300">
-                Gemini распознаёт чек…
+                {t('quick.scanning')}
               </p>
               <p className="text-[11px] text-slate-400 font-medium px-6">
                 Дата, сумма, магазин и позиции подставятся в форму. Поля, в которых ИИ не уверен,
@@ -340,7 +342,7 @@ export function QuickAddSheet({
               {!keyError && <Sparkles className="w-9 h-9 mx-auto text-sky-500" />}
               <PrimaryButton onClick={() => scanInputRef.current?.click()}>
                 <ScanLine className="w-4 h-4" />
-                Сфотографировать чек
+                {t('quick.photograph')}
               </PrimaryButton>
               {error && <p className="text-[11px] font-bold text-rose-500">{error}</p>}
               {keyError && (
@@ -378,7 +380,7 @@ export function QuickAddSheet({
                 {isListening ? <MicOff className="w-9 h-9" /> : <Mic className="w-9 h-9" />}
               </button>
               <p className="text-xs font-black text-slate-600 dark:text-slate-300">
-                {isListening ? 'Говорите…' : 'Нажмите и надиктуйте операцию'}
+                {isListening ? t('quick.listening') : t('quick.voicePrompt')}
               </p>
               <p className="text-[11px] text-slate-400 font-medium px-6">
                 Например: «потратил 50 на кафе». Язык распознавания — из настроек профиля.
@@ -403,12 +405,12 @@ export function QuickAddSheet({
             options={[
               {
                 value: 'EXPENSE',
-                label: 'РАСХОД',
+                label: t('common.expenses'),
                 activeClass: 'bg-white dark:bg-slate-900 text-rose-600 dark:text-rose-400 shadow-sm',
               },
               {
                 value: 'INCOME',
-                label: 'ДОХОД',
+                label: t('common.incomes'),
                 activeClass:
                   'bg-white dark:bg-slate-900 text-emerald-600 dark:text-emerald-400 shadow-sm',
               },

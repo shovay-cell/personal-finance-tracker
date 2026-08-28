@@ -3,6 +3,8 @@
 import React, { useEffect } from 'react';
 import { Plus, X } from 'lucide-react';
 import { CATEGORY_COLORS, getCategoryIcon } from '@/constants/categories';
+import { categoryName } from '@/i18n/categories';
+import { useT } from '@/i18n/context';
 import { FinanceCategory, ReceiptFieldFlag } from '@/types';
 
 interface ModalShellProps {
@@ -196,6 +198,8 @@ export function CategoryGrid({
   onCreate?: () => void;
   columns?: number;
 }) {
+  const { language } = useT();
+
   return (
     <div className={`grid gap-2`} style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}>
       {categories.map((category) => {
@@ -228,7 +232,7 @@ export function CategoryGrid({
               <Icon className="w-4.5 h-4.5" style={{ width: 18, height: 18 }} />
             </span>
             <span className="text-[9.5px] font-bold leading-tight text-center text-slate-600 dark:text-slate-300 line-clamp-2">
-              {category.name}
+              {categoryName(category, language)}
             </span>
           </button>
         );

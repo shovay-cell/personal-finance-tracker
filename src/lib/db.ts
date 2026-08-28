@@ -87,6 +87,7 @@ export const DEFAULT_SETTINGS: FinanceSettings = {
   baseCurrency: 'ILS',
   exchangeRates: { ...DEFAULT_EXCHANGE_RATES },
   profileName: 'Семейный бюджет',
+  language: 'ru',
   speechLocale: 'ru-RU',
   budgetRolloverEnabled: false,
   notifyAtPercent: [80, 100],

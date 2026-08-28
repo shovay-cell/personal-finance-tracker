@@ -4,6 +4,8 @@ import React, { useState } from 'react';
 import { AtSign, Loader2, LogIn, ShieldCheck, Wallet } from 'lucide-react';
 import { AuthSession } from '@/types';
 import { isGoogleSignInAvailable, signInWithEmail, signInWithGoogle } from '@/services/auth';
+import { useT } from '@/i18n/context';
+import { LANGUAGES } from '@/i18n/dictionary';
 import { PrimaryButton, inputClass } from './ui';
 
 /**
@@ -16,6 +18,7 @@ export function AuthGate({ onSignedIn }: { onSignedIn: (session: AuthSession) =>
   const [name, setName] = useState('');
   const [isBusy, setIsBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { t } = useT();
 
   const handleGoogle = async () => {
     setIsBusy(true);
@@ -42,7 +45,7 @@ export function AuthGate({ onSignedIn }: { onSignedIn: (session: AuthSession) =>
           <div>
             <h1 className="text-2xl font-black text-slate-900 dark:text-slate-100">FinTrack</h1>
             <p className="text-xs text-slate-500 dark:text-slate-400 font-medium mt-1 leading-relaxed">
-              Доходы и расходы, отделение НДС и совместный счёт с партнёром
+{t('auth.tagline')}
             </p>
           </div>
         </div>
@@ -60,7 +63,7 @@ export function AuthGate({ onSignedIn }: { onSignedIn: (session: AuthSession) =>
               ) : (
                 <GoogleMark />
               )}
-              Войти через Google
+{t('auth.google')}
             </button>
 
             <button
@@ -72,12 +75,12 @@ export function AuthGate({ onSignedIn }: { onSignedIn: (session: AuthSession) =>
               className="w-full py-3.5 rounded-2xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 font-black text-sm flex items-center justify-center gap-2.5 active:scale-[0.98] transition-all"
             >
               <AtSign className="w-4 h-4" />
-              Продолжить с email
+{t('auth.email')}
             </button>
 
             {!isGoogleSignInAvailable() && (
               <p className="text-[10.5px] text-amber-600 dark:text-amber-400 font-bold text-center px-2 leading-relaxed">
-                Вход через Google не настроен в этом деплое — доступен вход по email.
+{t('auth.googleUnavailable')}
               </p>
             )}
           </div>
@@ -96,12 +99,12 @@ export function AuthGate({ onSignedIn }: { onSignedIn: (session: AuthSession) =>
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="Как вас показывать (необязательно)"
+              placeholder={t('auth.namePlaceholder')}
               className={inputClass}
             />
             <PrimaryButton onClick={handleEmail}>
               <LogIn className="w-4 h-4" />
-              Продолжить
+              {t('auth.continue')}
             </PrimaryButton>
             <button
               type="button"
@@ -111,7 +114,7 @@ export function AuthGate({ onSignedIn }: { onSignedIn: (session: AuthSession) =>
               }}
               className="w-full py-2 text-[11px] font-black text-slate-400"
             >
-              Назад
+              {t('common.back')}
             </button>
           </div>
         )}
@@ -125,8 +128,7 @@ export function AuthGate({ onSignedIn }: { onSignedIn: (session: AuthSession) =>
         <div className="flex items-start gap-2 p-3 rounded-2xl bg-slate-100/70 dark:bg-slate-800/50">
           <ShieldCheck className="w-4 h-4 text-slate-400 flex-shrink-0 mt-px" />
           <p className="text-[10px] text-slate-500 dark:text-slate-400 font-medium leading-relaxed">
-            Данные хранятся на устройстве. Вход нужен, чтобы подписывать операции автором,
-            приглашать партнёра и привязывать резервную копию к вашему Google Drive.
+{t('auth.privacy')}
           </p>
         </div>
       </div>

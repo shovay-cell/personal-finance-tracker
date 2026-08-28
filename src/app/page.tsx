@@ -45,6 +45,7 @@ import { ReportsTab } from '@/components/reports-tab';
 import { SettingsTab } from '@/components/settings-tab';
 import { QuickAddSheet } from '@/components/quick-add-sheet';
 import { StatementImportModal } from '@/components/statement-import-modal';
+import { LanguageProvider } from '@/i18n/context';
 import { AuthGate } from '@/components/auth-gate';
 import { OnboardingWizard } from '@/components/onboarding-wizard';
 import { PinLockScreen } from '@/components/pin-lock';
@@ -440,6 +441,16 @@ function FinanceApp() {
   );
 }
 
+/**
+ * Reads the chosen language before the app renders, so every screen — including
+ * the login and lock gates — comes up already translated and, for Hebrew,
+ * already right-to-left.
+ */
+function LanguageBoundary({ children }: { children: React.ReactNode }) {
+  const settings = useLiveQuery(() => financeDb.settings.get('default'), []);
+  return <LanguageProvider language={settings?.language || 'ru'}>{children}</LanguageProvider>;
+}
+
 export default function FinancePage() {
   return (
     <Suspense
@@ -449,7 +460,9 @@ export default function FinancePage() {
         </div>
       }
     >
-      <FinanceApp />
+      <LanguageBoundary>
+        <FinanceApp />
+      </LanguageBoundary>
     </Suspense>
   );
 }

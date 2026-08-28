@@ -28,6 +28,8 @@ import {
   formatMoney,
   sumBase,
 } from '@/services/analytics';
+import { useT } from '@/i18n/context';
+import { accountName, categoryName } from '@/i18n/categories';
 import { Card, EmptyState, SectionTitle, SegmentedControl, inputClass } from './ui';
 
 interface TransactionsTabProps {
@@ -54,6 +56,7 @@ export function TransactionsTab({
   const [memberFilter, setMemberFilter] = useState<string>('ALL');
   const [accountFilter, setAccountFilter] = useState<string>('ALL');
   const [showFilters, setShowFilters] = useState(false);
+  const { t, language } = useT();
 
   const categoryById = useMemo(() => new Map(categories.map((c) => [c.id, c])), [categories]);
   const memberById = useMemo(() => new Map(members.map((m) => [m.id, m])), [members]);
@@ -93,7 +96,7 @@ export function TransactionsTab({
         <Card className="p-4">
           <div className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wide text-rose-500">
             <ArrowUpRight className="w-3.5 h-3.5" />
-            Расходы
+            {t('common.expense')}
           </div>
           <p className="text-xl font-black text-slate-900 dark:text-slate-100 mt-1 tabular-nums">
             {formatMoney(totalExpense, baseCurrency, { compact: true })}
@@ -102,7 +105,7 @@ export function TransactionsTab({
         <Card className="p-4">
           <div className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wide text-emerald-500">
             <ArrowDownLeft className="w-3.5 h-3.5" />
-            Доходы
+            {t('common.income')}
           </div>
           <p className="text-xl font-black text-slate-900 dark:text-slate-100 mt-1 tabular-nums">
             {formatMoney(totalIncome, baseCurrency, { compact: true })}
@@ -111,7 +114,7 @@ export function TransactionsTab({
       </div>
 
       <div>
-        <SectionTitle title="Счета и кошельки" />
+        <SectionTitle title={t('tx.accounts')} />
         <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">
           {accounts
             .filter((a) => !a.isArchived)
@@ -127,7 +130,7 @@ export function TransactionsTab({
                     {ACCOUNT_KIND_LABELS[account.kind]}
                   </p>
                   <p className="text-xs font-bold text-slate-700 dark:text-slate-200 truncate mt-0.5">
-                    {account.name}
+                    {accountName(account, language)}
                   </p>
                   <p
                     className={`text-sm font-black tabular-nums mt-1 ${
@@ -148,12 +151,12 @@ export function TransactionsTab({
         options={[
           {
             value: 'EXPENSE',
-            label: 'РАСХОДЫ',
+            label: t('common.expenses'),
             activeClass: 'bg-white dark:bg-slate-900 text-rose-600 dark:text-rose-400 shadow-sm',
           },
           {
             value: 'INCOME',
-            label: 'ДОХОДЫ',
+            label: t('common.incomes'),
             activeClass: 'bg-white dark:bg-slate-900 text-emerald-600 dark:text-emerald-400 shadow-sm',
           },
         ]}
@@ -166,7 +169,7 @@ export function TransactionsTab({
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Поиск по заметке, продавцу, сумме"
+            placeholder={t('tx.searchPlaceholder')}
             className={`${inputClass} pl-9 text-xs`}
           />
         </div>
@@ -190,7 +193,7 @@ export function TransactionsTab({
             onChange={(e) => setMemberFilter(e.target.value)}
             className={`${inputClass} text-xs`}
           >
-            <option value="ALL">Все авторы</option>
+            <option value="ALL">{t('tx.allAuthors')}</option>
             {members.map((member) => (
               <option key={member.id} value={member.id}>
                 {member.displayName}
@@ -202,7 +205,7 @@ export function TransactionsTab({
             onChange={(e) => setAccountFilter(e.target.value)}
             className={`${inputClass} text-xs`}
           >
-            <option value="ALL">Все счета</option>
+            <option value="ALL">{t('tx.allAccounts')}</option>
             {accounts.map((account) => (
               <option key={account.id} value={account.id}>
                 {account.name}
@@ -215,8 +218,8 @@ export function TransactionsTab({
       {grouped.length === 0 ? (
         <EmptyState
           icon={<Wallet className="w-7 h-7" />}
-          title="Операций пока нет"
-          description="Нажмите «+», чтобы записать трату за пару касаний, сфотографировать чек или надиктовать операцию голосом."
+          title={t('tx.emptyTitle')}
+          description={t('tx.emptyText')}
         />
       ) : (
         <div className="space-y-4">
@@ -263,8 +266,8 @@ export function TransactionsTab({
                         <span className="flex-1 min-w-0">
                           <span className="flex items-center gap-1.5">
                             <span className="text-xs font-black text-slate-800 dark:text-slate-100 truncate">
-                              {category?.name || 'Без категории'}
-                              {subcategory ? ` · ${subcategory.name}` : ''}
+                              {category ? categoryName(category, language) : t('common.category')}
+                              {subcategory ? ` · ${categoryName(subcategory, language)}` : ''}
                             </span>
                             {transaction.source === 'RECEIPT_SCAN' && (
                               <ScanLine className="w-3 h-3 text-sky-500 flex-shrink-0" />
@@ -278,7 +281,7 @@ export function TransactionsTab({
                           </span>
                           <span className="block text-[10.5px] text-slate-400 font-medium truncate mt-0.5">
                             {[transaction.merchant, transaction.note].filter(Boolean).join(' · ') ||
-                              'Без описания'}
+                              t('tx.noDescription')}
                           </span>
                         </span>
 

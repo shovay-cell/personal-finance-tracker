@@ -4,6 +4,7 @@ import React from 'react';
 import { CalendarDays, Info, Wallet } from 'lucide-react';
 import { CurrencyCode, SafeToSpend } from '@/types';
 import { formatMoney } from '@/services/analytics';
+import { useT } from '@/i18n/context';
 import { Card } from './ui';
 
 /**
@@ -20,12 +21,14 @@ export function SafeToSpendCard({
   currency: CurrencyCode;
   onSetBudget?: () => void;
 }) {
+  const { t } = useT();
+
   if (data.basis === 'NONE') {
     return (
       <Card className="p-4 flex items-center justify-between gap-3">
         <div>
           <p className="text-xs font-black text-slate-700 dark:text-slate-200">
-            Доступно до конца месяца
+            {t('safe.title')}
           </p>
           <p className="text-[10.5px] text-slate-400 font-medium mt-0.5 leading-relaxed">
             Задайте месячный бюджет — и приложение посчитает дневной лимит с учётом
@@ -52,7 +55,7 @@ export function SafeToSpendCard({
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="text-[10px] font-black uppercase tracking-wide text-slate-400">
-            Доступно до конца месяца
+            {t('safe.title')}
           </p>
           <p
             className={`text-3xl font-black tabular-nums leading-tight mt-0.5 ${
@@ -72,7 +75,7 @@ export function SafeToSpendCard({
             {formatMoney(data.perDay, currency)}
           </p>
           <p className="text-[10px] font-bold text-slate-400 flex items-center justify-end gap-1">
-            <CalendarDays className="w-3 h-3" />в день · {data.daysLeft} дн.
+            <CalendarDays className="w-3 h-3" />{t('common.perDay')} · {data.daysLeft} {t('common.days')}
           </p>
         </div>
       </div>
@@ -81,20 +84,20 @@ export function SafeToSpendCard({
       <div className="grid grid-cols-3 gap-2 pt-1">
         <div className="rounded-2xl bg-slate-50 dark:bg-slate-800/60 p-2.5">
           <p className="text-[9px] font-black uppercase tracking-wide text-slate-400">
-            {data.basis === 'BUDGET' ? 'Бюджет' : 'Доход'}
+            {data.basis === 'BUDGET' ? t('safe.budget') : t('common.income')}
           </p>
           <p className="text-xs font-black text-slate-700 dark:text-slate-200 tabular-nums mt-0.5">
             {formatMoney(data.planned, currency, { compact: true })}
           </p>
         </div>
         <div className="rounded-2xl bg-slate-50 dark:bg-slate-800/60 p-2.5">
-          <p className="text-[9px] font-black uppercase tracking-wide text-slate-400">Потрачено</p>
+          <p className="text-[9px] font-black uppercase tracking-wide text-slate-400">{t('safe.spent')}</p>
           <p className="text-xs font-black text-rose-500 tabular-nums mt-0.5">
             −{formatMoney(data.spent, currency, { compact: true })}
           </p>
         </div>
         <div className="rounded-2xl bg-slate-50 dark:bg-slate-800/60 p-2.5">
-          <p className="text-[9px] font-black uppercase tracking-wide text-slate-400">Обязательно</p>
+          <p className="text-[9px] font-black uppercase tracking-wide text-slate-400">{t('safe.committed')}</p>
           <p className="text-xs font-black text-amber-600 dark:text-amber-400 tabular-nums mt-0.5">
             −{formatMoney(data.upcomingCommitted, currency, { compact: true })}
           </p>
@@ -111,7 +114,7 @@ export function SafeToSpendCard({
         ) : (
           <>
             <Info className="w-3 h-3 mt-px flex-shrink-0" />
-            Обязательные платежи до конца месяца уже вычтены
+            {t('safe.hint')}
           </>
         )}
       </p>

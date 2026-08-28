@@ -5,11 +5,14 @@ import { BarChart3, CalendarClock, FileSignature, Plus, Settings, Wallet } from 
 
 export type FinanceTab = 'transactions' | 'budgets' | 'planned' | 'obligations' | 'reports' | 'settings';
 
-const TABS: { id: FinanceTab; label: string; Icon: typeof Wallet }[] = [
-  { id: 'transactions', label: 'Операции', Icon: Wallet },
-  { id: 'budgets', label: 'Бюджет', Icon: BarChart3 },
-  { id: 'planned', label: 'Планы', Icon: CalendarClock },
-  { id: 'obligations', label: 'Чеки', Icon: FileSignature },
+import { useT } from '@/i18n/context';
+import type { TranslationKey } from '@/i18n/dictionary';
+
+const TABS: { id: FinanceTab; labelKey: TranslationKey; Icon: typeof Wallet }[] = [
+  { id: 'transactions', labelKey: 'nav.operations', Icon: Wallet },
+  { id: 'budgets', labelKey: 'nav.budget', Icon: BarChart3 },
+  { id: 'planned', labelKey: 'nav.plans', Icon: CalendarClock },
+  { id: 'obligations', labelKey: 'nav.cheques', Icon: FileSignature },
 ];
 
 export function FinanceBottomNav({
@@ -21,6 +24,8 @@ export function FinanceBottomNav({
   onTabChange: (tab: FinanceTab) => void;
   onQuickAdd: () => void;
 }) {
+  const { t } = useT();
+
   const renderTab = (tab: (typeof TABS)[number]) => {
     const isActive = activeTab === tab.id;
     const { Icon } = tab;
@@ -36,7 +41,7 @@ export function FinanceBottomNav({
         }`}
       >
         <Icon className={`w-5 h-5 ${isActive ? 'stroke-[2.5]' : 'stroke-2'}`} />
-        <span className="text-[10px] tracking-tight">{tab.label}</span>
+        <span className="text-[10px] tracking-tight">{t(tab.labelKey)}</span>
       </button>
     );
   };
@@ -54,12 +59,12 @@ export function FinanceBottomNav({
             type="button"
             onClick={onQuickAdd}
             className="w-14 h-14 rounded-full bg-gradient-to-tr from-sky-500 via-cyan-500 to-teal-400 text-white flex items-center justify-center shadow-xl shadow-sky-500/40 hover:scale-110 active:scale-95 transition-all border-4 border-white dark:border-slate-900 group"
-            title="Быстрый ввод операции"
+            title={t('nav.quickAddTitle')}
           >
             <Plus className="w-7 h-7 group-hover:rotate-90 transition-transform stroke-[2.8]" />
           </button>
           <span className="text-[9px] font-black uppercase tracking-wider text-sky-600 dark:text-sky-400 mt-0.5">
-            Добавить
+            {t('nav.add')}
           </span>
         </div>
 
@@ -82,6 +87,8 @@ export function FinanceHeader({
   activeTab: FinanceTab;
   onTabChange: (tab: FinanceTab) => void;
 }) {
+  const { t } = useT();
+
   return (
     <header className="sticky top-0 z-30 bg-white/90 dark:bg-slate-900/90 backdrop-blur-xl border-b border-slate-100 dark:border-slate-800">
       <div className="max-w-lg mx-auto px-4 py-3 flex items-center gap-3">
@@ -104,7 +111,7 @@ export function FinanceHeader({
               ? 'bg-sky-500 text-white'
               : 'bg-slate-100 dark:bg-slate-800 text-slate-500'
           }`}
-          title="Отчёты"
+          title={t('nav.reports')}
         >
           <BarChart3 className="w-4 h-4" />
         </button>
@@ -117,7 +124,7 @@ export function FinanceHeader({
               ? 'bg-sky-500 text-white'
               : 'bg-slate-100 dark:bg-slate-800 text-slate-500'
           }`}
-          title="Настройки"
+          title={t('nav.settings')}
         >
           <Settings className="w-4 h-4" />
         </button>
