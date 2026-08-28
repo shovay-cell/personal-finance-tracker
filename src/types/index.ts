@@ -125,6 +125,9 @@ export type RecurrenceKind =
  */
 export type PlanKind = 'PAYMENT' | 'SUBSCRIPTION' | 'INVESTMENT';
 
+/** Simple "every N days/weeks/months/years" rule set from the expense form. */
+export type RecurrenceUnit = 'DAY' | 'WEEK' | 'MONTH' | 'YEAR';
+
 export interface PlannedPayment {
   id: string;
   title: string;
@@ -140,6 +143,9 @@ export interface PlannedPayment {
   recurrence: RecurrenceKind;
   /** interval in days when recurrence is CUSTOM_DAYS */
   intervalDays?: number;
+  /** «Повторять каждый N <unit>» — takes precedence over `recurrence` when set */
+  intervalUnit?: RecurrenceUnit;
+  intervalCount?: number;
   /** next date the payment is due, YYYY-MM-DD */
   nextDueDate: string;
   /** stop generating occurrences after this date */
@@ -164,6 +170,72 @@ export interface RecurringTotals {
   monthly: number;
   yearly: number;
   rows: RecurringCostRow[];
+}
+
+/** What kind of liability a debt plan represents. */
+export type DebtKind = 'INSTALLMENT' | 'TAX' | 'LOAN';
+
+/**
+ * A liability paid off on a schedule: an instalment purchase, a tax assessment
+ * or a loan. The purchase itself is not an expense on day one — each payment
+ * becomes a real expense when it is paid.
+ */
+export interface DebtPlan {
+  id: string;
+  kind: DebtKind;
+  title: string;
+  merchant?: string;
+  totalAmount: number;
+  currency: CurrencyCode;
+  categoryId: string;
+  accountId: string;
+  /** Date of the purchase / assessment. */
+  startDate: string;
+  note?: string;
+  authorId: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface DebtInstallment {
+  id: string;
+  debtId: string;
+  /** 1-based position in the schedule. */
+  index: number;
+  dueDate: string;
+  amount: number;
+  currency: CurrencyCode;
+  isPaid: boolean;
+  paidDate?: string;
+  /** Expense created when the payment was marked paid. */
+  transactionId?: string;
+}
+
+export interface DebtWithSchedule {
+  debt: DebtPlan;
+  installments: DebtInstallment[];
+  paidAmount: number;
+  outstandingAmount: number;
+  paidCount: number;
+  totalCount: number;
+  nextInstallment?: DebtInstallment;
+  isOverdue: boolean;
+}
+
+/** One month of the upcoming-liabilities timeline. */
+export interface UpcomingMonth {
+  month: string; // YYYY-MM
+  total: number;
+  items: UpcomingItem[];
+}
+
+export interface UpcomingItem {
+  id: string;
+  date: string;
+  title: string;
+  amount: number;
+  source: 'VAT' | 'CHEQUE' | 'INSTALLMENT' | 'TAX' | 'LOAN' | 'PLANNED';
+  isOverdue: boolean;
 }
 
 export type ObligationStatus = 'ISSUED' | 'PARTIALLY_SETTLED' | 'SETTLED' | 'OVERDUE';

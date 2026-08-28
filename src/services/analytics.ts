@@ -1,5 +1,6 @@
 import {
   Budget,
+  DebtInstallment,
   PlannedPayment,
   SafeToSpend,
   PacingComparison,
@@ -371,9 +372,12 @@ export function safeToSpend(input: {
   transactions: Transaction[];
   budgets: Budget[];
   plannedPayments: PlannedPayment[];
+  /** Unpaid instalment payments falling inside the month. */
+  installments?: DebtInstallment[];
   toBase: (amount: number, currency: CurrencyCode) => number;
 }): SafeToSpend {
   const { month, transactions, budgets, plannedPayments, toBase } = input;
+  const installments = input.installments || [];
   const today = input.today || todayIso();
   const range = monthRange(month);
   const inMonth = transactions.filter((t) => isWithin(t.date, range));
@@ -399,17 +403,24 @@ export function safeToSpend(input: {
     return alreadyBooked ? sum : sum + toBase(payment.amount, payment.currency);
   }, 0);
 
+  const upcomingInstallments = installments.reduce((sum, installment) => {
+    if (installment.isPaid) return sum;
+    if (installment.dueDate < today || installment.dueDate > range.to) return sum;
+    return sum + toBase(installment.amount, installment.currency);
+  }, 0);
+
   const total = daysInMonth(month);
   const currentDay = today.slice(0, 7) === month ? Number(today.slice(8, 10)) : total;
   // The current day still counts: money can be spent today.
   const daysLeft = Math.max(1, total - currentDay + 1);
 
-  const available = Math.round((planned - spent - upcomingCommitted) * 100) / 100;
+  const committed = upcomingCommitted + upcomingInstallments;
+  const available = Math.round((planned - spent - committed) * 100) / 100;
 
   return {
     planned: Math.round(planned * 100) / 100,
     spent,
-    upcomingCommitted: Math.round(upcomingCommitted * 100) / 100,
+    upcomingCommitted: Math.round(committed * 100) / 100,
     available,
     daysLeft,
     perDay: Math.round((available / daysLeft) * 100) / 100,

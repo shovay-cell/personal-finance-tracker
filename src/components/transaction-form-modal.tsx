@@ -3,8 +3,10 @@
 import React, { useMemo, useState } from 'react';
 import {
   Coins,
+  CreditCard,
   ImagePlus,
   Percent,
+  Repeat,
   Scissors,
   Loader2,
   Save,
@@ -23,9 +25,13 @@ import {
   Transaction,
   TransactionKind,
   TransactionSplit,
+  RecurrenceUnit,
 } from '@/types';
 import {
+  addDebtPlan,
+  addPlannedPayment,
   addTransaction,
+  buildInstallmentAmounts,
   deleteTransaction,
   getCurrentMemberId,
   todayIso,
@@ -42,6 +48,7 @@ import {
 } from './ui';
 import { CURRENCIES } from '@/constants/categories';
 import { netFromGross, vatFromGross } from '@/services/vat';
+import { formatMoney, pluralRu } from '@/services/analytics';
 import { CategoryEditorModal } from './category-manager-modal';
 import { GeminiKeyPrompt } from './gemini-key-prompt';
 import { SplitEditor } from './split-editor';
@@ -127,6 +134,14 @@ export function TransactionFormModal({
   const [isSaving, setIsSaving] = useState(false);
   const [isScanning, setIsScanning] = useState(false);
   const [isCreatingCategory, setIsCreatingCategory] = useState(false);
+  const [isRepeating, setIsRepeating] = useState(false);
+  const [repeatCount, setRepeatCount] = useState('1');
+  const [repeatUnit, setRepeatUnit] = useState<RecurrenceUnit>('MONTH');
+  const [isInstallment, setIsInstallment] = useState(false);
+  const [paymentsCount, setPaymentsCount] = useState('6');
+  const [installmentUnit, setInstallmentUnit] = useState<RecurrenceUnit>('MONTH');
+  const [installmentInterval, setInstallmentInterval] = useState('1');
+  const [firstPaymentPaid, setFirstPaymentPaid] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [keyError, setKeyError] = useState<string | null>(null);
   const [lastScanFile, setLastScanFile] = useState<File | null>(null);
@@ -232,10 +247,58 @@ export function TransactionFormModal({
       if (existing) {
         await updateTransaction(existing.id, payload as Partial<Transaction>);
         onSaved?.({ ...existing, ...payload } as Transaction);
-      } else {
-        const created = await addTransaction(payload as any);
-        onSaved?.(created);
+        onClose();
+        return;
       }
+
+      // An instalment purchase is not an expense today: it becomes a debt with a
+      // schedule, and only the payments actually made turn into expenses.
+      if (kind === 'EXPENSE' && isInstallment) {
+        const count = Math.max(2, parseInt(paymentsCount, 10) || 2);
+        await addDebtPlan({
+          kind: 'INSTALLMENT',
+          title: merchant.trim() || note.trim() || 'Покупка в рассрочку',
+          merchant: merchant.trim() || undefined,
+          totalAmount: numericAmount,
+          currency,
+          categoryId,
+          accountId,
+          startDate: date,
+          note: note.trim() || undefined,
+          paymentsCount: count,
+          intervalUnit: installmentUnit,
+          intervalCount: Math.max(1, parseInt(installmentInterval, 10) || 1),
+          firstPaymentPaid,
+        });
+        onClose();
+        return;
+      }
+
+      const created = await addTransaction(payload as any);
+      onSaved?.(created);
+
+      if (isRepeating) {
+        const every = Math.max(1, parseInt(repeatCount, 10) || 1);
+        await addPlannedPayment({
+          title: merchant.trim() || note.trim() || 'Повторяющийся расход',
+          planKind: 'PAYMENT',
+          kind,
+          amount: numericAmount,
+          currency,
+          categoryId,
+          accountId,
+          recurrence: 'CUSTOM_DAYS',
+          intervalUnit: repeatUnit,
+          intervalCount: every,
+          // The operation just saved counts as this period; the rule starts next.
+          nextDueDate: shiftByUnit(date, repeatUnit, every),
+          remindDaysBefore: 1,
+          autoCreate: false,
+          isActive: true,
+          note: note.trim() || undefined,
+        });
+      }
+
       onClose();
     } catch (err: any) {
       setError(err.message || 'Не удалось сохранить операцию');
@@ -356,6 +419,173 @@ export function TransactionFormModal({
             ))}
           </div>
         </Field>
+      )}
+
+      {kind === 'EXPENSE' && !existing && (
+        <div className="rounded-2xl border border-slate-200 dark:border-slate-700 p-3 space-y-2.5">
+          <button
+            type="button"
+            onClick={() => {
+              setIsRepeating((prev) => !prev);
+              if (!isRepeating) setIsInstallment(false);
+            }}
+            className="w-full flex items-center justify-between gap-3 text-left"
+          >
+            <span className="flex items-start gap-2">
+              <Repeat className="w-4 h-4 text-slate-400 mt-px flex-shrink-0" />
+              <span>
+                <span className="block text-xs font-black text-slate-800 dark:text-slate-100">
+                  Повторить операцию
+                </span>
+                <span className="block text-[10px] text-slate-400 font-medium mt-0.5">
+                  Расход будет повторяться и попадёт в прогноз бюджета
+                </span>
+              </span>
+            </span>
+            <span
+              className={`w-11 h-6 rounded-full flex items-center px-0.5 transition-colors flex-shrink-0 ${
+                isRepeating ? 'bg-emerald-500' : 'bg-slate-300 dark:bg-slate-700'
+              }`}
+            >
+              <span
+                className={`w-5 h-5 rounded-full bg-white shadow transition-transform ${
+                  isRepeating ? 'translate-x-5' : ''
+                }`}
+              />
+            </span>
+          </button>
+
+          {isRepeating && (
+            <div className="flex items-end gap-2 pt-1">
+              <Field label="Повторять каждый">
+                <input
+                  type="number"
+                  min={1}
+                  value={repeatCount}
+                  onChange={(e) => setRepeatCount(e.target.value)}
+                  className={`${inputClass} w-20 text-center font-black`}
+                />
+              </Field>
+              <div className="flex-1">
+                <Field label="Период">
+                  <select
+                    value={repeatUnit}
+                    onChange={(e) => setRepeatUnit(e.target.value as RecurrenceUnit)}
+                    className={inputClass}
+                  >
+                    <option value="DAY">{pluralUnit('DAY', repeatCount)}</option>
+                    <option value="WEEK">{pluralUnit('WEEK', repeatCount)}</option>
+                    <option value="MONTH">{pluralUnit('MONTH', repeatCount)}</option>
+                    <option value="YEAR">{pluralUnit('YEAR', repeatCount)}</option>
+                  </select>
+                </Field>
+              </div>
+            </div>
+          )}
+
+          <button
+            type="button"
+            onClick={() => {
+              setIsInstallment((prev) => !prev);
+              if (!isInstallment) setIsRepeating(false);
+            }}
+            className="w-full flex items-center justify-between gap-3 text-left pt-2 border-t border-slate-100 dark:border-slate-800"
+          >
+            <span className="flex items-start gap-2">
+              <CreditCard className="w-4 h-4 text-slate-400 mt-px flex-shrink-0" />
+              <span>
+                <span className="block text-xs font-black text-slate-800 dark:text-slate-100">
+                  Покупка в рассрочку
+                </span>
+                <span className="block text-[10px] text-slate-400 font-medium mt-0.5">
+                  Станет обязательством с графиком, а не расходом целиком сегодня
+                </span>
+              </span>
+            </span>
+            <span
+              className={`w-11 h-6 rounded-full flex items-center px-0.5 transition-colors flex-shrink-0 ${
+                isInstallment ? 'bg-violet-500' : 'bg-slate-300 dark:bg-slate-700'
+              }`}
+            >
+              <span
+                className={`w-5 h-5 rounded-full bg-white shadow transition-transform ${
+                  isInstallment ? 'translate-x-5' : ''
+                }`}
+              />
+            </span>
+          </button>
+
+          {isInstallment && (
+            <div className="space-y-2.5 pt-1">
+              <div className="flex items-end gap-2">
+                <Field label="Количество платежей">
+                  <input
+                    type="number"
+                    min={2}
+                    value={paymentsCount}
+                    onChange={(e) => setPaymentsCount(e.target.value)}
+                    className={`${inputClass} w-24 text-center font-black`}
+                  />
+                </Field>
+                <div className="flex-1">
+                  <Field label="Каждые">
+                    <div className="flex gap-1.5">
+                      <input
+                        type="number"
+                        min={1}
+                        value={installmentInterval}
+                        onChange={(e) => setInstallmentInterval(e.target.value)}
+                        className={`${inputClass} w-16 text-center`}
+                      />
+                      <select
+                        value={installmentUnit}
+                        onChange={(e) => setInstallmentUnit(e.target.value as RecurrenceUnit)}
+                        className={`${inputClass} flex-1`}
+                      >
+                        <option value="WEEK">{pluralUnit('WEEK', installmentInterval)}</option>
+                        <option value="MONTH">{pluralUnit('MONTH', installmentInterval)}</option>
+                        <option value="YEAR">{pluralUnit('YEAR', installmentInterval)}</option>
+                      </select>
+                    </div>
+                  </Field>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setFirstPaymentPaid((prev) => !prev)}
+                className="w-full flex items-center justify-between gap-3 p-2.5 rounded-2xl bg-slate-50 dark:bg-slate-800/70 text-left"
+              >
+                <span>
+                  <span className="block text-[11px] font-black text-slate-700 dark:text-slate-200">
+                    Первый платёж оплачен сейчас
+                  </span>
+                  <span className="block text-[10px] text-slate-400 font-medium">
+                    Он сразу уйдёт в расходы, остальное останется долгом
+                  </span>
+                </span>
+                <span
+                  className={`w-11 h-6 rounded-full flex items-center px-0.5 transition-colors flex-shrink-0 ${
+                    firstPaymentPaid ? 'bg-emerald-500' : 'bg-slate-300 dark:bg-slate-700'
+                  }`}
+                >
+                  <span
+                    className={`w-5 h-5 rounded-full bg-white shadow transition-transform ${
+                      firstPaymentPaid ? 'translate-x-5' : ''
+                    }`}
+                  />
+                </span>
+              </button>
+
+              <InstallmentPreview
+                total={parseFloat(amount.replace(',', '.')) || 0}
+                count={Math.max(2, parseInt(paymentsCount, 10) || 2)}
+                currency={currency}
+                firstPaid={firstPaymentPaid}
+              />
+            </div>
+          )}
+        </div>
       )}
 
       {kind === 'INCOME' && settings.vatEnabled && (
@@ -620,5 +850,78 @@ export function TransactionFormModal({
         </button>
       )}
     </ModalShell>
+  );
+}
+
+
+/** Correct Russian agreement for the period next to a number. */
+function pluralUnit(unit: RecurrenceUnit, rawCount: string): string {
+  const count = Math.max(1, parseInt(rawCount, 10) || 1);
+  const forms: Record<RecurrenceUnit, [string, string, string]> = {
+    DAY: ['день', 'дня', 'дней'],
+    WEEK: ['неделя', 'недели', 'недель'],
+    MONTH: ['месяц', 'месяца', 'месяцев'],
+    YEAR: ['год', 'года', 'лет'],
+  };
+  const [one, few, many] = forms[unit];
+  return pluralRu(count, one, few, many);
+}
+
+function shiftByUnit(dateStr: string, unit: RecurrenceUnit, count: number): string {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const date = new Date(y, m - 1, d);
+
+  if (unit === 'DAY') date.setDate(date.getDate() + count);
+  else if (unit === 'WEEK') date.setDate(date.getDate() + count * 7);
+  else if (unit === 'YEAR') date.setFullYear(date.getFullYear() + count);
+  else {
+    const day = date.getDate();
+    date.setDate(1);
+    date.setMonth(date.getMonth() + count);
+    const lastDay = new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
+    date.setDate(Math.min(day, lastDay));
+  }
+
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(
+    date.getDate()
+  ).padStart(2, '0')}`;
+}
+
+/** Shows the schedule the way it will be booked, before anything is saved. */
+function InstallmentPreview({
+  total,
+  count,
+  currency,
+  firstPaid,
+}: {
+  total: number;
+  count: number;
+  currency: CurrencyCode;
+  firstPaid: boolean;
+}) {
+  if (total <= 0) return null;
+  const amounts = buildInstallmentAmounts(total, count);
+  const first = amounts[0];
+
+  return (
+    <div className="rounded-2xl bg-violet-50/70 dark:bg-violet-950/20 p-3 space-y-1">
+      <p className="text-[10px] font-black uppercase tracking-wide text-violet-600 dark:text-violet-400">
+        График платежей
+      </p>
+      <p className="text-[11px] font-bold text-slate-700 dark:text-slate-200">
+        {count} × {formatMoney(amounts[1] ?? first, currency)}
+        {amounts[1] !== undefined && amounts[0] !== amounts[1]
+          ? ` (первый — ${formatMoney(first, currency)})`
+          : ''}
+      </p>
+      <p className="text-[10.5px] text-slate-500 dark:text-slate-400 font-medium">
+        {firstPaid
+          ? `Сегодня в расходы уйдёт ${formatMoney(first, currency)}, в долгах останется ${formatMoney(
+              Math.round((total - first) * 100) / 100,
+              currency
+            )}`
+          : `Вся сумма ${formatMoney(total, currency)} останется обязательством до первого платежа`}
+      </p>
+    </div>
   );
 }

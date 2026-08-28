@@ -13,6 +13,7 @@ import {
 import {
   Budget,
   BudgetProgress,
+  DebtInstallment,
   FinanceCategory,
   FinanceSettings,
   PlannedPayment,
@@ -50,6 +51,7 @@ interface BudgetsTabProps {
   categories: FinanceCategory[];
   members: ProfileMember[];
   plannedPayments: PlannedPayment[];
+  installments: DebtInstallment[];
   settings: FinanceSettings;
   month: string;
   onMonthChange: (month: string) => void;
@@ -62,6 +64,7 @@ export function BudgetsTab({
   categories,
   members,
   plannedPayments,
+  installments,
   settings,
   month,
   onMonthChange,
@@ -82,9 +85,10 @@ export function BudgetsTab({
         transactions,
         budgets,
         plannedPayments,
+        installments,
         toBase: (amount, currency) => convertToBase(amount, currency, settings).baseAmount,
       }),
-    [month, transactions, budgets, plannedPayments, settings]
+    [month, transactions, budgets, plannedPayments, installments, settings]
   );
 
   const pacing = useMemo(() => pacingComparison(transactions, month), [transactions, month]);

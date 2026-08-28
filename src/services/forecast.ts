@@ -1,6 +1,8 @@
 import {
   CashFlowForecast,
   CurrencyCode,
+  DebtInstallment,
+  DebtPlan,
   FinanceAccount,
   ForecastEvent,
   ForecastPoint,
@@ -54,11 +56,16 @@ export function forecastCashFlow(input: {
   accounts: FinanceAccount[];
   transactions: Transaction[];
   plannedPayments: PlannedPayment[];
+  /** Scheduled instalment payments that have not been paid yet. */
+  debts?: DebtPlan[];
+  installments?: DebtInstallment[];
   days: number;
   today: string;
   toBase: (amount: number, currency: CurrencyCode) => number;
 }): CashFlowForecast {
   const { accounts, transactions, plannedPayments, days, today, toBase } = input;
+  const debts = input.debts || [];
+  const installments = input.installments || [];
   const horizon = addDays(today, days);
 
   const startBalance = accounts
@@ -92,6 +99,29 @@ export function forecastCashFlow(input: {
       });
       eventsByDate.set(date, list);
     }
+  }
+
+  // An instalment purchase is not an expense on the day it is made, but every
+  // scheduled payment still drains the balance ahead — that is the whole point
+  // of showing it in a forecast.
+  const debtById = new Map(debts.map((debt) => [debt.id, debt]));
+  for (const installment of installments) {
+    if (installment.isPaid) continue;
+    if (installment.dueDate <= today || installment.dueDate > horizon) continue;
+
+    const debt = debtById.get(installment.debtId);
+    const base = toBase(installment.amount, installment.currency);
+    totalExpense += base;
+
+    const list = eventsByDate.get(installment.dueDate) || [];
+    list.push({
+      date: installment.dueDate,
+      title: debt ? `${debt.title} · ${installment.index}` : 'Платёж по рассрочке',
+      amount: -Math.round(base * 100) / 100,
+      planKind: 'PAYMENT',
+      categoryId: debt?.categoryId || '',
+    });
+    eventsByDate.set(installment.dueDate, list);
   }
 
   const points: ForecastPoint[] = [];

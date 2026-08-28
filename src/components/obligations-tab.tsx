@@ -45,7 +45,6 @@ import {
   compressForStorage,
   readFileAsDataUrl,
 } from '@/services/ai/receipt-parser';
-import { VatCard } from './vat-card';
 import {
   Card,
   EmptyState,
@@ -96,16 +95,6 @@ export function ObligationsTab({
 
   return (
     <div className="space-y-4">
-      {vatSummary && (
-        <VatCard
-          summary={vatSummary}
-          payments={vatPayments}
-          currency={baseCurrency}
-          accounts={accounts}
-          categories={categories}
-        />
-      )}
-
       <Card className="p-4">
         <p className="text-[10px] font-black uppercase tracking-wide text-slate-400">
           Непогашенный остаток по выданным чекам

@@ -30,7 +30,7 @@ export const DICTIONARY = {
   'nav.operations': { ru: 'Операции', he: 'תנועות', uk: 'Операції', en: 'Operations' },
   'nav.budget': { ru: 'Бюджет', he: 'תקציב', uk: 'Бюджет', en: 'Budget' },
   'nav.plans': { ru: 'Планы', he: 'תוכניות', uk: 'Плани', en: 'Plans' },
-  'nav.cheques': { ru: 'Чеки', he: 'התחייבויות', uk: 'Чеки', en: 'Liabilities' },
+  'nav.debts': { ru: 'Долги', he: 'חובות', uk: 'Борги', en: 'Debts' },
   'nav.add': { ru: 'Добавить', he: 'הוספה', uk: 'Додати', en: 'Add' },
   'nav.reports': { ru: 'Отчёты', he: 'דוחות', uk: 'Звіти', en: 'Reports' },
   'nav.settings': { ru: 'Настройки', he: 'הגדרות', uk: 'Налаштування', en: 'Settings' },

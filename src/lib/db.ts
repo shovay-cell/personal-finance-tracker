@@ -15,6 +15,11 @@ import {
   TransactionSplit,
   VatPayment,
   VatSummary,
+  DebtPlan,
+  DebtInstallment,
+  DebtKind,
+  DebtWithSchedule,
+  RecurrenceUnit,
 } from '@/types';
 import {
   buildDefaultCategories,
@@ -34,6 +39,8 @@ export class FinanceDatabase extends Dexie {
   budgets!: Table<Budget, string>;
   members!: Table<ProfileMember, string>;
   vatPayments!: Table<VatPayment, string>;
+  debts!: Table<DebtPlan, string>;
+  debtInstallments!: Table<DebtInstallment, string>;
   settings!: Table<FinanceSettings, string>;
 
   constructor() {
@@ -53,6 +60,12 @@ export class FinanceDatabase extends Dexie {
     // v2 adds VAT remittances; existing tables carry over untouched.
     this.version(2).stores({
       vatPayments: 'id, date',
+    });
+
+    // v3 adds instalment purchases, taxes and loans with their payment schedules.
+    this.version(3).stores({
+      debts: 'id, kind, startDate',
+      debtInstallments: 'id, debtId, dueDate, isPaid',
     });
   }
 }
@@ -887,5 +900,186 @@ export function summarizeVat(
     grossIncome: round(grossIncome),
     netIncome: round(grossIncome - accrued),
     incomeCount: withVat.length,
+  };
+}
+
+
+// ------------------------------------------------------------------- debts
+
+function addInterval(dateStr: string, unit: RecurrenceUnit, count: number): string {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const date = new Date(y, m - 1, d);
+
+  if (unit === 'DAY') date.setDate(date.getDate() + count);
+  else if (unit === 'WEEK') date.setDate(date.getDate() + count * 7);
+  else if (unit === 'YEAR') date.setFullYear(date.getFullYear() + count);
+  else {
+    // Month steps keep the day of month and clamp to shorter months, so a
+    // schedule started on the 31st still lands inside February.
+    const day = date.getDate();
+    date.setDate(1);
+    date.setMonth(date.getMonth() + count);
+    const lastDay = new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
+    date.setDate(Math.min(day, lastDay));
+  }
+
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(
+    date.getDate()
+  ).padStart(2, '0')}`;
+}
+
+/**
+ * Splits a total into `count` payments. Rounding lands on the first payment, so
+ * the schedule always adds back up to the purchase price exactly.
+ */
+export function buildInstallmentAmounts(total: number, count: number): number[] {
+  const safeCount = Math.max(1, Math.floor(count));
+  const each = Math.floor((total / safeCount) * 100) / 100;
+  const amounts = new Array(safeCount).fill(each);
+  const drift = Math.round((total - each * safeCount) * 100) / 100;
+  amounts[0] = Math.round((amounts[0] + drift) * 100) / 100;
+  return amounts;
+}
+
+export interface NewDebtInput {
+  kind: DebtKind;
+  title: string;
+  merchant?: string;
+  totalAmount: number;
+  currency: CurrencyCode;
+  categoryId: string;
+  accountId: string;
+  startDate: string;
+  note?: string;
+  paymentsCount: number;
+  intervalUnit: RecurrenceUnit;
+  intervalCount: number;
+  /** Book the first payment as an expense today and mark it paid. */
+  firstPaymentPaid: boolean;
+}
+
+export async function addDebtPlan(input: NewDebtInput): Promise<DebtPlan> {
+  const now = new Date().toISOString();
+  const debt: DebtPlan = {
+    id: newId('debt'),
+    kind: input.kind,
+    title: input.title,
+    merchant: input.merchant,
+    totalAmount: input.totalAmount,
+    currency: input.currency,
+    categoryId: input.categoryId,
+    accountId: input.accountId,
+    startDate: input.startDate,
+    note: input.note,
+    authorId: getCurrentMemberId(),
+    createdAt: now,
+    updatedAt: now,
+  };
+  await financeDb.debts.put(debt);
+
+  const amounts = buildInstallmentAmounts(input.totalAmount, input.paymentsCount);
+  const installments: DebtInstallment[] = amounts.map((amount, index) => ({
+    id: newId('inst'),
+    debtId: debt.id,
+    index: index + 1,
+    // The first payment falls on the purchase date; the rest follow the interval.
+    dueDate:
+      index === 0
+        ? input.startDate
+        : addInterval(input.startDate, input.intervalUnit, input.intervalCount * index),
+    amount,
+    currency: input.currency,
+    isPaid: false,
+  }));
+  await financeDb.debtInstallments.bulkPut(installments);
+
+  if (input.firstPaymentPaid && installments.length > 0) {
+    await payDebtInstallment(installments[0].id);
+  }
+
+  return debt;
+}
+
+/** Turns one scheduled payment into a real expense and marks it paid. */
+export async function payDebtInstallment(
+  installmentId: string,
+  paidDate?: string
+): Promise<void> {
+  const installment = await financeDb.debtInstallments.get(installmentId);
+  if (!installment || installment.isPaid) return;
+
+  const debt = await financeDb.debts.get(installment.debtId);
+  if (!debt) return;
+
+  const date = paidDate || todayIso();
+  const transaction = await addTransaction({
+    kind: 'EXPENSE',
+    amount: installment.amount,
+    currency: installment.currency,
+    categoryId: debt.categoryId,
+    accountId: debt.accountId,
+    date,
+    note: `${debt.title} · платёж ${installment.index}/${await financeDb.debtInstallments
+      .where('debtId')
+      .equals(debt.id)
+      .count()}`,
+    merchant: debt.merchant,
+    source: 'MANUAL',
+  } as any);
+
+  await financeDb.debtInstallments.update(installmentId, {
+    isPaid: true,
+    paidDate: date,
+    transactionId: transaction.id,
+  });
+  await financeDb.debts.update(debt.id, { updatedAt: new Date().toISOString() });
+}
+
+export async function unpayDebtInstallment(installmentId: string): Promise<void> {
+  const installment = await financeDb.debtInstallments.get(installmentId);
+  if (!installment) return;
+
+  if (installment.transactionId) {
+    await financeDb.transactions.delete(installment.transactionId);
+  }
+  await financeDb.debtInstallments.update(installmentId, {
+    isPaid: false,
+    paidDate: undefined,
+    transactionId: undefined,
+  });
+}
+
+export async function deleteDebtPlan(id: string): Promise<void> {
+  const installments = await financeDb.debtInstallments.where('debtId').equals(id).toArray();
+  for (const installment of installments) {
+    // Payments already booked stay in history: deleting the plan must not
+    // rewrite money that actually left the account.
+    await financeDb.debtInstallments.delete(installment.id);
+  }
+  await financeDb.debts.delete(id);
+}
+
+export function describeDebt(
+  debt: DebtPlan,
+  installments: DebtInstallment[],
+  today = todayIso()
+): DebtWithSchedule {
+  const own = installments
+    .filter((i) => i.debtId === debt.id)
+    .sort((a, b) => a.index - b.index);
+
+  const paid = own.filter((i) => i.isPaid);
+  const paidAmount = Math.round(paid.reduce((sum, i) => sum + i.amount, 0) * 100) / 100;
+  const unpaid = own.filter((i) => !i.isPaid);
+
+  return {
+    debt,
+    installments: own,
+    paidAmount,
+    outstandingAmount: Math.round((debt.totalAmount - paidAmount) * 100) / 100,
+    paidCount: paid.length,
+    totalCount: own.length,
+    nextInstallment: unpaid[0],
+    isOverdue: unpaid.some((i) => i.dueDate < today),
   };
 }

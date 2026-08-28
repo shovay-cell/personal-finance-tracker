@@ -43,6 +43,26 @@ export function daysBetween(fromIso: string, toIsoStr: string): number {
 export function nextOccurrence(payment: PlannedPayment, from: string): string | null {
   const date = parseIso(from);
 
+  // «Повторять каждый N день/неделя/месяц/год» from the expense form wins over
+  // the preset kinds — it is the rule the user actually typed.
+  if (payment.intervalUnit && payment.intervalCount) {
+    const count = Math.max(1, payment.intervalCount);
+    if (payment.intervalUnit === 'DAY') date.setDate(date.getDate() + count);
+    else if (payment.intervalUnit === 'WEEK') date.setDate(date.getDate() + count * 7);
+    else if (payment.intervalUnit === 'YEAR') date.setFullYear(date.getFullYear() + count);
+    else {
+      const day = date.getDate();
+      date.setDate(1);
+      date.setMonth(date.getMonth() + count);
+      const lastDay = new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
+      date.setDate(Math.min(day, lastDay));
+    }
+
+    const next = toIso(date);
+    if (payment.endDate && next > payment.endDate) return null;
+    return next;
+  }
+
   switch (payment.recurrence) {
     case 'ONCE':
       return null;
@@ -74,6 +94,27 @@ export function nextOccurrence(payment: PlannedPayment, from: string): string | 
 }
 
 export function describeRecurrence(payment: PlannedPayment): string {
+  if (payment.intervalUnit && payment.intervalCount) {
+    const count = payment.intervalCount;
+    const unit = payment.intervalUnit;
+    const forms: Record<string, [string, string, string]> = {
+      DAY: ['день', 'дня', 'дней'],
+      WEEK: ['неделю', 'недели', 'недель'],
+      MONTH: ['месяц', 'месяца', 'месяцев'],
+      YEAR: ['год', 'года', 'лет'],
+    };
+    const [one, few, many] = forms[unit];
+    const mod10 = count % 10;
+    const mod100 = count % 100;
+    const word =
+      mod10 === 1 && mod100 !== 11
+        ? one
+        : mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)
+        ? few
+        : many;
+    return count === 1 ? `Каждый ${word}` : `Каждые ${count} ${word}`;
+  }
+
   switch (payment.recurrence) {
     case 'ONCE':
       return 'Разовый платёж';
@@ -180,6 +221,20 @@ const DAYS_PER_MONTH = 365.25 / 12;
  */
 export function monthlyEquivalent(payment: PlannedPayment): number {
   const amount = payment.amount;
+
+  if (payment.intervalUnit && payment.intervalCount) {
+    const count = Math.max(1, payment.intervalCount);
+    switch (payment.intervalUnit) {
+      case 'DAY':
+        return (amount * DAYS_PER_MONTH) / count;
+      case 'WEEK':
+        return (amount * 52) / 12 / count;
+      case 'MONTH':
+        return amount / count;
+      case 'YEAR':
+        return amount / (12 * count);
+    }
+  }
 
   switch (payment.recurrence) {
     case 'WEEKLY':

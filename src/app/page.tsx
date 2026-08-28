@@ -40,7 +40,7 @@ import { FinanceBottomNav, FinanceHeader, FinanceTab } from '@/components/naviga
 import { TransactionsTab } from '@/components/transactions-tab';
 import { BudgetsTab } from '@/components/budgets-tab';
 import { PlannedTab } from '@/components/planned-tab';
-import { ObligationsTab } from '@/components/obligations-tab';
+import { DebtsTab } from '@/components/debts-tab';
 import { ReportsTab } from '@/components/reports-tab';
 import { SettingsTab } from '@/components/settings-tab';
 import { QuickAddSheet } from '@/components/quick-add-sheet';
@@ -91,6 +91,8 @@ function FinanceApp() {
   const obligations = useLiveQuery(() => financeDb.obligations.toArray(), [], []);
   const settlements = useLiveQuery(() => financeDb.obligationSettlements.toArray(), [], []);
   const vatPayments = useLiveQuery(() => financeDb.vatPayments.toArray(), [], []);
+  const debts = useLiveQuery(() => financeDb.debts.toArray(), [], []);
+  const installments = useLiveQuery(() => financeDb.debtInstallments.toArray(), [], []);
   const settingsRow = useLiveQuery(() => financeDb.settings.get('default'), []);
 
   const settings = settingsRow || DEFAULT_SETTINGS;
@@ -317,6 +319,7 @@ function FinanceApp() {
             categories={categories}
             members={members}
             plannedPayments={plannedPayments}
+            installments={installments}
             settings={settings}
             month={month}
             onMonthChange={handleMonthChange}
@@ -335,12 +338,15 @@ function FinanceApp() {
         )}
 
         {activeTab === 'obligations' && (
-          <ObligationsTab
-            obligations={obligations}
-            settlements={settlements}
+          <DebtsTab
+            settings={settings}
             categories={categories}
             accounts={accounts}
-            baseCurrency={settings.baseCurrency}
+            obligations={obligations}
+            settlements={settlements}
+            debts={debts}
+            installments={installments}
+            plannedPayments={plannedPayments}
             vatSummary={vatSummary}
             vatPayments={vatPayments}
           />
@@ -350,6 +356,8 @@ function FinanceApp() {
           <ReportsTab
             transactions={transactions}
             plannedPayments={plannedPayments}
+            debts={debts}
+            installments={installments}
             settings={settings}
             categories={categories}
             accounts={accounts}

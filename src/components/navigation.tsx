@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { BarChart3, CalendarClock, FileSignature, Plus, Settings, Wallet } from 'lucide-react';
+import { BarChart3, CalendarClock, Plus, Scale, Settings, Wallet } from 'lucide-react';
 
 export type FinanceTab = 'transactions' | 'budgets' | 'planned' | 'obligations' | 'reports' | 'settings';
 
@@ -12,7 +12,7 @@ const TABS: { id: FinanceTab; labelKey: TranslationKey; Icon: typeof Wallet }[] 
   { id: 'transactions', labelKey: 'nav.operations', Icon: Wallet },
   { id: 'budgets', labelKey: 'nav.budget', Icon: BarChart3 },
   { id: 'planned', labelKey: 'nav.plans', Icon: CalendarClock },
-  { id: 'obligations', labelKey: 'nav.cheques', Icon: FileSignature },
+  { id: 'obligations', labelKey: 'nav.debts', Icon: Scale },
 ];
 
 export function FinanceBottomNav({
