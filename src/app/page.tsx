@@ -220,10 +220,10 @@ function FinanceApp() {
       <OnboardingWizard
         settings={settings}
         session={settings.session}
-        onFinish={() => {
+        onFinish={(message) => {
           // The PIN was just chosen here — do not ask for it on the next frame.
           markSessionUnlocked();
-          setToast('Настройки сохранены');
+          setToast(message || 'Настройки сохранены');
         }}
       />
     );

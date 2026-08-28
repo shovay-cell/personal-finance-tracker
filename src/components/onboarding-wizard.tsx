@@ -21,6 +21,7 @@ import { CURRENCY_LIST, MEMBER_COLORS } from '@/constants/categories';
 import { createSalt, hashPin, isValidPin } from '@/services/security/pin';
 import { vatFromGross, netFromGross } from '@/services/vat';
 import { formatMoney } from '@/services/analytics';
+import { JoinProfileModal } from './join-profile-modal';
 import { PrimaryButton, inputClass } from './ui';
 
 type StepId = 'INTRO' | 'MONEY' | 'VAT' | 'PROFIT' | 'PARTNER' | 'SECURITY' | 'DONE';
@@ -39,7 +40,7 @@ export function OnboardingWizard({
 }: {
   settings: FinanceSettings;
   session?: AuthSession;
-  onFinish: () => void;
+  onFinish: (message?: string) => void;
 }) {
   const [stepIndex, setStepIndex] = useState(0);
   const step = STEPS[stepIndex];
@@ -54,6 +55,8 @@ export function OnboardingWizard({
   const [pin, setPin] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [inviteCode] = useState(() => Math.random().toString(36).slice(2, 8).toUpperCase());
+  const [isJoining, setIsJoining] = useState(false);
+  const [hasJoined, setHasJoined] = useState(false);
 
   const next = () => setStepIndex((index) => Math.min(index + 1, STEPS.length - 1));
   const back = () => setStepIndex((index) => Math.max(index - 1, 0));
@@ -131,6 +134,15 @@ export function OnboardingWizard({
               <Feature icon={<ScanLine className="w-4 h-4" />} title="Чек в операцию" text="Фото чека — сумма, дата и категория подставляются сами." />
               <Feature icon={<Mic className="w-4 h-4" />} title="Голос и списки" text="«Потратил 50 на кафе» или фото списка операций из банка." />
               <Feature icon={<BarChart3 className="w-4 h-4" />} title="Отчёты и прогноз" text="Куда уходят деньги и хватит ли до конца месяца." />
+
+              <button
+                type="button"
+                onClick={() => setIsJoining(true)}
+                className="w-full py-3 rounded-2xl border border-dashed border-slate-300 dark:border-slate-600 text-slate-500 dark:text-slate-400 text-[11px] font-black flex items-center justify-center gap-1.5"
+              >
+                <Users className="w-3.5 h-3.5" />
+                У меня есть код приглашения — присоединиться к профилю
+              </button>
             </StepShell>
           )}
 
@@ -249,6 +261,14 @@ export function OnboardingWizard({
                 className={inputClass}
               />
 
+              <button
+                type="button"
+                onClick={() => setIsJoining(true)}
+                className="w-full py-2.5 rounded-2xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-[11px] font-black"
+              >
+                Наоборот: у меня есть код — присоединиться к чужому профилю
+              </button>
+
               <div className="rounded-2xl bg-slate-50 dark:bg-slate-800/60 p-3">
                 <p className="text-[10px] font-black uppercase tracking-wide text-slate-400">
                   Код приглашения
@@ -257,8 +277,9 @@ export function OnboardingWizard({
                   {inviteCode}
                 </p>
                 <p className="text-[10px] text-slate-400 font-medium leading-relaxed mt-1">
-                  Партнёр вводит код на своём устройстве и подключает тот же Google Drive —
-                  операции синхронизируются через общую резервную копию.
+                  Партнёр устанавливает приложение, на первом экране выбирает «У меня есть код
+                  приглашения», вводит этот код и подключает тот же Google Drive. Чтобы ему было
+                  что скачать, сделайте выгрузку в разделе резервного копирования.
                 </p>
               </div>
 
@@ -362,6 +383,20 @@ export function OnboardingWizard({
           </div>
         </div>
       </div>
+
+      {isJoining && (
+        <JoinProfileModal
+          session={session}
+          // The wizard steps back only when the join screen is dismissed, so its
+          // final confirmation is actually seen instead of flashing past.
+          onClose={() => setIsJoining(false)}
+          onJoined={(profileName) => {
+            if (hasJoined) return;
+            setHasJoined(true);
+            onFinish(`Вы в профиле «${profileName}»`);
+          }}
+        />
+      )}
     </div>
   );
 }

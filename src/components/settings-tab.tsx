@@ -72,6 +72,7 @@ import {
 } from '@/services/notifications';
 import { CategoryManagerModal } from './category-manager-modal';
 import { ManagePinModal } from './pin-lock';
+import { JoinProfileModal } from './join-profile-modal';
 import {
   Card,
   ColorPicker,
@@ -116,6 +117,7 @@ export function SettingsTab({
   const [message, setMessage] = useState<{ text: string; kind: 'ok' | 'error' } | null>(null);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [isManagingPin, setIsManagingPin] = useState(false);
+  const [isJoining, setIsJoining] = useState(false);
   const currentMemberId = getCurrentMemberId();
 
   useEffect(() => {
@@ -543,8 +545,9 @@ export function SettingsTab({
 
           <div className="pt-2 border-t border-slate-50 dark:border-slate-800 space-y-2">
             <p className="text-[10px] text-slate-400 font-medium leading-relaxed">
-              Второй участник устанавливает приложение, вводит код приглашения и подключает тот же
-              Google Drive — профиль, категории и операции синхронизируются через общий бэкап.
+              Второй участник устанавливает приложение, на первом экране выбирает «У меня есть код
+              приглашения», вводит этот код и подключает тот же Google Drive. Перед этим сделайте
+              выгрузку копии — из неё партнёр получит профиль, категории и операции.
             </p>
             <div className="flex gap-2">
               <div className="flex-1 px-3 py-2.5 rounded-2xl bg-slate-50 dark:bg-slate-800 text-center">
@@ -574,6 +577,15 @@ export function SettingsTab({
               )}
             </div>
           </div>
+
+          <button
+            type="button"
+            onClick={() => setIsJoining(true)}
+            className="w-full py-2.5 rounded-2xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-[11px] font-black flex items-center justify-center gap-1.5"
+          >
+            <UserPlus className="w-3.5 h-3.5" />
+            Ввести код и присоединиться к профилю
+          </button>
         </Card>
       </div>
 
@@ -871,6 +883,14 @@ export function SettingsTab({
             «Восстановить».
           </p>
         </ModalShell>
+      )}
+
+      {isJoining && (
+        <JoinProfileModal
+          session={settings.session}
+          onClose={() => setIsJoining(false)}
+          onJoined={(name) => setMessage({ text: `Профиль «${name}» подключён`, kind: 'ok' })}
+        />
       )}
 
       {isManagingPin && (

@@ -1,6 +1,6 @@
 'use client';
 
-import { GoogleDriveBackupFile } from '@/types';
+import { FinanceBackupPayload, GoogleDriveBackupFile } from '@/types';
 import {
   authenticateGoogleDrive,
   disconnectGoogleDrive,
@@ -206,4 +206,60 @@ export async function runDailyAutoBackup(): Promise<void> {
   if (last && Date.now() - new Date(last).getTime() < 24 * 60 * 60 * 1000) return;
 
   await uploadFinanceBackup();
+}
+
+
+/**
+ * Finds the shared profile backup a partner is joining and checks it really is
+ * the profile whose code they typed. The code alone carries no data — the
+ * operations live in the backup on the shared Google account — so this is the
+ * step that both locates the profile and proves the person was invited to it.
+ */
+export async function fetchProfileBackupByCode(code: string): Promise<{
+  success: boolean;
+  payload?: FinanceBackupPayload;
+  json?: string;
+  fileName?: string;
+  error?: string;
+}> {
+  const normalized = code.trim().toUpperCase();
+  if (normalized.length < 4) {
+    return { success: false, error: 'Введите код приглашения из профиля партнёра' };
+  }
+
+  const list = await listFinanceBackups();
+  if (!list.success || !list.files || list.files.length === 0) {
+    return {
+      success: false,
+      error:
+        'В этом Google Drive нет резервной копии FinTrack. Убедитесь, что вошли в тот же Google-аккаунт, что и партнёр, и что он сделал выгрузку.',
+    };
+  }
+
+  const { text, error } = await downloadBackupText(list.files[0].id);
+  if (!text) return { success: false, error };
+
+  try {
+    const payload = JSON.parse(text) as FinanceBackupPayload;
+    if (payload.appName !== 'FinTrack') {
+      return { success: false, error: 'Файл в Drive не является резервной копией FinTrack' };
+    }
+
+    const expected = (payload.settings?.inviteCode || '').trim().toUpperCase();
+    if (!expected) {
+      return {
+        success: false,
+        error:
+          'В профиле партнёра ещё не создан код приглашения. Попросите его открыть Настройки → Семейный доступ и сгенерировать код.',
+      };
+    }
+
+    if (expected !== normalized) {
+      return { success: false, error: 'Код не совпадает с кодом этого профиля' };
+    }
+
+    return { success: true, payload, json: text, fileName: list.files[0].name };
+  } catch (err: any) {
+    return { success: false, error: err.message || 'Не удалось прочитать резервную копию' };
+  }
 }
