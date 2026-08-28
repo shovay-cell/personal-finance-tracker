@@ -34,7 +34,7 @@ export function debtsOverview(input: {
 }): DebtsOverview {
   const { vatSummary, obligations, settlements, debts, installments, toBase } = input;
 
-  const cheques = obligationsWithBalance(obligations, settlements)
+  const issuedCheques = obligationsWithBalance(obligations, settlements)
     .filter((row) => row.status !== 'SETTLED')
     .reduce((sum, row) => sum + toBase(row.outstandingAmount, row.obligation.currency), 0);
 
@@ -50,7 +50,8 @@ export function debtsOverview(input: {
 
   const overview: DebtsOverview = {
     vat: round(vatSummary?.outstanding || 0),
-    cheques: round(cheques),
+    // Cheques the user has to pay, plus what is still open on cheques they issued.
+    cheques: round(issuedCheques + byKind('CHEQUE')),
     installments: round(byKind('INSTALLMENT')),
     taxes: round(byKind('TAX')),
     loans: round(byKind('LOAN')),

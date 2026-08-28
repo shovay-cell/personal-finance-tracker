@@ -3,10 +3,10 @@
 import React, { useMemo, useState } from 'react';
 import {
   Coins,
-  CreditCard,
   ImagePlus,
   Percent,
   Repeat,
+  Scale,
   Scissors,
   Loader2,
   Save,
@@ -26,6 +26,7 @@ import {
   TransactionKind,
   TransactionSplit,
   RecurrenceUnit,
+  DebtKind,
 } from '@/types';
 import {
   addDebtPlan,
@@ -137,10 +138,12 @@ export function TransactionFormModal({
   const [isRepeating, setIsRepeating] = useState(false);
   const [repeatCount, setRepeatCount] = useState('1');
   const [repeatUnit, setRepeatUnit] = useState<RecurrenceUnit>('MONTH');
-  const [isInstallment, setIsInstallment] = useState(false);
+  const [isDebt, setIsDebt] = useState(false);
+  const [debtKind, setDebtKind] = useState<DebtKind>('INSTALLMENT');
   const [paymentsCount, setPaymentsCount] = useState('6');
   const [installmentUnit, setInstallmentUnit] = useState<RecurrenceUnit>('MONTH');
   const [installmentInterval, setInstallmentInterval] = useState('1');
+  const [firstDueDate, setFirstDueDate] = useState(todayIso());
   const [firstPaymentPaid, setFirstPaymentPaid] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [keyError, setKeyError] = useState<string | null>(null);
@@ -251,19 +254,20 @@ export function TransactionFormModal({
         return;
       }
 
-      // An instalment purchase is not an expense today: it becomes a debt with a
-      // schedule, and only the payments actually made turn into expenses.
-      if (kind === 'EXPENSE' && isInstallment) {
-        const count = Math.max(2, parseInt(paymentsCount, 10) || 2);
+      // A liability is not an expense today: it becomes a debt with a schedule,
+      // and only the payments actually marked paid turn into expenses.
+      if (kind === 'EXPENSE' && isDebt) {
+        const count = Math.max(1, parseInt(paymentsCount, 10) || 1);
         await addDebtPlan({
-          kind: 'INSTALLMENT',
-          title: merchant.trim() || note.trim() || 'Покупка в рассрочку',
+          kind: debtKind,
+          title: merchant.trim() || note.trim() || DEBT_KIND_META[debtKind].defaultTitle,
           merchant: merchant.trim() || undefined,
           totalAmount: numericAmount,
           currency,
           categoryId,
           accountId,
           startDate: date,
+          firstDueDate,
           note: note.trim() || undefined,
           paymentsCount: count,
           intervalUnit: installmentUnit,
@@ -427,7 +431,7 @@ export function TransactionFormModal({
             type="button"
             onClick={() => {
               setIsRepeating((prev) => !prev);
-              if (!isRepeating) setIsInstallment(false);
+              if (!isRepeating) setIsDebt(false);
             }}
             className="w-full flex items-center justify-between gap-3 text-left"
           >
@@ -486,70 +490,103 @@ export function TransactionFormModal({
           <button
             type="button"
             onClick={() => {
-              setIsInstallment((prev) => !prev);
-              if (!isInstallment) setIsRepeating(false);
+              setIsDebt((prev) => !prev);
+              if (!isDebt) setIsRepeating(false);
             }}
             className="w-full flex items-center justify-between gap-3 text-left pt-2 border-t border-slate-100 dark:border-slate-800"
           >
             <span className="flex items-start gap-2">
-              <CreditCard className="w-4 h-4 text-slate-400 mt-px flex-shrink-0" />
+              <Scale className="w-4 h-4 text-slate-400 mt-px flex-shrink-0" />
               <span>
                 <span className="block text-xs font-black text-slate-800 dark:text-slate-100">
-                  Покупка в рассрочку
+                  Оформить как обязательство
                 </span>
                 <span className="block text-[10px] text-slate-400 font-medium mt-0.5">
-                  Станет обязательством с графиком, а не расходом целиком сегодня
+                  Рассрочка, налог, кредит или чек — попадёт в «Долги», а не в расходы сегодня
                 </span>
               </span>
             </span>
             <span
               className={`w-11 h-6 rounded-full flex items-center px-0.5 transition-colors flex-shrink-0 ${
-                isInstallment ? 'bg-violet-500' : 'bg-slate-300 dark:bg-slate-700'
+                isDebt ? 'bg-violet-500' : 'bg-slate-300 dark:bg-slate-700'
               }`}
             >
               <span
                 className={`w-5 h-5 rounded-full bg-white shadow transition-transform ${
-                  isInstallment ? 'translate-x-5' : ''
+                  isDebt ? 'translate-x-5' : ''
                 }`}
               />
             </span>
           </button>
 
-          {isInstallment && (
+          {isDebt && (
             <div className="space-y-2.5 pt-1">
-              <div className="flex items-end gap-2">
+              <div className="grid grid-cols-4 gap-1.5">
+                {(Object.keys(DEBT_KIND_META) as DebtKind[]).map((option) => {
+                  const meta = DEBT_KIND_META[option];
+                  const isActive = debtKind === option;
+                  return (
+                    <button
+                      key={option}
+                      type="button"
+                      onClick={() => {
+                        setDebtKind(option);
+                        setPaymentsCount(String(meta.defaultPayments));
+                      }}
+                      className={`py-2 rounded-xl text-[10px] font-black border transition-all ${
+                        isActive
+                          ? 'bg-violet-500 text-white border-transparent'
+                          : 'bg-slate-50 dark:bg-slate-800 text-slate-500 border-slate-200 dark:border-slate-700'
+                      }`}
+                    >
+                      {meta.label}
+                    </button>
+                  );
+                })}
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
                 <Field label="Количество платежей">
                   <input
                     type="number"
-                    min={2}
+                    min={1}
                     value={paymentsCount}
                     onChange={(e) => setPaymentsCount(e.target.value)}
-                    className={`${inputClass} w-24 text-center font-black`}
+                    className={`${inputClass} text-center font-black`}
                   />
                 </Field>
-                <div className="flex-1">
-                  <Field label="Каждые">
-                    <div className="flex gap-1.5">
-                      <input
-                        type="number"
-                        min={1}
-                        value={installmentInterval}
-                        onChange={(e) => setInstallmentInterval(e.target.value)}
-                        className={`${inputClass} w-16 text-center`}
-                      />
-                      <select
-                        value={installmentUnit}
-                        onChange={(e) => setInstallmentUnit(e.target.value as RecurrenceUnit)}
-                        className={`${inputClass} flex-1`}
-                      >
-                        <option value="WEEK">{pluralUnit('WEEK', installmentInterval)}</option>
-                        <option value="MONTH">{pluralUnit('MONTH', installmentInterval)}</option>
-                        <option value="YEAR">{pluralUnit('YEAR', installmentInterval)}</option>
-                      </select>
-                    </div>
-                  </Field>
-                </div>
+                <Field label={paymentsCount === '1' ? 'Дата оплаты' : 'Первый платёж'}>
+                  <input
+                    type="date"
+                    value={firstDueDate}
+                    onChange={(e) => setFirstDueDate(e.target.value)}
+                    className={inputClass}
+                  />
+                </Field>
               </div>
+
+              {parseInt(paymentsCount, 10) > 1 && (
+                <Field label="Платежи каждые">
+                  <div className="flex gap-1.5">
+                    <input
+                      type="number"
+                      min={1}
+                      value={installmentInterval}
+                      onChange={(e) => setInstallmentInterval(e.target.value)}
+                      className={`${inputClass} w-16 text-center`}
+                    />
+                    <select
+                      value={installmentUnit}
+                      onChange={(e) => setInstallmentUnit(e.target.value as RecurrenceUnit)}
+                      className={`${inputClass} flex-1`}
+                    >
+                      <option value="WEEK">{pluralUnit('WEEK', installmentInterval)}</option>
+                      <option value="MONTH">{pluralUnit('MONTH', installmentInterval)}</option>
+                      <option value="YEAR">{pluralUnit('YEAR', installmentInterval)}</option>
+                    </select>
+                  </div>
+                </Field>
+              )}
 
               <button
                 type="button"
@@ -558,10 +595,12 @@ export function TransactionFormModal({
               >
                 <span>
                   <span className="block text-[11px] font-black text-slate-700 dark:text-slate-200">
-                    Первый платёж оплачен сейчас
+                    {parseInt(paymentsCount, 10) > 1
+                      ? 'Первый платёж оплачен сейчас'
+                      : 'Уже оплачено'}
                   </span>
                   <span className="block text-[10px] text-slate-400 font-medium">
-                    Он сразу уйдёт в расходы, остальное останется долгом
+                    Оплаченная часть сразу уйдёт в расходы и выйдет из долга
                   </span>
                 </span>
                 <span
@@ -579,7 +618,7 @@ export function TransactionFormModal({
 
               <InstallmentPreview
                 total={parseFloat(amount.replace(',', '.')) || 0}
-                count={Math.max(2, parseInt(paymentsCount, 10) || 2)}
+                count={Math.max(1, parseInt(paymentsCount, 10) || 1)}
                 currency={currency}
                 firstPaid={firstPaymentPaid}
               />
@@ -854,6 +893,17 @@ export function TransactionFormModal({
 }
 
 
+/** Liability types that can be created straight from the expense form. */
+const DEBT_KIND_META: Record<
+  DebtKind,
+  { label: string; defaultTitle: string; defaultPayments: number }
+> = {
+  INSTALLMENT: { label: 'Рассрочка', defaultTitle: 'Покупка в рассрочку', defaultPayments: 6 },
+  CHEQUE: { label: 'Чек', defaultTitle: 'Чек к оплате', defaultPayments: 1 },
+  TAX: { label: 'Налог', defaultTitle: 'Налог', defaultPayments: 1 },
+  LOAN: { label: 'Кредит', defaultTitle: 'Кредит', defaultPayments: 1 },
+};
+
 /** Correct Russian agreement for the period next to a number. */
 function pluralUnit(unit: RecurrenceUnit, rawCount: string): string {
   const count = Math.max(1, parseInt(rawCount, 10) || 1);
@@ -902,6 +952,7 @@ function InstallmentPreview({
   if (total <= 0) return null;
   const amounts = buildInstallmentAmounts(total, count);
   const first = amounts[0];
+  const single = amounts.length === 1;
 
   return (
     <div className="rounded-2xl bg-violet-50/70 dark:bg-violet-950/20 p-3 space-y-1">
@@ -909,18 +960,20 @@ function InstallmentPreview({
         График платежей
       </p>
       <p className="text-[11px] font-bold text-slate-700 dark:text-slate-200">
-        {count} × {formatMoney(amounts[1] ?? first, currency)}
-        {amounts[1] !== undefined && amounts[0] !== amounts[1]
+        {single ? formatMoney(first, currency) : `${count} × ${formatMoney(amounts[1] ?? first, currency)}`}
+        {!single && amounts[1] !== undefined && amounts[0] !== amounts[1]
           ? ` (первый — ${formatMoney(first, currency)})`
           : ''}
       </p>
       <p className="text-[10.5px] text-slate-500 dark:text-slate-400 font-medium">
         {firstPaid
-          ? `Сегодня в расходы уйдёт ${formatMoney(first, currency)}, в долгах останется ${formatMoney(
-              Math.round((total - first) * 100) / 100,
-              currency
-            )}`
-          : `Вся сумма ${formatMoney(total, currency)} останется обязательством до первого платежа`}
+          ? single
+            ? `Сумма ${formatMoney(total, currency)} уйдёт в расходы сразу — долга не останется`
+            : `Сегодня в расходы уйдёт ${formatMoney(first, currency)}, в долгах останется ${formatMoney(
+                Math.round((total - first) * 100) / 100,
+                currency
+              )}`
+          : `Вся сумма ${formatMoney(total, currency)} останется обязательством до отметки «Оплачено»`}
       </p>
     </div>
   );

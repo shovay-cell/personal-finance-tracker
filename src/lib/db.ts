@@ -950,6 +950,8 @@ export interface NewDebtInput {
   categoryId: string;
   accountId: string;
   startDate: string;
+  /** First payment date; defaults to the purchase date. */
+  firstDueDate?: string;
   note?: string;
   paymentsCount: number;
   intervalUnit: RecurrenceUnit;
@@ -978,15 +980,15 @@ export async function addDebtPlan(input: NewDebtInput): Promise<DebtPlan> {
   await financeDb.debts.put(debt);
 
   const amounts = buildInstallmentAmounts(input.totalAmount, input.paymentsCount);
+  const firstDue = input.firstDueDate || input.startDate;
   const installments: DebtInstallment[] = amounts.map((amount, index) => ({
     id: newId('inst'),
     debtId: debt.id,
     index: index + 1,
-    // The first payment falls on the purchase date; the rest follow the interval.
+    // A tax or a cheque is usually one payment on a date of its own; an
+    // instalment plan walks forward from that same first date.
     dueDate:
-      index === 0
-        ? input.startDate
-        : addInterval(input.startDate, input.intervalUnit, input.intervalCount * index),
+      index === 0 ? firstDue : addInterval(firstDue, input.intervalUnit, input.intervalCount * index),
     amount,
     currency: input.currency,
     isPaid: false,

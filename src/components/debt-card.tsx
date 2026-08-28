@@ -1,22 +1,32 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Check, CreditCard, Landmark, RotateCcw, Trash2, Wallet } from 'lucide-react';
-import { CurrencyCode, DebtWithSchedule } from '@/types';
+import {
+  Check,
+  CreditCard,
+  FileSignature,
+  Landmark,
+  RotateCcw,
+  Trash2,
+  Wallet,
+} from 'lucide-react';
+import { CurrencyCode, DebtKind, DebtWithSchedule } from '@/types';
 import { deleteDebtPlan, payDebtInstallment, unpayDebtInstallment } from '@/lib/db';
 import { formatDateHuman, formatMoney } from '@/services/analytics';
 import { Card } from './ui';
 
-const KIND_ICON = {
+const KIND_ICON: Record<DebtKind, typeof CreditCard> = {
   INSTALLMENT: CreditCard,
   TAX: Landmark,
   LOAN: Wallet,
+  CHEQUE: FileSignature,
 };
 
-const KIND_COLOR = {
+const KIND_COLOR: Record<DebtKind, string> = {
   INSTALLMENT: '#8B5CF6',
   TAX: '#F97316',
   LOAN: '#0EA5E9',
+  CHEQUE: '#A855F7',
 };
 
 /**

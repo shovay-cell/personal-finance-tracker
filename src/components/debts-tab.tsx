@@ -8,7 +8,6 @@ import {
   FileSignature,
   Landmark,
   Percent,
-  Plus,
   Scale,
   Wallet,
 } from 'lucide-react';
@@ -26,13 +25,13 @@ import {
   VatPayment,
   VatSummary,
 } from '@/types';
-import { addDebtPlan, convertToBase, todayIso } from '@/lib/db';
+import { convertToBase } from '@/lib/db';
 import { formatDateHuman, formatMoney, monthLabel } from '@/services/analytics';
 import { debtsOverview, describeAllDebts, upcomingByMonth } from '@/services/debts';
 import { VatCard } from './vat-card';
 import { DebtCard } from './debt-card';
 import { ObligationsTab } from './obligations-tab';
-import { Card, EmptyState, Field, ModalShell, PrimaryButton, SectionTitle, inputClass } from './ui';
+import { Card, EmptyState, SectionTitle } from './ui';
 
 type Segment = 'ALL' | 'VAT' | 'CHEQUE' | 'INSTALLMENT' | 'TAX' | 'LOAN';
 
@@ -66,7 +65,6 @@ export function DebtsTab({
   vatPayments,
 }: DebtsTabProps) {
   const [segment, setSegment] = useState<Segment>('ALL');
-  const [creatingKind, setCreatingKind] = useState<DebtKind | null>(null);
 
   const baseCurrency = settings.baseCurrency;
   const toBase = (amount: number, currency: CurrencyCode) =>
@@ -256,33 +254,25 @@ export function DebtsTab({
         ))}
 
       {segment === 'CHEQUE' && (
-        <ObligationsTab
-          obligations={obligations}
-          settlements={settlements}
-          categories={categories}
-          accounts={accounts}
-          baseCurrency={baseCurrency}
-          vatPayments={[]}
-        />
+        <>
+          <DebtList kind="CHEQUE" rows={ofKind('CHEQUE')} currency={baseCurrency} />
+
+          <div>
+            <SectionTitle title="Выданные чеки на предъявителя" />
+            <ObligationsTab
+              obligations={obligations}
+              settlements={settlements}
+              categories={categories}
+              accounts={accounts}
+              baseCurrency={baseCurrency}
+              vatPayments={[]}
+            />
+          </div>
+        </>
       )}
 
       {(segment === 'INSTALLMENT' || segment === 'TAX' || segment === 'LOAN') && (
-        <DebtList
-          kind={segment}
-          rows={ofKind(segment)}
-          currency={baseCurrency}
-          onCreate={() => setCreatingKind(segment)}
-        />
-      )}
-
-      {creatingKind && (
-        <DebtFormModal
-          kind={creatingKind}
-          categories={categories}
-          accounts={accounts}
-          baseCurrency={baseCurrency}
-          onClose={() => setCreatingKind(null)}
-        />
+        <DebtList kind={segment} rows={ofKind(segment)} currency={baseCurrency} />
       )}
     </div>
   );
@@ -292,45 +282,34 @@ function DebtList({
   kind,
   rows,
   currency,
-  onCreate,
 }: {
   kind: DebtKind;
   rows: ReturnType<typeof describeAllDebts>;
   currency: CurrencyCode;
-  onCreate: () => void;
 }) {
+  // All of these are created from the expense form now: one place to enter money
+  // going out, whether it leaves today or on a schedule.
   const meta = {
     INSTALLMENT: {
-      title: 'Покупки в рассрочку',
       empty: 'Рассрочек нет',
-      hint: 'Рассрочка создаётся в форме расхода: включите «Покупка в рассрочку», укажите количество платежей — и график появится здесь.',
-      add: 'Добавить рассрочку вручную',
+      hint: 'Заводится в форме расхода: включите «Оформить как обязательство» → «Рассрочка» и укажите количество платежей.',
     },
     TAX: {
-      title: 'Налоги',
       empty: 'Налоговых обязательств нет',
-      hint: 'Добавьте начисленный налог с датой или графиком платежей — он попадёт в прогноз и в календарь списаний.',
-      add: 'Добавить налог',
+      hint: 'Заводится в форме расхода: «Оформить как обязательство» → «Налог», с датой оплаты или графиком платежей.',
     },
     LOAN: {
-      title: 'Долги и кредиты',
       empty: 'Кредитов нет',
-      hint: 'Добавьте кредит или долг с графиком выплат — остаток и ближайший платёж будут на виду.',
-      add: 'Добавить кредит',
+      hint: 'Заводится в форме расхода: «Оформить как обязательство» → «Кредит», с графиком выплат.',
+    },
+    CHEQUE: {
+      empty: 'Чеков к оплате нет',
+      hint: 'Заводится в форме расхода: «Оформить как обязательство» → «Чек», с датой оплаты.',
     },
   }[kind];
 
   return (
     <div className="space-y-3">
-      <button
-        type="button"
-        onClick={onCreate}
-        className="w-full py-3 rounded-2xl bg-gradient-to-tr from-violet-500 to-fuchsia-400 text-white text-xs font-black flex items-center justify-center gap-2 shadow-lg shadow-violet-500/25 active:scale-[0.98] transition-transform"
-      >
-        <Plus className="w-4 h-4" />
-        {meta.add}
-      </button>
-
       {rows.length === 0 ? (
         <EmptyState icon={<CreditCard className="w-7 h-7" />} title={meta.empty} description={meta.hint} />
       ) : (
@@ -341,167 +320,5 @@ function DebtList({
         </div>
       )}
     </div>
-  );
-}
-
-function DebtFormModal({
-  kind,
-  categories,
-  accounts,
-  baseCurrency,
-  onClose,
-}: {
-  kind: DebtKind;
-  categories: FinanceCategory[];
-  accounts: FinanceAccount[];
-  baseCurrency: CurrencyCode;
-  onClose: () => void;
-}) {
-  const [title, setTitle] = useState('');
-  const [amount, setAmount] = useState('');
-  const [categoryId, setCategoryId] = useState('cat-fees');
-  const [accountId, setAccountId] = useState(accounts[0]?.id || '');
-  const [startDate, setStartDate] = useState(todayIso());
-  const [paymentsCount, setPaymentsCount] = useState(kind === 'TAX' ? '1' : '6');
-  const [intervalCount, setIntervalCount] = useState('1');
-  const [firstPaid, setFirstPaid] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const expenseCategories = categories.filter((c) => c.kind === 'EXPENSE' && !c.parentId && !c.isHidden);
-
-  const handleSave = async () => {
-    const total = parseFloat(amount.replace(',', '.'));
-    if (!title.trim()) return setError('Укажите название');
-    if (!Number.isFinite(total) || total <= 0) return setError('Укажите сумму');
-
-    await addDebtPlan({
-      kind,
-      title: title.trim(),
-      totalAmount: total,
-      currency: baseCurrency,
-      categoryId: categoryId || expenseCategories[0]?.id || '',
-      accountId: accountId || accounts[0]?.id,
-      startDate,
-      paymentsCount: Math.max(1, parseInt(paymentsCount, 10) || 1),
-      intervalUnit: 'MONTH',
-      intervalCount: Math.max(1, parseInt(intervalCount, 10) || 1),
-      firstPaymentPaid: firstPaid,
-    });
-    onClose();
-  };
-
-  const label = kind === 'TAX' ? 'налог' : kind === 'LOAN' ? 'кредит' : 'рассрочку';
-
-  return (
-    <ModalShell
-      title={`Добавить ${label}`}
-      icon={<Scale className="w-5 h-5" />}
-      onClose={onClose}
-      maxWidthClass="max-w-md"
-      footer={
-        <div className="space-y-2">
-          {error && <p className="text-[11px] font-bold text-rose-500 text-center">{error}</p>}
-          <PrimaryButton onClick={handleSave}>Создать обязательство</PrimaryButton>
-        </div>
-      }
-    >
-      <Field label="Название">
-        <input
-          type="text"
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          placeholder={kind === 'TAX' ? 'Налог на прибыль' : kind === 'LOAN' ? 'Кредит на авто' : 'Техника'}
-          className={inputClass}
-          autoFocus
-        />
-      </Field>
-
-      <div className="grid grid-cols-2 gap-3">
-        <Field label={`Сумма, ${baseCurrency}`}>
-          <input
-            type="text"
-            inputMode="decimal"
-            value={amount}
-            onChange={(e) => setAmount(e.target.value)}
-            className={`${inputClass} text-lg font-black`}
-          />
-        </Field>
-        <Field label="Дата начала">
-          <input
-            type="date"
-            value={startDate}
-            onChange={(e) => setStartDate(e.target.value)}
-            className={inputClass}
-          />
-        </Field>
-      </div>
-
-      <div className="grid grid-cols-2 gap-3">
-        <Field label="Количество платежей">
-          <input
-            type="number"
-            min={1}
-            value={paymentsCount}
-            onChange={(e) => setPaymentsCount(e.target.value)}
-            className={inputClass}
-          />
-        </Field>
-        <Field label="Каждые N месяцев">
-          <input
-            type="number"
-            min={1}
-            value={intervalCount}
-            onChange={(e) => setIntervalCount(e.target.value)}
-            className={inputClass}
-          />
-        </Field>
-      </div>
-
-      <Field label="Категория расхода">
-        <select value={categoryId} onChange={(e) => setCategoryId(e.target.value)} className={inputClass}>
-          {expenseCategories.map((category) => (
-            <option key={category.id} value={category.id}>
-              {category.name}
-            </option>
-          ))}
-        </select>
-      </Field>
-
-      <Field label="Счёт списания">
-        <select value={accountId} onChange={(e) => setAccountId(e.target.value)} className={inputClass}>
-          {accounts.map((account) => (
-            <option key={account.id} value={account.id}>
-              {account.name}
-            </option>
-          ))}
-        </select>
-      </Field>
-
-      <button
-        type="button"
-        onClick={() => setFirstPaid((prev) => !prev)}
-        className="w-full flex items-center justify-between gap-3 p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/70 text-left"
-      >
-        <span>
-          <span className="block text-xs font-black text-slate-700 dark:text-slate-200">
-            Первый платёж оплачен сейчас
-          </span>
-          <span className="block text-[10px] text-slate-400 font-medium">
-            Он сразу уйдёт в расходы, остальное останется долгом
-          </span>
-        </span>
-        <span
-          className={`w-11 h-6 rounded-full flex items-center px-0.5 transition-colors flex-shrink-0 ${
-            firstPaid ? 'bg-emerald-500' : 'bg-slate-300 dark:bg-slate-700'
-          }`}
-        >
-          <span
-            className={`w-5 h-5 rounded-full bg-white shadow transition-transform ${
-              firstPaid ? 'translate-x-5' : ''
-            }`}
-          />
-        </span>
-      </button>
-    </ModalShell>
   );
 }

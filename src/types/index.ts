@@ -173,7 +173,7 @@ export interface RecurringTotals {
 }
 
 /** What kind of liability a debt plan represents. */
-export type DebtKind = 'INSTALLMENT' | 'TAX' | 'LOAN';
+export type DebtKind = 'INSTALLMENT' | 'TAX' | 'LOAN' | 'CHEQUE';
 
 /**
  * A liability paid off on a schedule: an instalment purchase, a tax assessment
