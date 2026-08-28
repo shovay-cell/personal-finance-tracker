@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import {
   ArrowRight,
   BarChart3,
+  Languages,
   Check,
   Coins,
   FileSignature,
@@ -18,15 +19,26 @@ import {
 import { AuthSession, CurrencyCode, FinanceSettings } from '@/types';
 import { addMember, saveFinanceSettings } from '@/lib/db';
 import { CURRENCY_LIST, MEMBER_COLORS } from '@/constants/categories';
+import { LANGUAGES, SPEECH_LOCALE_BY_LANGUAGE } from '@/i18n/dictionary';
+import { useT } from '@/i18n/context';
 import { createSalt, hashPin, isValidPin } from '@/services/security/pin';
 import { vatFromGross, netFromGross } from '@/services/vat';
 import { formatMoney } from '@/services/analytics';
 import { JoinProfileModal } from './join-profile-modal';
 import { PrimaryButton, inputClass } from './ui';
 
-type StepId = 'INTRO' | 'MONEY' | 'VAT' | 'PROFIT' | 'PARTNER' | 'SECURITY' | 'DONE';
+type StepId = 'LANGUAGE' | 'INTRO' | 'MONEY' | 'VAT' | 'PROFIT' | 'PARTNER' | 'SECURITY' | 'DONE';
 
-const STEPS: StepId[] = ['INTRO', 'MONEY', 'VAT', 'PROFIT', 'PARTNER', 'SECURITY', 'DONE'];
+const STEPS: StepId[] = [
+  'LANGUAGE',
+  'INTRO',
+  'MONEY',
+  'VAT',
+  'PROFIT',
+  'PARTNER',
+  'SECURITY',
+  'DONE',
+];
 
 /**
  * First-run wizard: explains the six things that are not obvious from the UI and
@@ -55,6 +67,7 @@ export function OnboardingWizard({
   const [pin, setPin] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [inviteCode] = useState(() => Math.random().toString(36).slice(2, 8).toUpperCase());
+  const { t, language } = useT();
   const [isJoining, setIsJoining] = useState(false);
   const [hasJoined, setHasJoined] = useState(false);
 
@@ -125,11 +138,47 @@ export function OnboardingWizard({
         </div>
 
         <div className="flex-1 space-y-5">
+          {step === 'LANGUAGE' && (
+            <StepShell
+              icon={<Languages className="w-7 h-7" />}
+              title={t('settings.language')}
+              text={t('settings.languageHint')}
+            >
+              <div className="grid grid-cols-2 gap-2">
+                {LANGUAGES.map((option) => (
+                  <button
+                    key={option.code}
+                    type="button"
+                    onClick={() =>
+                      // Applied at once: the remaining steps should already be in
+                      // the language the user just picked.
+                      saveFinanceSettings({
+                        language: option.code,
+                        speechLocale: SPEECH_LOCALE_BY_LANGUAGE[option.code] as any,
+                      })
+                    }
+                    className={`py-3 rounded-2xl text-sm font-black border transition-all ${
+                      language === option.code
+                        ? 'bg-sky-500 text-white border-transparent shadow-md shadow-sky-500/25'
+                        : 'bg-slate-50 dark:bg-slate-800 text-slate-500 border-slate-200 dark:border-slate-700'
+                    }`}
+                  >
+                    {option.nativeLabel}
+                  </button>
+                ))}
+              </div>
+
+              <p className="text-[10px] text-slate-400 font-medium leading-relaxed">
+                Язык можно поменять в любой момент: Настройки → Профиль → Язык интерфейса.
+              </p>
+            </StepShell>
+          )}
+
           {step === 'INTRO' && (
             <StepShell
               icon={<Wallet className="w-7 h-7" />}
-              title={`Привет${session?.displayName ? `, ${session.displayName}` : ''}!`}
-              text="Коротко покажу, как здесь всё устроено, и сразу настроим главное. Это займёт минуту — любой шаг можно пропустить."
+              title={`${t('onboarding.hello')}${session?.displayName ? `, ${session.displayName}` : ''}!`}
+              text={t('onboarding.introText')}
             >
               <Feature icon={<ScanLine className="w-4 h-4" />} title="Чек в операцию" text="Фото чека — сумма, дата и категория подставляются сами." />
               <Feature icon={<Mic className="w-4 h-4" />} title="Голос и списки" text="«Потратил 50 на кафе» или фото списка операций из банка." />
@@ -141,7 +190,7 @@ export function OnboardingWizard({
                 className="w-full py-3 rounded-2xl border border-dashed border-slate-300 dark:border-slate-600 text-slate-500 dark:text-slate-400 text-[11px] font-black flex items-center justify-center gap-1.5"
               >
                 <Users className="w-3.5 h-3.5" />
-                У меня есть код приглашения — присоединиться к профилю
+                {t('onboarding.haveCode')}
               </button>
             </StepShell>
           )}
@@ -355,11 +404,11 @@ export function OnboardingWizard({
           {step === 'DONE' ? (
             <PrimaryButton onClick={finish} variant="success">
               <Check className="w-4 h-4" />
-              Начать
+              {t('onboarding.start')}
             </PrimaryButton>
           ) : (
             <PrimaryButton onClick={next}>
-              Далее
+              {t('common.next')}
               <ArrowRight className="w-4 h-4" />
             </PrimaryButton>
           )}
@@ -371,14 +420,14 @@ export function OnboardingWizard({
               disabled={stepIndex === 0}
               className="py-2 px-3 text-[11px] font-black text-slate-400 disabled:opacity-0"
             >
-              Назад
+              {t('common.back')}
             </button>
             <button
               type="button"
               onClick={skipAll}
               className="py-2 px-3 text-[11px] font-black text-slate-400"
             >
-              Пропустить всё
+              {t('common.skip')}
             </button>
           </div>
         </div>

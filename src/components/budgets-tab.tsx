@@ -31,6 +31,7 @@ import {
   shiftMonth,
 } from '@/services/analytics';
 import { getCategoryIcon } from '@/constants/categories';
+import { useT } from '@/i18n/context';
 import { ProgressBar } from './charts';
 import { SafeToSpendCard } from './safe-to-spend-card';
 import { PacingChart } from './pacing-chart';
@@ -72,6 +73,7 @@ export function BudgetsTab({
 }: BudgetsTabProps) {
   const [editing, setEditing] = useState<Budget | 'NEW' | null>(null);
   const baseCurrency = settings.baseCurrency;
+  const { t } = useT();
 
   const progress = useMemo(
     () => budgetProgress(budgets, transactions, categories, month),
@@ -155,7 +157,7 @@ export function BudgetsTab({
           <div className="flex items-start justify-between gap-3">
             <div>
               <p className="text-[10px] font-black uppercase tracking-wide text-slate-400">
-                Общий бюджет месяца
+                {t('budget.monthly')}
               </p>
               <p className="text-2xl font-black text-slate-900 dark:text-slate-100 tabular-nums mt-0.5">
                 {formatMoney(totalBudget.spent, baseCurrency)}
@@ -170,7 +172,7 @@ export function BudgetsTab({
               onClick={() => setEditing(totalBudget.budget)}
               className="text-[10px] font-black text-sky-600 dark:text-sky-400 px-2 py-1 rounded-lg bg-sky-50 dark:bg-sky-950/50"
             >
-              Изменить
+              {t('budget.change')}
             </button>
           </div>
 
@@ -184,7 +186,7 @@ export function BudgetsTab({
                   : 'text-emerald-600 dark:text-emerald-400'
               }
             >
-              {totalBudget.remaining < 0 ? 'Перерасход ' : 'Осталось '}
+              {totalBudget.remaining < 0 ? `${t('budget.overspent')} ` : `${t('budget.remaining')} `}
               {formatMoney(Math.abs(totalBudget.remaining), baseCurrency)}
             </span>
             <span className="text-slate-400">{totalBudget.percent.toFixed(0)}%</span>
@@ -212,14 +214,14 @@ export function BudgetsTab({
             onClick={() => setEditing('NEW')}
             className="px-3 py-2 rounded-xl bg-sky-500 text-white text-[11px] font-black flex-shrink-0"
           >
-            Задать
+            {t('budget.set')}
           </button>
         </Card>
       )}
 
       <div>
         <SectionTitle
-          title="Лимиты по категориям"
+          title={t('budget.limits')}
           action={
             <button
               type="button"

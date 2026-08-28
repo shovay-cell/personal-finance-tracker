@@ -29,7 +29,7 @@ import {
   sumBase,
 } from '@/services/analytics';
 import { useT } from '@/i18n/context';
-import { accountName, categoryName } from '@/i18n/categories';
+import { accountKindLabel, accountName, categoryName } from '@/i18n/categories';
 import { Card, EmptyState, SectionTitle, SegmentedControl, inputClass } from './ui';
 
 interface TransactionsTabProps {
@@ -127,7 +127,7 @@ export function TransactionsTab({
                   style={{ borderTopColor: account.colorHex, borderTopWidth: 3 }}
                 >
                   <p className="text-[10px] font-black uppercase tracking-wide text-slate-400">
-                    {ACCOUNT_KIND_LABELS[account.kind]}
+                    {accountKindLabel(account.kind, language)}
                   </p>
                   <p className="text-xs font-bold text-slate-700 dark:text-slate-200 truncate mt-0.5">
                     {accountName(account, language)}

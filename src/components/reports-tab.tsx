@@ -34,6 +34,7 @@ import { forecastCashFlow } from '@/services/forecast';
 import { convertToBase, todayIso } from '@/lib/db';
 import { CategoryLegend, DonutChart, MonthlyBarChart } from './charts';
 import { CashFlowForecastCard } from './cash-flow-forecast';
+import { useT } from '@/i18n/context';
 import { Card, EmptyState, SectionTitle, SegmentedControl, inputClass } from './ui';
 import { ProgressBar } from './charts';
 
@@ -56,11 +57,11 @@ interface ReportsTabProps {
   onRangeChange: (range: DateRange, preset: PeriodPreset) => void;
 }
 
-const PRESET_LABELS: { value: PeriodPreset; label: string }[] = [
-  { value: 'WEEK', label: 'Неделя' },
-  { value: 'MONTH', label: 'Месяц' },
-  { value: 'QUARTER', label: 'Квартал' },
-  { value: 'YEAR', label: 'Год' },
+const PRESET_KEYS: { value: PeriodPreset; key: 'reports.week' | 'reports.month' | 'reports.quarter' | 'reports.year' }[] = [
+  { value: 'WEEK', key: 'reports.week' },
+  { value: 'MONTH', key: 'reports.month' },
+  { value: 'QUARTER', key: 'reports.quarter' },
+  { value: 'YEAR', key: 'reports.year' },
 ];
 
 export function ReportsTab({
@@ -84,6 +85,7 @@ export function ReportsTab({
   const [kind, setKind] = useState<TransactionKind>('EXPENSE');
   const [showCustom, setShowCustom] = useState(preset === 'CUSTOM');
   const [forecastDays, setForecastDays] = useState(30);
+  const { t } = useT();
 
   const forecast = useMemo(
     () =>
@@ -147,7 +149,7 @@ export function ReportsTab({
   return (
     <div className="space-y-4">
       <div className="flex gap-1.5">
-        {PRESET_LABELS.map((option) => (
+        {PRESET_KEYS.map((option) => (
           <button
             key={option.value}
             type="button"
@@ -161,7 +163,7 @@ export function ReportsTab({
                 : 'bg-slate-50 dark:bg-slate-800 text-slate-500 border-slate-200 dark:border-slate-700'
             }`}
           >
-            {option.label}
+            {t(option.key)}
           </button>
         ))}
         <button
@@ -196,19 +198,19 @@ export function ReportsTab({
 
       <div className="grid grid-cols-3 gap-2">
         <Card className="p-3">
-          <p className="text-[9px] font-black uppercase tracking-wide text-rose-500">Расходы</p>
+          <p className="text-[9px] font-black uppercase tracking-wide text-rose-500">{t('common.expenses')}</p>
           <p className="text-sm font-black text-slate-900 dark:text-slate-100 tabular-nums mt-1">
             {formatMoney(totalExpense, baseCurrency, { compact: true })}
           </p>
         </Card>
         <Card className="p-3">
-          <p className="text-[9px] font-black uppercase tracking-wide text-emerald-500">Доходы</p>
+          <p className="text-[9px] font-black uppercase tracking-wide text-emerald-500">{t('common.incomes')}</p>
           <p className="text-sm font-black text-slate-900 dark:text-slate-100 tabular-nums mt-1">
             {formatMoney(totalIncome, baseCurrency, { compact: true })}
           </p>
         </Card>
         <Card className="p-3">
-          <p className="text-[9px] font-black uppercase tracking-wide text-slate-400">Баланс</p>
+          <p className="text-[9px] font-black uppercase tracking-wide text-slate-400">{t('reports.balance')}</p>
           <p
             className={`text-sm font-black tabular-nums mt-1 ${
               totalIncome - totalExpense < 0
@@ -225,8 +227,8 @@ export function ReportsTab({
         value={kind}
         onChange={setKind}
         options={[
-          { value: 'EXPENSE', label: 'РАСХОДЫ' },
-          { value: 'INCOME', label: 'ДОХОДЫ' },
+          { value: 'EXPENSE', label: t('common.expenses') },
+          { value: 'INCOME', label: t('common.incomes') },
         ]}
       />
 
@@ -253,7 +255,7 @@ export function ReportsTab({
       </Card>
 
       <div>
-        <SectionTitle title="Прогноз ликвидности" />
+        <SectionTitle title={t('reports.forecast')} />
         <CashFlowForecastCard
           forecast={forecast}
           currency={baseCurrency}
@@ -263,7 +265,7 @@ export function ReportsTab({
       </div>
 
       <div>
-        <SectionTitle title="Динамика по месяцам" />
+        <SectionTitle title={t('reports.dynamics')} />
         <Card className="p-4">
           <MonthlyBarChart points={dynamics} currency={baseCurrency} />
           <div className="flex items-center justify-center gap-4 mt-3">
@@ -278,7 +280,7 @@ export function ReportsTab({
       </div>
 
       <div>
-        <SectionTitle title="План / факт по бюджетам" />
+        <SectionTitle title={t('reports.planFact')} />
         {budgetRows.length === 0 ? (
           <Card className="p-4 text-[11px] font-medium text-slate-400 text-center">
             Лимиты на этот месяц не заданы
@@ -330,7 +332,7 @@ export function ReportsTab({
           className="py-3 rounded-2xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-[11px] font-black flex items-center justify-center gap-1.5 active:scale-95 transition-transform"
         >
           <FileDown className="w-4 h-4" />
-          Экспорт CSV
+          {t('reports.exportCsv')}
         </button>
         <button
           type="button"
@@ -338,7 +340,7 @@ export function ReportsTab({
           className="py-3 rounded-2xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-[11px] font-black flex items-center justify-center gap-1.5 active:scale-95 transition-transform"
         >
           <FileText className="w-4 h-4" />
-          Отчёт PDF
+          {t('reports.exportPdf')}
         </button>
       </div>
 

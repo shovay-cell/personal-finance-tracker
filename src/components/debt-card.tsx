@@ -13,6 +13,7 @@ import {
 import { CurrencyCode, DebtKind, DebtWithSchedule } from '@/types';
 import { deleteDebtPlan, payDebtInstallment, unpayDebtInstallment } from '@/lib/db';
 import { formatDateHuman, formatMoney } from '@/services/analytics';
+import { useT } from '@/i18n/context';
 import { Card } from './ui';
 
 const KIND_ICON: Record<DebtKind, typeof CreditCard> = {
@@ -42,6 +43,7 @@ export function DebtCard({
   currency: CurrencyCode;
 }) {
   const [isExpanded, setIsExpanded] = useState(false);
+  const { t } = useT();
   const { debt, paidAmount, outstandingAmount, paidCount, totalCount, nextInstallment } = row;
 
   const Icon = KIND_ICON[debt.kind];
@@ -63,7 +65,7 @@ export function DebtCard({
             {debt.title}
           </p>
           <p className="text-[10.5px] text-slate-400 font-medium truncate">
-            {paidCount} из {totalCount} платежей
+            {paidCount} / {totalCount} {t('debts.ofPayments')}
             {nextInstallment ? ` · следующий ${formatDateHuman(nextInstallment.dueDate)}` : ' · закрыт'}
           </p>
         </div>
@@ -72,7 +74,7 @@ export function DebtCard({
           <p className="text-xs font-black text-slate-900 dark:text-slate-100 tabular-nums">
             {formatMoney(outstandingAmount, debt.currency)}
           </p>
-          <p className="text-[10px] font-bold text-slate-400">осталось</p>
+          <p className="text-[10px] font-bold text-slate-400">{t('debts.left')}</p>
         </div>
       </div>
 
@@ -85,10 +87,10 @@ export function DebtCard({
 
       <div className="flex items-center justify-between text-[11px] font-bold">
         <span className="text-slate-400 tabular-nums">
-          Оплачено {formatMoney(paidAmount, debt.currency)} из{' '}
+          {t('debts.paid')} {formatMoney(paidAmount, debt.currency)} / {' '}
           {formatMoney(debt.totalAmount, debt.currency)}
         </span>
-        {row.isOverdue && <span className="text-rose-500">просрочен платёж</span>}
+        {row.isOverdue && <span className="text-rose-500">{t('debts.overdue')}</span>}
       </div>
 
       {nextInstallment && !isExpanded && (
@@ -99,7 +101,7 @@ export function DebtCard({
           style={{ backgroundColor: `${color}1A`, color }}
         >
           <Check className="w-3.5 h-3.5" />
-          Оплатить {formatMoney(nextInstallment.amount, nextInstallment.currency)} ·{' '}
+          {t('debts.pay')} {formatMoney(nextInstallment.amount, nextInstallment.currency)} ·{' '}
           {formatDateHuman(nextInstallment.dueDate)}
         </button>
       )}
@@ -142,7 +144,7 @@ export function DebtCard({
                   onClick={() => payDebtInstallment(installment.id)}
                   className="px-2 py-0.5 rounded-lg bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-400 text-[9px] font-black"
                 >
-                  Оплачено
+                  {t('debts.paid')}
                 </button>
               )}
             </div>
@@ -154,7 +156,7 @@ export function DebtCard({
             className="w-full mt-1 py-2 rounded-xl text-[10px] font-black text-rose-500 bg-rose-50 dark:bg-rose-950/40 flex items-center justify-center gap-1.5"
           >
             <Trash2 className="w-3 h-3" />
-            Удалить обязательство
+            {t('debts.deleteDebt')}
           </button>
         </div>
       )}

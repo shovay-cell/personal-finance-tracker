@@ -31,8 +31,7 @@ export function SafeToSpendCard({
             {t('safe.title')}
           </p>
           <p className="text-[10.5px] text-slate-400 font-medium mt-0.5 leading-relaxed">
-            Задайте месячный бюджет — и приложение посчитает дневной лимит с учётом
-            обязательных платежей.
+            {t('safe.setBudgetHint')}
           </p>
         </div>
         {onSetBudget && (
@@ -41,7 +40,7 @@ export function SafeToSpendCard({
             onClick={onSetBudget}
             className="px-3 py-2 rounded-xl bg-sky-500 text-white text-[11px] font-black flex-shrink-0"
           >
-            Задать
+            {t('budget.set')}
           </button>
         )}
       </Card>

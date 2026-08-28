@@ -8,6 +8,7 @@ import {
   isRtl,
   translate,
 } from './dictionary';
+import { setActiveLanguage } from './runtime';
 
 interface LanguageContextValue {
   language: Language;
@@ -34,6 +35,9 @@ export function LanguageProvider({
   children: React.ReactNode;
 }) {
   const rtl = isRtl(language);
+  // Published synchronously so the first render already formats dates and
+  // numbers in the chosen language.
+  setActiveLanguage(language);
 
   useEffect(() => {
     if (typeof document === 'undefined') return;

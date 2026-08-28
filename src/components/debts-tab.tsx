@@ -31,6 +31,7 @@ import { debtsOverview, describeAllDebts, upcomingByMonth } from '@/services/deb
 import { VatCard } from './vat-card';
 import { DebtCard } from './debt-card';
 import { ObligationsTab } from './obligations-tab';
+import { useT } from '@/i18n/context';
 import { Card, EmptyState, SectionTitle } from './ui';
 
 type Segment = 'ALL' | 'VAT' | 'CHEQUE' | 'INSTALLMENT' | 'TAX' | 'LOAN';
@@ -65,6 +66,7 @@ export function DebtsTab({
   vatPayments,
 }: DebtsTabProps) {
   const [segment, setSegment] = useState<Segment>('ALL');
+  const { t } = useT();
 
   const baseCurrency = settings.baseCurrency;
   const toBase = (amount: number, currency: CurrencyCode) =>
@@ -95,11 +97,11 @@ export function DebtsTab({
   const ofKind = (kind: DebtKind) => described.filter((row) => row.debt.kind === kind);
 
   const tiles: { id: Segment; label: string; amount: number; icon: React.ReactNode; color: string }[] = [
-    { id: 'VAT', label: 'НДС', amount: overview.vat, icon: <Percent className="w-3.5 h-3.5" />, color: '#F59E0B' },
-    { id: 'CHEQUE', label: 'Чеки', amount: overview.cheques, icon: <FileSignature className="w-3.5 h-3.5" />, color: '#A855F7' },
-    { id: 'INSTALLMENT', label: 'Рассрочка', amount: overview.installments, icon: <CreditCard className="w-3.5 h-3.5" />, color: '#8B5CF6' },
-    { id: 'TAX', label: 'Налоги', amount: overview.taxes, icon: <Landmark className="w-3.5 h-3.5" />, color: '#F97316' },
-    { id: 'LOAN', label: 'Кредиты', amount: overview.loans, icon: <Wallet className="w-3.5 h-3.5" />, color: '#0EA5E9' },
+    { id: 'VAT', label: t('debts.vat'), amount: overview.vat, icon: <Percent className="w-3.5 h-3.5" />, color: '#F59E0B' },
+    { id: 'CHEQUE', label: t('debts.cheques'), amount: overview.cheques, icon: <FileSignature className="w-3.5 h-3.5" />, color: '#A855F7' },
+    { id: 'INSTALLMENT', label: t('debts.installments'), amount: overview.installments, icon: <CreditCard className="w-3.5 h-3.5" />, color: '#8B5CF6' },
+    { id: 'TAX', label: t('debts.taxes'), amount: overview.taxes, icon: <Landmark className="w-3.5 h-3.5" />, color: '#F97316' },
+    { id: 'LOAN', label: t('debts.loans'), amount: overview.loans, icon: <Wallet className="w-3.5 h-3.5" />, color: '#0EA5E9' },
   ];
 
   return (
@@ -108,7 +110,7 @@ export function DebtsTab({
         <div className="flex items-start justify-between gap-3">
           <div>
             <p className="text-[10px] font-black uppercase tracking-wide text-slate-400">
-              Всего обязательств
+              {t('debts.total')}
             </p>
             <p className="text-2xl font-black text-slate-900 dark:text-slate-100 tabular-nums mt-0.5">
               {formatMoney(overview.total, baseCurrency)}
@@ -163,9 +165,9 @@ export function DebtsTab({
           >
             <span className="flex items-center gap-1 text-[9px] font-black uppercase tracking-wide">
               <CalendarClock className="w-3.5 h-3.5" />
-              Всё
+              {t('debts.all')}
             </span>
-            <span className="block text-xs font-black tabular-nums mt-0.5">по месяцам</span>
+            <span className="block text-xs font-black tabular-nums mt-0.5">{t('debts.byMonth')}</span>
           </button>
         </div>
       </Card>
@@ -173,12 +175,12 @@ export function DebtsTab({
       {segment === 'ALL' && (
         <>
           <div>
-            <SectionTitle title="Предстоящие платежи по месяцам" />
+            <SectionTitle title={t('debts.upcoming')} />
             {upcoming.length === 0 ? (
               <EmptyState
                 icon={<CalendarClock className="w-7 h-7" />}
-                title="Предстоящих платежей нет"
-                description="Здесь появятся платежи по рассрочкам, чекам с датой закрытия и регулярным списаниям на ближайшие три месяца."
+                title={t('debts.emptyUpcoming')}
+                description={t('debts.emptyUpcomingHint')}
               />
             ) : (
               <div className="space-y-3">

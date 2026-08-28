@@ -4,6 +4,7 @@ import React from 'react';
 import { TrendingDown, TrendingUp } from 'lucide-react';
 import { CurrencyCode, PacingComparison } from '@/types';
 import { formatMoney } from '@/services/analytics';
+import { useT } from '@/i18n/context';
 import { Card } from './ui';
 
 /**
@@ -18,6 +19,7 @@ export function PacingChart({
   data: PacingComparison;
   currency: CurrencyCode;
 }) {
+  const { t } = useT();
   const width = 320;
   const height = 120;
   const max = Math.max(
@@ -46,13 +48,13 @@ export function PacingChart({
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="text-[10px] font-black uppercase tracking-wide text-slate-400">
-            Темп трат · {data.dayOfMonth}-й день месяца
+            {t('pace.title')} · {data.dayOfMonth} {t('pace.dayOfMonth')}
           </p>
           <p className="text-xl font-black text-slate-900 dark:text-slate-100 tabular-nums mt-0.5">
             {formatMoney(data.currentTotal, currency)}
           </p>
           <p className="text-[10.5px] font-bold text-slate-400">
-            в прошлом месяце к этому дню — {formatMoney(data.previousTotal, currency)}
+            {t('pace.previousSameDay')} — {formatMoney(data.previousTotal, currency)}
           </p>
         </div>
 
@@ -67,7 +69,7 @@ export function PacingChart({
         >
           {isFaster ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
           {data.deltaShare === 0 && data.previousTotal === 0
-            ? 'нет данных'
+            ? t('pace.noData')
             : `${data.deltaShare > 0 ? '+' : ''}${(data.deltaShare * 100).toFixed(0)}%`}
         </span>
       </div>
@@ -96,11 +98,11 @@ export function PacingChart({
             className="w-4 h-0.5 rounded-full"
             style={{ backgroundColor: isFaster ? '#F43F5E' : '#10B981' }}
           />
-          Текущий месяц
+          {t('pace.currentMonth')}
         </span>
         <span className="flex items-center gap-1.5 text-[10px] font-bold text-slate-400">
           <span className="w-4 h-0.5 rounded-full bg-slate-300 dark:bg-slate-600" />
-          Прошлый ({formatMoney(data.previousMonthTotal, currency, { compact: true })} за месяц)
+          {t('pace.previousMonth')} ({formatMoney(data.previousMonthTotal, currency, { compact: true })})
         </span>
       </div>
     </Card>

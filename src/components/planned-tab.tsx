@@ -45,6 +45,7 @@ import {
   SUBSCRIPTION_CATEGORY_ID,
 } from '@/constants/categories';
 import { PaymentCalendar } from './payment-calendar';
+import { useT } from '@/i18n/context';
 import {
   Card,
   EmptyState,
@@ -102,6 +103,7 @@ export function PlannedTab({
 }: PlannedTabProps) {
   const [planKind, setPlanKind] = useState<PlanKind>('PAYMENT');
   const [editing, setEditing] = useState<PlannedPayment | 'NEW' | null>(null);
+  const { t } = useT();
 
   const baseCurrency = settings.baseCurrency;
   const meta = PLAN_KIND_META[planKind];
@@ -151,9 +153,9 @@ export function PlannedTab({
         value={planKind}
         onChange={setPlanKind}
         options={[
-          { value: 'PAYMENT', label: 'ПЛАТЕЖИ' },
-          { value: 'SUBSCRIPTION', label: 'ПОДПИСКИ' },
-          { value: 'INVESTMENT', label: 'ИНВЕСТИЦИИ' },
+          { value: 'PAYMENT', label: t('plans.payments') },
+          { value: 'SUBSCRIPTION', label: t('plans.subscriptions') },
+          { value: 'INVESTMENT', label: t('plans.investments') },
         ]}
       />
 
@@ -164,7 +166,7 @@ export function PlannedTab({
       {totals.rows.length > 0 && (
         <Card className="p-4 space-y-2">
           <p className="text-[10px] font-black uppercase tracking-wide text-slate-400">
-            {planKind === 'INVESTMENT' ? 'Регулярно откладываю' : 'Постоянные траты'}
+            {planKind === 'INVESTMENT' ? t('plans.saving') : t('plans.fixedCosts')}
           </p>
           <div className="flex items-end gap-3">
             <div>
@@ -216,7 +218,7 @@ export function PlannedTab({
       )}
 
       <div>
-        <SectionTitle title={planKind === 'PAYMENT' ? 'Предстоящие' : 'Активные'} />
+        <SectionTitle title={planKind === 'PAYMENT' ? t('plans.upcoming') : t('plans.active')} />
         {upcoming.length === 0 && overdue.length === 0 ? (
           <EmptyState
             icon={

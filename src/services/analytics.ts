@@ -18,6 +18,7 @@ import {
   TransactionKind,
 } from '@/types';
 import { CURRENCIES } from '@/constants/categories';
+import { monthNames, numberLocale, relativeDayNames, shortMonthNames } from '@/i18n/runtime';
 import { computeObligationStatus, todayIso } from '@/lib/db';
 import { monthlyEquivalent, planKindOf } from './planned';
 
@@ -311,7 +312,7 @@ export function formatMoney(
     return `${amount < 0 ? '-' : ''}${(abs / 1000).toFixed(abs >= 100000 ? 0 : 1)}k ${symbol}`;
   }
 
-  const formatted = abs.toLocaleString('ru-RU', {
+  const formatted = abs.toLocaleString(numberLocale(), {
     minimumFractionDigits: Number.isInteger(abs) ? 0 : 2,
     maximumFractionDigits: 2,
   });
@@ -321,25 +322,19 @@ export function formatMoney(
 export function formatDateHuman(dateStr: string): string {
   const [y, m, d] = dateStr.split('-').map(Number);
   if (!y || !m || !d) return dateStr;
-  const months = [
-    'янв', 'фев', 'мар', 'апр', 'мая', 'июн',
-    'июл', 'авг', 'сен', 'окт', 'ноя', 'дек',
-  ];
+  const months = shortMonthNames();
+  const relative = relativeDayNames();
   const today = todayIso();
-  if (dateStr === today) return 'Сегодня';
+  if (dateStr === today) return relative.today;
   const yesterday = new Date();
   yesterday.setDate(yesterday.getDate() - 1);
-  if (dateStr === yesterday.toISOString().slice(0, 10)) return 'Вчера';
+  if (dateStr === yesterday.toISOString().slice(0, 10)) return relative.yesterday;
   return `${d} ${months[m - 1]}${y !== new Date().getFullYear() ? ` ${y}` : ''}`;
 }
 
 export function monthLabel(month: string): string {
   const [y, m] = month.split('-').map(Number);
-  const names = [
-    'Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь',
-    'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь',
-  ];
-  return `${names[m - 1]} ${y}`;
+  return `${monthNames()[m - 1]} ${y}`;
 }
 
 export function shiftMonth(month: string, delta: number): string {

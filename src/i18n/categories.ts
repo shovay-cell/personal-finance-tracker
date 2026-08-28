@@ -93,3 +93,15 @@ export function categoryNameById(
 export function accountName(account: { id: string; name: string }, language: Language): string {
   return localize(ACCOUNT_NAMES, account.id, account.name, language);
 }
+
+
+const ACCOUNT_KIND_LABELS: Record<string, Entry> = {
+  CASH: { ru: 'Наличные', he: 'מזומן', uk: 'Готівка', en: 'Cash' },
+  CARD: { ru: 'Карта', he: 'כרטיס', uk: 'Картка', en: 'Card' },
+  BANK: { ru: 'Счёт в банке', he: 'חשבון בנק', uk: 'Рахунок у банку', en: 'Bank account' },
+  SAVINGS: { ru: 'Накопления', he: 'חיסכון', uk: 'Заощадження', en: 'Savings' },
+};
+
+export function accountKindLabel(kind: string, language: Language): string {
+  return ACCOUNT_KIND_LABELS[kind]?.[language] || kind;
+}

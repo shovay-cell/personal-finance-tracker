@@ -48,6 +48,7 @@ import {
   inputClass,
 } from './ui';
 import { CURRENCIES } from '@/constants/categories';
+import { useT } from '@/i18n/context';
 import { netFromGross, vatFromGross } from '@/services/vat';
 import { formatMoney, pluralRu } from '@/services/analytics';
 import { CategoryEditorModal } from './category-manager-modal';
@@ -147,6 +148,7 @@ export function TransactionFormModal({
   const [firstPaymentPaid, setFirstPaymentPaid] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [keyError, setKeyError] = useState<string | null>(null);
+  const { t } = useT();
   const [lastScanFile, setLastScanFile] = useState<File | null>(null);
 
   const rootCategories = useMemo(
@@ -319,10 +321,16 @@ export function TransactionFormModal({
 
   return (
     <ModalShell
-      title={existing ? 'Операция' : kind === 'EXPENSE' ? 'Новый расход' : 'Новый доход'}
+      title={
+        existing
+          ? t('form.operation')
+          : kind === 'EXPENSE'
+          ? t('form.newExpense')
+          : t('form.newIncome')
+      }
       subtitle={
         uncertainFields.length > 0
-          ? 'ИИ не уверен в подсвеченных полях — проверьте их перед сохранением'
+          ? t('form.uncertainHint')
           : undefined
       }
       icon={<Wallet className="w-5 h-5" />}
@@ -338,7 +346,7 @@ export function TransactionFormModal({
             variant={kind === 'EXPENSE' ? 'primary' : 'success'}
           >
             {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-            <span>{existing ? 'Сохранить изменения' : 'Записать операцию'}</span>
+            <span>{existing ? t('form.saveChanges') : t('form.saveOperation')}</span>
           </PrimaryButton>
         </div>
       }
@@ -353,18 +361,21 @@ export function TransactionFormModal({
         options={[
           {
             value: 'EXPENSE',
-            label: 'РАСХОДЫ',
+            label: t('common.expenses'),
             activeClass: 'bg-white dark:bg-slate-900 text-rose-600 dark:text-rose-400 shadow-sm',
           },
           {
             value: 'INCOME',
-            label: 'ДОХОДЫ',
+            label: t('common.incomes'),
             activeClass: 'bg-white dark:bg-slate-900 text-emerald-600 dark:text-emerald-400 shadow-sm',
           },
         ]}
       />
 
-      <Field label={`Сумма, ${CURRENCIES[currency].symbol}`} warn={uncertainFields.includes('amount')}>
+      <Field
+        label={`${t('common.amount')}, ${CURRENCIES[currency].symbol}`}
+        warn={uncertainFields.includes('amount')}
+      >
         <div className="flex gap-2">
           <input
             type="text"
@@ -391,7 +402,7 @@ export function TransactionFormModal({
         </div>
       )}
 
-      <Field label="Категория" warn={uncertainFields.includes('category')}>
+      <Field label={t('common.category')} warn={uncertainFields.includes('category')}>
         <CategoryGrid
           categories={rootCategories}
           selectedId={categoryId}
@@ -405,7 +416,7 @@ export function TransactionFormModal({
       </Field>
 
       {subcategories.length > 0 && (
-        <Field label="Подкатегория">
+        <Field label={t('form.subcategory')}>
           <div className="flex flex-wrap gap-2">
             {subcategories.map((sub) => (
               <button
@@ -439,10 +450,10 @@ export function TransactionFormModal({
               <Repeat className="w-4 h-4 text-slate-400 mt-px flex-shrink-0" />
               <span>
                 <span className="block text-xs font-black text-slate-800 dark:text-slate-100">
-                  Повторить операцию
+                  {t('form.repeat')}
                 </span>
                 <span className="block text-[10px] text-slate-400 font-medium mt-0.5">
-                  Расход будет повторяться и попадёт в прогноз бюджета
+                  {t('form.repeatHint')}
                 </span>
               </span>
             </span>
@@ -461,7 +472,7 @@ export function TransactionFormModal({
 
           {isRepeating && (
             <div className="flex items-end gap-2 pt-1">
-              <Field label="Повторять каждый">
+              <Field label={t('form.repeatEvery')}>
                 <input
                   type="number"
                   min={1}
@@ -471,7 +482,7 @@ export function TransactionFormModal({
                 />
               </Field>
               <div className="flex-1">
-                <Field label="Период">
+                <Field label={t('form.period')}>
                   <select
                     value={repeatUnit}
                     onChange={(e) => setRepeatUnit(e.target.value as RecurrenceUnit)}
@@ -499,10 +510,10 @@ export function TransactionFormModal({
               <Scale className="w-4 h-4 text-slate-400 mt-px flex-shrink-0" />
               <span>
                 <span className="block text-xs font-black text-slate-800 dark:text-slate-100">
-                  Оформить как обязательство
+                  {t('form.asDebt')}
                 </span>
                 <span className="block text-[10px] text-slate-400 font-medium mt-0.5">
-                  Рассрочка, налог, кредит или чек — попадёт в «Долги», а не в расходы сегодня
+                  {t('form.asDebtHint')}
                 </span>
               </span>
             </span>
@@ -546,7 +557,7 @@ export function TransactionFormModal({
               </div>
 
               <div className="grid grid-cols-2 gap-3">
-                <Field label="Количество платежей">
+                <Field label={t('form.paymentsCount')}>
                   <input
                     type="number"
                     min={1}
@@ -555,7 +566,7 @@ export function TransactionFormModal({
                     className={`${inputClass} text-center font-black`}
                   />
                 </Field>
-                <Field label={paymentsCount === '1' ? 'Дата оплаты' : 'Первый платёж'}>
+                <Field label={paymentsCount === '1' ? t('form.paymentDate') : t('form.firstPayment')}>
                   <input
                     type="date"
                     value={firstDueDate}
@@ -566,7 +577,7 @@ export function TransactionFormModal({
               </div>
 
               {parseInt(paymentsCount, 10) > 1 && (
-                <Field label="Платежи каждые">
+                <Field label={t('form.paymentsEvery')}>
                   <div className="flex gap-1.5">
                     <input
                       type="number"
@@ -596,11 +607,11 @@ export function TransactionFormModal({
                 <span>
                   <span className="block text-[11px] font-black text-slate-700 dark:text-slate-200">
                     {parseInt(paymentsCount, 10) > 1
-                      ? 'Первый платёж оплачен сейчас'
-                      : 'Уже оплачено'}
+                      ? t('form.firstPaid')
+                      : t('form.alreadyPaid')}
                   </span>
                   <span className="block text-[10px] text-slate-400 font-medium">
-                    Оплаченная часть сразу уйдёт в расходы и выйдет из долга
+                    {t('form.paidHint')}
                   </span>
                 </span>
                 <span
@@ -638,7 +649,7 @@ export function TransactionFormModal({
               <Percent className="w-4 h-4 text-amber-600 dark:text-amber-400 mt-px flex-shrink-0" />
               <span>
                 <span className="block text-xs font-black text-slate-800 dark:text-slate-100">
-                  Отделить НДС и отложить в сторону
+                  {t('form.vatSeparate')}
                 </span>
                 <span className="block text-[10px] text-slate-500 dark:text-slate-400 font-medium mt-0.5">
                   Ставка {settings.vatRate}% · сумма уйдёт из доступной прибыли в обязательства
@@ -707,12 +718,12 @@ export function TransactionFormModal({
           className="w-full py-2.5 rounded-2xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-[11px] font-black flex items-center justify-center gap-1.5"
         >
           <Scissors className="w-3.5 h-3.5" />
-          Разделить чек между категориями
+          {t('form.splitReceipt')}
         </button>
       )}
 
       <div className="grid grid-cols-2 gap-3">
-        <Field label="Дата" warn={uncertainFields.includes('date')}>
+        <Field label={t('common.date')} warn={uncertainFields.includes('date')}>
           <input
             type="date"
             value={date}
@@ -724,7 +735,7 @@ export function TransactionFormModal({
           />
         </Field>
 
-        <Field label="Счёт">
+        <Field label={t('common.account')}>
           <select
             value={accountId}
             onChange={(e) => setAccountId(e.target.value)}
@@ -741,7 +752,7 @@ export function TransactionFormModal({
         </Field>
       </div>
 
-      <Field label="Продавец / место" warn={uncertainFields.includes('merchant')}>
+      <Field label={t('form.merchant')} warn={uncertainFields.includes('merchant')}>
         <input
           type="text"
           value={merchant}
@@ -754,7 +765,7 @@ export function TransactionFormModal({
         />
       </Field>
 
-      <Field label="Заметка">
+      <Field label={t('common.note')}>
         <input
           type="text"
           value={note}
@@ -765,7 +776,7 @@ export function TransactionFormModal({
       </Field>
 
       {members.length > 1 && settings.showTransactionAuthor && (
-        <Field label="Автор операции">
+        <Field label={t('form.author')}>
           <select
             value={authorId}
             onChange={(e) => setAuthorId(e.target.value)}
@@ -780,11 +791,11 @@ export function TransactionFormModal({
         </Field>
       )}
 
-      <Field label="Чек" hint="Фото хранится вместе с операцией для последующей сверки">
+      <Field label={t('form.receipt')} hint="Фото хранится вместе с операцией для последующей сверки">
         <div className="flex gap-2">
           <label className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-2xl bg-sky-50 dark:bg-sky-950/40 text-sky-600 dark:text-sky-400 text-[11px] font-black cursor-pointer border border-sky-100 dark:border-sky-900 active:scale-95 transition-transform">
             <Sparkles className="w-3.5 h-3.5" />
-            Снять и распознать
+            {t('form.scanAndRead')}
             <input
               type="file"
               accept="image/*"
@@ -795,7 +806,7 @@ export function TransactionFormModal({
           </label>
           <label className="flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-2xl bg-slate-100 dark:bg-slate-800 text-slate-500 text-[11px] font-black cursor-pointer active:scale-95 transition-transform">
             <ImagePlus className="w-3.5 h-3.5" />
-            Файл
+            {t('form.file')}
             <input
               type="file"
               accept="image/*"
@@ -885,7 +896,7 @@ export function TransactionFormModal({
           className="w-full py-2.5 rounded-2xl text-[11px] font-black text-rose-500 bg-rose-50 dark:bg-rose-950/40 flex items-center justify-center gap-1.5 active:scale-95 transition-transform"
         >
           <Trash2 className="w-3.5 h-3.5" />
-          Удалить операцию
+          {t('form.deleteOperation')}
         </button>
       )}
     </ModalShell>
