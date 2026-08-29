@@ -16,6 +16,7 @@ import {
   getGoogleDriveState,
 } from '@/services/backup/drive-backup';
 import { MEMBER_COLORS } from '@/constants/categories';
+import { useT } from '@/i18n/context';
 import { Field, ModalShell, PrimaryButton, inputClass } from './ui';
 
 type Step = 'CODE' | 'CONFIRM' | 'DONE';
@@ -34,6 +35,7 @@ export function JoinProfileModal({
   onClose: () => void;
   onJoined: (profileName: string) => void;
 }) {
+  const { t } = useT();
   const [step, setStep] = useState<Step>('CODE');
   const [code, setCode] = useState('');
   const [isBusy, setIsBusy] = useState(false);
@@ -49,21 +51,21 @@ export function JoinProfileModal({
       if (!getGoogleDriveState().isConnected) {
         const auth = await authenticateGoogleDrive();
         if (!auth.success) {
-          setError(auth.error || 'Не удалось подключить Google Drive');
+          setError(auth.error || t('join.driveFailed'));
           return;
         }
       }
 
       const result = await fetchProfileBackupByCode(code);
       if (!result.success || !result.payload || !result.json) {
-        setError(result.error || 'Профиль не найден');
+        setError(result.error || t('join.notFound'));
         return;
       }
 
       setFound({ payload: result.payload, json: result.json });
       setStep('CONFIRM');
     } catch (err: any) {
-      setError(err.message || 'Ошибка подключения к Google Drive');
+      setError(err.message || t('join.driveError'));
     } finally {
       setIsBusy(false);
     }
@@ -83,7 +85,7 @@ export function JoinProfileModal({
         : await importFinanceDatabaseJson(found.json);
 
       if (!result.success) {
-        setError(result.error || 'Не удалось применить профиль');
+        setError(result.error || t('join.applyFailed'));
         return;
       }
 
@@ -104,7 +106,7 @@ export function JoinProfileModal({
         memberId = `member-${Date.now().toString(36)}`;
         await financeDb.members.put({
           id: memberId,
-          displayName: displayName.trim() || session?.displayName || 'Партнёр',
+          displayName: displayName.trim() || session?.displayName || t('join.partner'),
           email: session?.email,
           colorHex: MEMBER_COLORS[members.length % MEMBER_COLORS.length],
           role: 'FULL',
@@ -132,9 +134,9 @@ export function JoinProfileModal({
       await saveFinanceSettings({ session });
 
       setStep('DONE');
-      onJoined(found.payload.settings?.profileName || 'Общий профиль');
+      onJoined(found.payload.settings?.profileName || t('join.sharedProfile'));
     } catch (err: any) {
-      setError(err.message || 'Не удалось присоединиться к профилю');
+      setError(err.message || t('join.joinFailed'));
     } finally {
       setIsBusy(false);
     }
@@ -144,12 +146,12 @@ export function JoinProfileModal({
 
   return (
     <ModalShell
-      title="Присоединиться к профилю"
+      title={t('join.title')}
       subtitle={
         step === 'CODE'
-          ? 'Код у партнёра: Настройки → Семейный доступ'
+          ? t('join.codeSub')
           : step === 'CONFIRM'
-          ? 'Профиль найден — проверьте, что это он'
+          ? t('join.confirmSub')
           : undefined
       }
       icon={<Users className="w-5 h-5" />}
@@ -162,24 +164,24 @@ export function JoinProfileModal({
           {step === 'CODE' && (
             <PrimaryButton onClick={connectAndFind} disabled={isBusy || code.trim().length < 4}>
               {isBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Cloud className="w-4 h-4" />}
-              Подключить Google Drive и найти профиль
+              {t('join.connectAndFind')}
             </PrimaryButton>
           )}
 
           {step === 'CONFIRM' && (
             <PrimaryButton onClick={join} disabled={isBusy} variant="success">
               {isBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
-              Присоединиться
+              {t('join.join')}
             </PrimaryButton>
           )}
 
-          {step === 'DONE' && <PrimaryButton onClick={onClose}>Открыть профиль</PrimaryButton>}
+          {step === 'DONE' && <PrimaryButton onClick={onClose}>{t('join.openProfile')}</PrimaryButton>}
         </div>
       }
     >
       {step === 'CODE' && (
         <>
-          <Field label="Код приглашения">
+          <Field label={t('join.codeField')}>
             <input
               type="text"
               value={code}
@@ -191,34 +193,31 @@ export function JoinProfileModal({
             />
           </Field>
 
-          <Field label="Как вас показывать" hint="Метка автора у ваших операций">
+          <Field label={t('join.displayAs')} hint={t('join.displayAsHint')}>
             <input
               type="text"
               value={displayName}
               onChange={(e) => setDisplayName(e.target.value)}
-              placeholder="Имя"
+              placeholder={t('join.namePlaceholder')}
               className={inputClass}
             />
           </Field>
 
           <div className="rounded-2xl bg-slate-50 dark:bg-slate-800/60 p-3 space-y-1.5">
             <p className="text-[10px] font-black uppercase tracking-wide text-slate-400">
-              Что произойдёт
+              {t('join.whatHappens')}
             </p>
             <p className="text-[10.5px] text-slate-500 dark:text-slate-400 font-medium leading-relaxed">
-              1. Вы войдёте в <b>тот же Google-аккаунт</b>, что и партнёр — в нём лежит общая
-              резервная копия профиля.
+              {t('join.step1')}
               <br />
-              2. Приложение найдёт профиль и сверит код.
+              {t('join.step2')}
               <br />
-              3. Счета, категории, бюджеты и операции появятся на этом устройстве, а ваши операции
-              будут подписаны вашим именем.
+              {t('join.step3')}
             </p>
           </div>
 
           <p className="text-[10px] text-amber-600 dark:text-amber-400 font-bold leading-relaxed">
-            Одного кода недостаточно: данные передаются через общий Google Drive, поэтому партнёр
-            должен хотя бы раз нажать «Выгрузить» в разделе резервного копирования.
+            {t('join.codeNotEnough')}
           </p>
         </>
       )}
@@ -230,17 +229,26 @@ export function JoinProfileModal({
               {profile.profileName}
             </p>
             <div className="grid grid-cols-3 gap-2">
-              <Stat label="Операций" value={String(found?.payload.transactions?.length || 0)} />
-              <Stat label="Счетов" value={String(found?.payload.accounts?.length || 0)} />
-              <Stat label="Участников" value={String(found?.payload.members?.length || 0)} />
+              <Stat
+                label={t('join.statOperations')}
+                value={String(found?.payload.transactions?.length || 0)}
+              />
+              <Stat
+                label={t('join.statAccounts')}
+                value={String(found?.payload.accounts?.length || 0)}
+              />
+              <Stat
+                label={t('join.statMembers')}
+                value={String(found?.payload.members?.length || 0)}
+              />
             </div>
             <p className="text-[10px] text-slate-500 dark:text-slate-400 font-medium">
-              Валюта профиля: {profile.baseCurrency}
-              {profile.vatEnabled ? ` · НДС ${profile.vatRate}%` : ''}
+              {t('join.profileCurrency')}: {profile.baseCurrency}
+              {profile.vatEnabled ? ` · ${t('settings.vat')} ${profile.vatRate}%` : ''}
             </p>
           </div>
 
-          <Field label="Как вас показывать">
+          <Field label={t('join.displayAs')}>
             <input
               type="text"
               value={displayName}
@@ -250,7 +258,7 @@ export function JoinProfileModal({
           </Field>
 
           <p className="text-[10px] text-slate-400 font-medium leading-relaxed">
-            Если на этом устройстве уже есть операции, они сохранятся и объединятся с профилем.
+            {t('join.mergeHint')}
           </p>
         </>
       )}
@@ -261,11 +269,10 @@ export function JoinProfileModal({
             <Check className="w-7 h-7" />
           </div>
           <p className="text-sm font-black text-slate-800 dark:text-slate-100">
-            Вы в общем профиле
+            {t('join.doneTitle')}
           </p>
           <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium px-4 leading-relaxed">
-            Чтобы обмениваться операциями дальше, каждый нажимает «Синхронизировать» в разделе
-            резервного копирования — записи объединяются без потерь.
+            {t('join.doneText')}
           </p>
         </div>
       )}

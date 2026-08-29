@@ -156,3 +156,19 @@ const OBLIGATION_STATUS: Record<string, Entry> = {
 export function obligationStatusLabel(status: string, language: Language): string {
   return OBLIGATION_STATUS[status]?.[language] || status;
 }
+
+/** Labels the analytics layer needs without a React context around it. */
+const GENERIC: Record<string, Entry> = {
+  uncategorized: { ru: 'Без категории', he: 'ללא קטגוריה', uk: 'Без категорії', en: 'Uncategorised' },
+  category: { ru: 'Категория', he: 'קטגוריה', uk: 'Категорія', en: 'Category' },
+  totalBudget: {
+    ru: 'Общий бюджет месяца',
+    he: 'תקציב החודש הכולל',
+    uk: 'Загальний бюджет місяця',
+    en: 'The month’s overall budget',
+  },
+};
+
+export function genericLabel(id: keyof typeof GENERIC | string, language: Language): string {
+  return GENERIC[id]?.[language] || GENERIC[id]?.ru || id;
+}

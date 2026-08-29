@@ -14,6 +14,7 @@ import {
 } from '@/services/security/pin';
 import { signInWithGoogle } from '@/services/auth';
 import { markSessionUnlocked } from './../services/security/session-lock';
+import { useT } from '@/i18n/context';
 import { ModalShell, PrimaryButton, inputClass } from './ui';
 
 const KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '', '0', 'DEL'];
@@ -84,6 +85,7 @@ export function PinLockScreen({
   settings: FinanceSettings;
   onUnlocked: () => void;
 }) {
+  const { t } = useT();
   const [pin, setPin] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [isRecovering, setIsRecovering] = useState(false);
@@ -100,7 +102,7 @@ export function PinLockScreen({
       return;
     }
     setAttempts(registerFailedAttempt());
-    setError('Неверный код');
+    setError(t('pin.wrong'));
     setPin('');
   };
 
@@ -119,7 +121,7 @@ export function PinLockScreen({
       onUnlocked();
     } else if (next.length === 6) {
       setAttempts(registerFailedAttempt());
-      setError('Неверный код');
+      setError(t('pin.wrong'));
       setPin('');
     }
   };
@@ -138,7 +140,7 @@ export function PinLockScreen({
       return;
     }
     if (session && result.session.email.toLowerCase() !== session.email.toLowerCase()) {
-      setError(`Это другой аккаунт. Профиль создан на ${session.email}.`);
+      setError(`${t('pin.otherAccount')} ${session.email}.`);
       return;
     }
     await resetPin();
@@ -146,7 +148,7 @@ export function PinLockScreen({
 
   const recoverWithEmail = async () => {
     if (!session || recoveryEmail.trim().toLowerCase() !== session.email.toLowerCase()) {
-      setError('Email не совпадает с тем, на который создан профиль');
+      setError(t('pin.emailMismatch'));
       return;
     }
     await resetPin();
@@ -159,14 +161,14 @@ export function PinLockScreen({
           <div className="w-14 h-14 mx-auto rounded-3xl bg-amber-100 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400 flex items-center justify-center">
             <ShieldOff className="w-7 h-7" />
           </div>
-          <h2 className="text-lg font-black text-slate-900 dark:text-slate-100">Забыли код?</h2>
+          <h2 className="text-lg font-black text-slate-900 dark:text-slate-100">{t('pin.forgot')}</h2>
           <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium leading-relaxed">
-            Подтвердите, что профиль ваш — код будет сброшен, а данные останутся на месте.
+            {t('pin.recoverText')}
           </p>
 
           {session?.provider === 'GOOGLE' ? (
             <PrimaryButton onClick={recoverWithGoogle}>
-              Подтвердить входом через Google
+              {t('pin.confirmGoogle')}
             </PrimaryButton>
           ) : (
             <>
@@ -174,11 +176,11 @@ export function PinLockScreen({
                 type="email"
                 value={recoveryEmail}
                 onChange={(e) => setRecoveryEmail(e.target.value)}
-                placeholder={session?.email || 'email профиля'}
+                placeholder={session?.email || t('pin.profileEmail')}
                 className={inputClass}
                 autoFocus
               />
-              <PrimaryButton onClick={recoverWithEmail}>Сбросить код</PrimaryButton>
+              <PrimaryButton onClick={recoverWithEmail}>{t('pin.resetCode')}</PrimaryButton>
             </>
           )}
 
@@ -192,7 +194,7 @@ export function PinLockScreen({
             }}
             className="w-full py-2 text-[11px] font-black text-slate-400"
           >
-            Назад к вводу кода
+            {t('pin.backToEntry')}
           </button>
         </div>
       </div>
@@ -205,7 +207,7 @@ export function PinLockScreen({
         <div className="w-14 h-14 mx-auto rounded-3xl bg-sky-100 dark:bg-sky-950/60 text-sky-600 dark:text-sky-400 flex items-center justify-center">
           <Lock className="w-7 h-7" />
         </div>
-        <h2 className="text-lg font-black text-slate-900 dark:text-slate-100">Введите код</h2>
+        <h2 className="text-lg font-black text-slate-900 dark:text-slate-100">{t('pin.enterCode')}</h2>
         <p className="text-[11px] text-slate-400 font-medium">
           {settings.profileName}
           {session?.email ? ` · ${session.email}` : ''}
@@ -215,14 +217,14 @@ export function PinLockScreen({
 
         {pin.length >= 4 && (
           <PrimaryButton onClick={() => submit(pin)} className="mt-3">
-            Разблокировать
+            {t('pin.unlock')}
           </PrimaryButton>
         )}
 
         {error && (
           <p className="text-[11px] font-bold text-rose-500 pt-2">
             {error}
-            {attempts >= 3 ? ` · попыток: ${attempts}` : ''}
+            {attempts >= 3 ? ` · ${t('pin.attempts')}: ${attempts}` : ''}
           </p>
         )}
 
@@ -234,7 +236,7 @@ export function PinLockScreen({
           }}
           className="w-full py-2 text-[11px] font-black text-slate-400 mt-2"
         >
-          Забыли код?
+          {t('pin.forgot')}
         </button>
       </div>
     </div>
@@ -249,6 +251,7 @@ export function ManagePinModal({
   settings: FinanceSettings;
   onClose: () => void;
 }) {
+  const { t } = useT();
   const [step, setStep] = useState<'CURRENT' | 'NEW' | 'CONFIRM'>(
     settings.pinEnabled ? 'CURRENT' : 'NEW'
   );
@@ -261,7 +264,7 @@ export function ManagePinModal({
 
   const checkCurrent = async () => {
     if (!(await verifyPin(current, settings.pinSalt, settings.pinHash))) {
-      setError('Неверный текущий код');
+      setError(t('pin.wrongCurrent'));
       setCurrent('');
       return;
     }
@@ -269,9 +272,9 @@ export function ManagePinModal({
   };
 
   const savePin = async () => {
-    if (!isValidPin(next)) return setError('Код должен состоять из 4–6 цифр');
+    if (!isValidPin(next)) return setError(t('pin.mustBe46'));
     if (next !== confirm) {
-      setError('Коды не совпадают');
+      setError(t('pin.mismatch'));
       setConfirm('');
       return;
     }
@@ -293,13 +296,13 @@ export function ManagePinModal({
 
   return (
     <ModalShell
-      title={settings.pinEnabled ? 'Код доступа' : 'Установить код'}
+      title={settings.pinEnabled ? t('settings.pin') : t('pin.setCode')}
       subtitle={
         step === 'CURRENT'
-          ? 'Введите текущий код, чтобы изменить или отключить его'
+          ? t('pin.currentSub')
           : step === 'NEW'
-          ? 'Придумайте код из 4–6 цифр'
-          : 'Повторите код'
+          ? t('pin.newSub')
+          : t('pin.confirmSub')
       }
       icon={<KeyRound className="w-5 h-5" />}
       onClose={onClose}
@@ -311,20 +314,20 @@ export function ManagePinModal({
           {step === 'CURRENT' && (
             <>
               <PrimaryButton onClick={checkCurrent} disabled={current.length < 4}>
-                Продолжить
+                {t('pin.continue')}
               </PrimaryButton>
               <button
                 type="button"
                 onClick={async () => {
                   if (!(await verifyPin(current, settings.pinSalt, settings.pinHash))) {
-                    setError('Введите текущий код, чтобы отключить защиту');
+                    setError(t('pin.currentToDisable'));
                     return;
                   }
                   await disablePin();
                 }}
                 className="w-full py-2.5 rounded-2xl text-[11px] font-black text-rose-500 bg-rose-50 dark:bg-rose-950/40"
               >
-                Отключить код
+                {t('pin.disable')}
               </button>
             </>
           )}
@@ -332,18 +335,18 @@ export function ManagePinModal({
           {step === 'NEW' && (
             <PrimaryButton
               onClick={() => {
-                if (!isValidPin(next)) return setError('Код должен состоять из 4–6 цифр');
+                if (!isValidPin(next)) return setError(t('pin.mustBe46'));
                 setStep('CONFIRM');
               }}
               disabled={next.length < 4}
             >
-              Далее
+              {t('common.next')}
             </PrimaryButton>
           )}
 
           {step === 'CONFIRM' && (
             <PrimaryButton onClick={savePin} disabled={confirm.length < 4}>
-              Сохранить код
+              {t('pin.saveCode')}
             </PrimaryButton>
           )}
         </div>
@@ -354,8 +357,7 @@ export function ManagePinModal({
       {step === 'CONFIRM' && <Keypad value={confirm} onChange={setConfirm} />}
 
       <p className="text-[10px] text-slate-400 font-medium text-center leading-relaxed">
-        Код закрывает доступ к приложению на этом устройстве. Он не хранится в открытом виде;
-        если код забыт, его можно сбросить, подтвердив аккаунт профиля.
+        {t('pin.footerNote')}
       </p>
     </ModalShell>
   );

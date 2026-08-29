@@ -18,7 +18,14 @@ import {
   TransactionKind,
 } from '@/types';
 import { CURRENCIES } from '@/constants/categories';
-import { monthNames, numberLocale, relativeDayNames, shortMonthNames } from '@/i18n/runtime';
+import {
+  getActiveLanguage,
+  monthNames,
+  numberLocale,
+  relativeDayNames,
+  shortMonthNames,
+} from '@/i18n/runtime';
+import { categoryName as localizedCategoryName, genericLabel } from '@/i18n/categories';
 import { computeObligationStatus, todayIso } from '@/lib/db';
 import { monthlyEquivalent, planKindOf } from './planned';
 
@@ -187,7 +194,9 @@ export function categoryBreakdown(
       const category = byId.get(categoryId);
       return {
         categoryId,
-        categoryName: category?.name || 'Без категории',
+        categoryName: category
+          ? localizedCategoryName(category, getActiveLanguage())
+          : genericLabel('uncategorized', getActiveLanguage()),
         colorHex: category?.colorHex || '#64748B',
         iconName: category?.iconName || 'CircleDashed',
         total: Math.round(entry.total * 100) / 100,
@@ -255,8 +264,13 @@ export function budgetProgress(
       return {
         budget,
         categoryName: budget.categoryId
-          ? byId.get(budget.categoryId)?.name || 'Категория'
-          : 'Общий бюджет месяца',
+          ? (() => {
+              const category = byId.get(budget.categoryId!);
+              return category
+                ? localizedCategoryName(category, getActiveLanguage())
+                : genericLabel('category', getActiveLanguage());
+            })()
+          : genericLabel('totalBudget', getActiveLanguage()),
         spent,
         effectiveLimit,
         percent: Math.round(percent * 10) / 10,

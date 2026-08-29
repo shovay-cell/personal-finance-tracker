@@ -32,6 +32,7 @@ import {
 } from '@/services/analytics';
 import { getCategoryIcon } from '@/constants/categories';
 import { useT } from '@/i18n/context';
+import { categoryName } from '@/i18n/categories';
 import { ProgressBar } from './charts';
 import { SafeToSpendCard } from './safe-to-spend-card';
 import { PacingChart } from './pacing-chart';
@@ -194,8 +195,7 @@ export function BudgetsTab({
 
           {totalBudget.budget.carriedOver > 0 && (
             <p className="text-[10px] font-bold text-sky-600 dark:text-sky-400">
-              + {formatMoney(totalBudget.budget.carriedOver, baseCurrency)} перенесено с прошлого
-              месяца
+              + {formatMoney(totalBudget.budget.carriedOver, baseCurrency)} {t('bg.carriedOver')}
             </p>
           )}
         </Card>
@@ -203,10 +203,10 @@ export function BudgetsTab({
         <Card className="p-4 flex items-center justify-between gap-3">
           <div>
             <p className="text-xs font-black text-slate-700 dark:text-slate-200">
-              Общий бюджет не задан
+              {t('bg.noTotal')}
             </p>
             <p className="text-[10.5px] text-slate-400 font-medium mt-0.5">
-              Задайте лимит на весь месяц, чтобы видеть остаток
+              {t('bg.noTotalHint')}
             </p>
           </div>
           <button
@@ -229,7 +229,7 @@ export function BudgetsTab({
               className="flex items-center gap-1 text-[10px] font-black text-sky-600 dark:text-sky-400"
             >
               <Plus className="w-3 h-3" />
-              Добавить
+              {t('nav.add')}
             </button>
           }
         />
@@ -237,8 +237,8 @@ export function BudgetsTab({
         {categoryBudgets.length === 0 ? (
           <EmptyState
             icon={<Target className="w-7 h-7" />}
-            title="Лимиты не заданы"
-            description="Например, «Продукты — не более 2500 ₪ в месяц». При 80% и 100% придёт уведомление."
+            title={t('bg.emptyTitle')}
+            description={t('bg.emptyText')}
           />
         ) : (
           <div className="space-y-2">
@@ -256,13 +256,12 @@ export function BudgetsTab({
 
       {members.length > 1 && (
         <div>
-          <SectionTitle title="Индивидуальные лимиты супругов" />
+          <SectionTitle title={t('bg.personalLimits')} />
           {personalBudgets.length === 0 ? (
             <Card className="p-4 flex items-center gap-3">
               <Users className="w-5 h-5 text-slate-400 flex-shrink-0" />
               <p className="text-[11px] text-slate-500 font-medium">
-                Внутри общего профиля можно задать личный лимит каждому — прогресс считается
-                раздельно по автору операции.
+                {t('bg.personalHint')}
               </p>
             </Card>
           ) : (
@@ -273,7 +272,8 @@ export function BudgetsTab({
                   item={item}
                   categories={categories}
                   memberName={
-                    members.find((m) => m.id === item.budget.memberId)?.displayName || 'Участник'
+                    members.find((m) => m.id === item.budget.memberId)?.displayName ||
+                    t('bg.member')
                   }
                   onEdit={() => setEditing(item.budget)}
                 />
@@ -288,8 +288,7 @@ export function BudgetsTab({
           <div className="flex items-start gap-2 p-3 rounded-2xl bg-sky-50 dark:bg-sky-950/40 text-sky-700 dark:text-sky-400">
             <PiggyBank className="w-4 h-4 mt-px flex-shrink-0" />
             <p className="text-[10.5px] font-bold leading-relaxed">
-              Остатки переносятся автоматически при наступлении нового месяца:
-              неизрасходованный лимит увеличивает следующий месяц, перерасход — уменьшает.
+              {t('bg.rolloverNote')}
             </p>
           </div>
           <button
@@ -297,7 +296,7 @@ export function BudgetsTab({
             onClick={handleCarryOver}
             className="w-full py-2.5 rounded-2xl bg-slate-100 dark:bg-slate-800 text-slate-500 text-[11px] font-black active:scale-95 transition-transform"
           >
-            Перенести сейчас в {monthLabel(shiftMonth(month, 1))}
+            {t('bg.carryNow')} {monthLabel(shiftMonth(month, 1))}
           </button>
         </div>
       )}
@@ -328,6 +327,7 @@ function BudgetRow({
   memberName?: string;
   onEdit: () => void;
 }) {
+  const { t } = useT();
   const category = categories.find((c) => c.id === item.budget.categoryId);
   const Icon = getCategoryIcon(category?.iconName || 'Target');
 
@@ -351,7 +351,7 @@ function BudgetRow({
             )}
           </p>
           <p className="text-[10.5px] text-slate-400 font-medium tabular-nums">
-            {formatMoney(item.spent, item.budget.currency)} из{' '}
+            {formatMoney(item.spent, item.budget.currency)} {t('bg.spentOf')}{' '}
             {formatMoney(item.effectiveLimit, item.budget.currency)}
           </p>
         </div>
@@ -389,6 +389,7 @@ function BudgetEditorModal({
   rolloverDefault: boolean;
   onClose: () => void;
 }) {
+  const { t, language } = useT();
   const [scope, setScope] = useState<string>(budget?.categoryId || 'TOTAL');
   const [memberId, setMemberId] = useState<string>(budget?.memberId || 'SHARED');
   const [limit, setLimit] = useState(budget ? String(budget.limitAmount) : '');
@@ -400,7 +401,7 @@ function BudgetEditorModal({
   const handleSave = async () => {
     const amount = parseFloat(limit.replace(',', '.'));
     if (!Number.isFinite(amount) || amount <= 0) {
-      setError('Укажите лимит больше нуля');
+      setError(t('bg.enterLimit'));
       return;
     }
 
@@ -419,14 +420,14 @@ function BudgetEditorModal({
 
   return (
     <ModalShell
-      title={budget ? 'Изменить лимит' : 'Новый лимит'}
+      title={budget ? t('bg.editLimit') : t('bg.newLimit')}
       subtitle={monthLabel(month)}
       icon={<Target className="w-5 h-5" />}
       onClose={onClose}
       footer={
         <div className="space-y-2">
           {error && <p className="text-[11px] font-bold text-rose-500 text-center">{error}</p>}
-          <PrimaryButton onClick={handleSave}>Сохранить лимит</PrimaryButton>
+          <PrimaryButton onClick={handleSave}>{t('bg.saveLimit')}</PrimaryButton>
           {budget && (
             <button
               type="button"
@@ -437,37 +438,37 @@ function BudgetEditorModal({
               className="w-full py-2.5 rounded-2xl text-[11px] font-black text-rose-500 bg-rose-50 dark:bg-rose-950/40 flex items-center justify-center gap-1.5"
             >
               <Trash2 className="w-3.5 h-3.5" />
-              Удалить лимит
+              {t('bg.deleteLimit')}
             </button>
           )}
         </div>
       }
     >
-      <Field label="На что лимит">
+      <Field label={t('bg.scope')}>
         <select value={scope} onChange={(e) => setScope(e.target.value)} className={inputClass}>
-          <option value="TOTAL">Общий бюджет месяца</option>
+          <option value="TOTAL">{t('bg.totalMonth')}</option>
           {expenseCategories.map((category) => (
             <option key={category.id} value={category.id}>
-              {category.name}
+              {categoryName(category, language)}
             </option>
           ))}
         </select>
       </Field>
 
       {members.length > 1 && (
-        <Field label="Кого касается" hint="Личный лимит считается только по операциям этого участника">
+        <Field label={t('bg.whoFor')} hint={t('bg.whoForHint')}>
           <select value={memberId} onChange={(e) => setMemberId(e.target.value)} className={inputClass}>
-            <option value="SHARED">Общий (оба участника)</option>
+            <option value="SHARED">{t('bg.shared')}</option>
             {members.map((member) => (
               <option key={member.id} value={member.id}>
-                Личный лимит: {member.displayName}
+                {t('bg.personalLimit')}: {member.displayName}
               </option>
             ))}
           </select>
         </Field>
       )}
 
-      <Field label={`Лимит на месяц, ${baseCurrency}`}>
+      <Field label={`${t('bg.monthlyLimit')}, ${baseCurrency}`}>
         <input
           type="text"
           inputMode="decimal"
@@ -486,10 +487,10 @@ function BudgetEditorModal({
       >
         <span className="text-left">
           <span className="block text-xs font-black text-slate-700 dark:text-slate-200">
-            Переносить остаток
+            {t('bg.rollover')}
           </span>
           <span className="block text-[10px] text-slate-400 font-medium">
-            Неизрасходованная часть добавится к лимиту следующего месяца
+            {t('bg.rolloverHint')}
           </span>
         </span>
         <span
