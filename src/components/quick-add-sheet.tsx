@@ -122,6 +122,50 @@ export function QuickAddSheet({
     });
   };
 
+  /**
+   * On a desktop the on-screen keypad is not how anyone enters a number — they
+   * type. Without this the amount could only be set by clicking, which made the
+   * sheet look broken and pushed people into the full form just to get a field
+   * they could type into.
+   */
+  useEffect(() => {
+    if (mode !== 'MANUAL' || isCreatingCategory) return;
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      // A real field somewhere on top of the sheet owns its own keystrokes.
+      const target = event.target as HTMLElement | null;
+      if (target && /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName)) return;
+      if (target?.isContentEditable) return;
+      if (event.metaKey || event.ctrlKey || event.altKey) return;
+
+      if (event.key >= '0' && event.key <= '9') {
+        event.preventDefault();
+        pressKey(event.key);
+        return;
+      }
+      // Both separators land on the decimal point: the numpad emits a comma in
+      // many locales, and nobody wants to hunt for the right one.
+      if (event.key === '.' || event.key === ',') {
+        event.preventDefault();
+        pressKey('.');
+        return;
+      }
+      if (event.key === 'Backspace') {
+        event.preventDefault();
+        pressKey('DEL');
+        return;
+      }
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        handleSave();
+      }
+    };
+
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode, isCreatingCategory, amount, categoryId, kind, accountId, isBusy]);
+
   const handleSave = async () => {
     const numericAmount = parseFloat(amount);
     if (!Number.isFinite(numericAmount) || numericAmount <= 0) {
