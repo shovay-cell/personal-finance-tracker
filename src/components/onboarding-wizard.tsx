@@ -76,7 +76,7 @@ export function OnboardingWizard({
 
   const finish = async () => {
     if (pinEnabled && !isValidPin(pin)) {
-      setError('Код должен состоять из 4–6 цифр — или выключите защиту');
+      setError(t('ob.pinError'));
       return;
     }
 
@@ -169,7 +169,7 @@ export function OnboardingWizard({
               </div>
 
               <p className="text-[10px] text-slate-400 font-medium leading-relaxed">
-                Язык можно поменять в любой момент: Настройки → Профиль → Язык интерфейса.
+                {t('ob.languageLater')}
               </p>
             </StepShell>
           )}
@@ -180,9 +180,9 @@ export function OnboardingWizard({
               title={`${t('onboarding.hello')}${session?.displayName ? `, ${session.displayName}` : ''}!`}
               text={t('onboarding.introText')}
             >
-              <Feature icon={<ScanLine className="w-4 h-4" />} title="Чек в операцию" text="Фото чека — сумма, дата и категория подставляются сами." />
-              <Feature icon={<Mic className="w-4 h-4" />} title="Голос и списки" text="«Потратил 50 на кафе» или фото списка операций из банка." />
-              <Feature icon={<BarChart3 className="w-4 h-4" />} title="Отчёты и прогноз" text="Куда уходят деньги и хватит ли до конца месяца." />
+              <Feature icon={<ScanLine className="w-4 h-4" />} title={t('ob.featureScan')} text={t('ob.featureScanText')} />
+              <Feature icon={<Mic className="w-4 h-4" />} title={t('ob.featureVoice')} text={t('ob.featureVoiceText')} />
+              <Feature icon={<BarChart3 className="w-4 h-4" />} title={t('ob.featureReports')} text={t('ob.featureReportsText')} />
 
               <button
                 type="button"
@@ -198,15 +198,15 @@ export function OnboardingWizard({
           {step === 'MONEY' && (
             <StepShell
               icon={<Coins className="w-7 h-7" />}
-              title="Доходы и расходы"
-              text="Кнопка «+» внизу — главный вход. Сумма и категория, и операция записана."
+              title={t('ob.moneyTitle')}
+              text={t('ob.moneyText')}
             >
-              <Feature icon={<span className="font-black text-rose-500">−</span>} title="Расход" title2="таб «РАСХОДЫ»" text="Вручную, фото чека или голосом. Чек можно разделить между категориями." />
-              <Feature icon={<span className="font-black text-emerald-500">+</span>} title="Доход" title2="таб «ДОХОДЫ»" text="Тот же экран, переключатель сверху. Список поступлений из банка вносится одним фото." />
+              <Feature icon={<span className="font-black text-rose-500">−</span>} title={t('common.expense')} title2={t('ob.expenseTab')} text={t('ob.expenseText')} />
+              <Feature icon={<span className="font-black text-emerald-500">+</span>} title={t('common.income')} title2={t('ob.incomeTab')} text={t('ob.incomeText')} />
 
               <div className="pt-2">
                 <p className="text-[11px] font-black uppercase tracking-wide text-slate-400 mb-2">
-                  Валюта по умолчанию
+                  {t('ob.defaultCurrency')}
                 </p>
                 <div className="flex gap-1.5">
                   {CURRENCY_LIST.map((option) => (
@@ -231,12 +231,12 @@ export function OnboardingWizard({
           {step === 'VAT' && (
             <StepShell
               icon={<Percent className="w-7 h-7" />}
-              title="Отделение НДС"
-              text="Если вы работаете с НДС, налог отделяется в момент внесения дохода — и полной оплаты, и аванса, и частичного платежа."
+              title={t('ob.vatTitle')}
+              text={t('ob.vatText')}
             >
               <Toggle
-                label="Отделять НДС от доходов"
-                hint="Появится галочка «Отделить НДС и отложить» в форме дохода"
+                label={t('ob.vatToggle')}
+                hint={t('ob.vatToggleHint')}
                 value={vatEnabled}
                 onChange={setVatEnabled}
               />
@@ -245,7 +245,7 @@ export function OnboardingWizard({
                 <>
                   <div>
                     <p className="text-[11px] font-black uppercase tracking-wide text-slate-400 mb-1.5">
-                      Ставка НДС, %
+                      {t('settings.vatRate')}
                     </p>
                     <input
                       type="text"
@@ -258,18 +258,18 @@ export function OnboardingWizard({
 
                   <div className="rounded-2xl bg-slate-50 dark:bg-slate-800/60 p-3 space-y-1">
                     <p className="text-[10px] font-black uppercase tracking-wide text-slate-400">
-                      Например, доход {formatMoney(1000, currency)}
+                      {t('ob.vatExample')} {formatMoney(1000, currency)}
                     </p>
                     <div className="flex justify-between text-[11px] font-bold">
                       <span className="text-emerald-600 dark:text-emerald-400">
-                        Ваша прибыль: {formatMoney(netFromGross(1000, rate), currency)}
+                        {t('ob.yourProfit')}: {formatMoney(netFromGross(1000, rate), currency)}
                       </span>
                       <span className="text-amber-600 dark:text-amber-400">
                         НДС: {formatMoney(vatFromGross(1000, rate), currency)}
                       </span>
                     </div>
                     <p className="text-[10px] text-slate-400 font-medium leading-relaxed">
-                      НДС сразу уходит из доступной прибыли и становится обязательством к выплате.
+                      {t('ob.vatNote')}
                     </p>
                   </div>
                 </>
@@ -280,33 +280,33 @@ export function OnboardingWizard({
           {step === 'PROFIT' && (
             <StepShell
               icon={<BarChart3 className="w-7 h-7" />}
-              title="Где смотреть деньги"
-              text="Три места, которые отвечают на главные вопросы."
+              title={t('ob.whereTitle')}
+              text={t('ob.whereText')}
             >
-              <Feature icon={<Wallet className="w-4 h-4" />} title="Доступная прибыль" title2="вкладка «Бюджет»" text="«Доступно до конца месяца»: за вычетом трат, обязательных платежей и отложенного НДС — и сколько это в день." />
-              <Feature icon={<FileSignature className="w-4 h-4" />} title="Обязательства и НДС" title2="вкладка «Чеки»" text="НДС к выплате и выданные чеки на предъявителя с остатком долга." />
-              <Feature icon={<Settings className="w-4 h-4" />} title="Настройки" title2="шестерёнка справа сверху" text="Валюта, ставка НДС, счета, категории, партнёр, код доступа и резервные копии." />
+              <Feature icon={<Wallet className="w-4 h-4" />} title={t('ob.availableProfit')} title2={t('ob.budgetTab')} text={t('ob.availableText')} />
+              <Feature icon={<FileSignature className="w-4 h-4" />} title={t('ob.debtsAndVat')} title2={t('ob.debtsTab')} text={t('ob.debtsText')} />
+              <Feature icon={<Settings className="w-4 h-4" />} title={t('nav.settings')} title2={t('ob.settingsWhere')} text={t('ob.settingsText')} />
             </StepShell>
           )}
 
           {step === 'PARTNER' && (
             <StepShell
               icon={<Users className="w-7 h-7" />}
-              title="Общий счёт с партнёром"
-              text="Второй участник ведёт тот же профиль: те же счета, категории и бюджеты. Шаг необязательный — можно вернуться к нему в настройках."
+              title={t('ob.partnerTitle')}
+              text={t('ob.partnerText')}
             >
               <input
                 type="email"
                 value={partnerEmail}
                 onChange={(e) => setPartnerEmail(e.target.value)}
-                placeholder="Email партнёра (необязательно)"
+                placeholder={t('ob.partnerEmail')}
                 className={inputClass}
               />
               <input
                 type="text"
                 value={partnerName}
                 onChange={(e) => setPartnerName(e.target.value)}
-                placeholder="Как его показывать"
+                placeholder={t('ob.partnerName')}
                 className={inputClass}
               />
 
@@ -315,26 +315,24 @@ export function OnboardingWizard({
                 onClick={() => setIsJoining(true)}
                 className="w-full py-2.5 rounded-2xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-[11px] font-black"
               >
-                Наоборот: у меня есть код — присоединиться к чужому профилю
+                {t('ob.joinInstead')}
               </button>
 
               <div className="rounded-2xl bg-slate-50 dark:bg-slate-800/60 p-3">
                 <p className="text-[10px] font-black uppercase tracking-wide text-slate-400">
-                  Код приглашения
+                  {t('ob.inviteCode')}
                 </p>
                 <p className="text-lg font-black tracking-[0.3em] text-slate-700 dark:text-slate-200">
                   {inviteCode}
                 </p>
                 <p className="text-[10px] text-slate-400 font-medium leading-relaxed mt-1">
-                  Партнёр устанавливает приложение, на первом экране выбирает «У меня есть код
-                  приглашения», вводит этот код и подключает тот же Google Drive. Чтобы ему было
-                  что скачать, сделайте выгрузку в разделе резервного копирования.
+                  {t('ob.inviteHint')}
                 </p>
               </div>
 
               <Toggle
-                label="Показывать, кто добавил операцию"
-                hint="У каждой операции метка автора — в списке, фильтрах и отчётах"
+                label={t('ob.showAuthor')}
+                hint={t('ob.showAuthorHint')}
                 value={showAuthor}
                 onChange={setShowAuthor}
               />
@@ -344,12 +342,12 @@ export function OnboardingWizard({
           {step === 'SECURITY' && (
             <StepShell
               icon={<ShieldCheck className="w-7 h-7" />}
-              title="Код доступа"
-              text="Необязательная защита входа в приложение на этом устройстве. По умолчанию выключена."
+              title={t('ob.securityTitle')}
+              text={t('ob.securityText')}
             >
               <Toggle
-                label="Защитить приложение кодом"
-                hint="4–6 цифр. Код можно сменить или отключить в настройках"
+                label={t('ob.pinToggle')}
+                hint={t('ob.pinToggleHint')}
                 value={pinEnabled}
                 onChange={(value) => {
                   setPinEnabled(value);
@@ -363,14 +361,14 @@ export function OnboardingWizard({
                   inputMode="numeric"
                   value={pin}
                   onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                  placeholder="Код из 4–6 цифр"
+                  placeholder={t('ob.pinPlaceholder')}
                   className={`${inputClass} text-lg font-black tracking-[0.3em] text-center`}
                 />
               )}
 
               <p className="text-[10px] text-slate-400 font-medium leading-relaxed">
-                Если код забыт, его можно сбросить, подтвердив аккаунт профиля
-                {session?.email ? ` (${session.email})` : ''} — данные при этом сохраняются.
+                {t('ob.pinRecovery')}
+                {session?.email ? ` (${session.email})` : ''}.
               </p>
             </StepShell>
           )}
@@ -378,20 +376,20 @@ export function OnboardingWizard({
           {step === 'DONE' && (
             <StepShell
               icon={<Check className="w-7 h-7" />}
-              title="Всё готово"
-              text="Настройки сохранятся, и можно начинать. Всё это меняется в любой момент в настройках."
+              title={t('ob.doneTitle')}
+              text={t('ob.doneText')}
             >
-              <Summary label="Валюта" value={currency} />
+              <Summary label={t('ob.summaryCurrency')} value={currency} />
               <Summary
-                label="НДС"
-                value={vatEnabled ? `отделяется, ${rate}%` : 'не отделяется'}
+                label={t('ob.summaryVat')}
+                value={vatEnabled ? `${t('ob.summaryVatOn')}, ${rate}%` : t('ob.summaryVatOff')}
               />
-              <Summary label="Код доступа" value={pinEnabled ? 'включён' : 'выключен'} />
+              <Summary label={t('ob.summaryPin')} value={pinEnabled ? t('ob.on') : t('ob.off')} />
               <Summary
-                label="Партнёр"
-                value={partnerEmail.trim() ? partnerEmail.trim() : 'без партнёра'}
+                label={t('ob.summaryPartner')}
+                value={partnerEmail.trim() ? partnerEmail.trim() : t('ob.noPartner')}
               />
-              <Summary label="Автор операции" value={showAuthor ? 'показывать' : 'скрывать'} />
+              <Summary label={t('ob.summaryAuthor')} value={showAuthor ? t('ob.show') : t('ob.hide')} />
             </StepShell>
           )}
         </div>

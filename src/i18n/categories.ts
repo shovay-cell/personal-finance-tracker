@@ -105,3 +105,54 @@ const ACCOUNT_KIND_LABELS: Record<string, Entry> = {
 export function accountKindLabel(kind: string, language: Language): string {
   return ACCOUNT_KIND_LABELS[kind]?.[language] || kind;
 }
+
+/** Who a bearer cheque was written out to — the label shown in the picker. */
+const PAYEE_KIND_LABELS: Record<string, Entry> = {
+  LANDLORD: {
+    ru: 'Арендодатель (аренда жилья)',
+    he: 'משכיר (שכר דירה)',
+    uk: 'Орендодавець (оренда житла)',
+    en: 'Landlord (rent)',
+  },
+  TAX_AUTHORITY: {
+    ru: 'Налоговое управление',
+    he: 'רשות המסים',
+    uk: 'Податкове управління',
+    en: 'Tax authority',
+  },
+  INSURANCE: {
+    ru: 'Страховая компания',
+    he: 'חברת ביטוח',
+    uk: 'Страхова компанія',
+    en: 'Insurance company',
+  },
+  CONTRACTOR: { ru: 'Подрядчик', he: 'קבלן', uk: 'Підрядник', en: 'Contractor' },
+  THIRD_PARTY: { ru: 'Третье лицо', he: 'צד שלישי', uk: 'Третя особа', en: 'Third party' },
+  CUSTOM: {
+    ru: 'Другое (свой вариант)',
+    he: 'אחר (ניסוח משלכם)',
+    uk: 'Інше (свій варіант)',
+    en: 'Other (your own)',
+  },
+};
+
+export function payeeKindLabelI18n(kind: string, language: Language): string {
+  return PAYEE_KIND_LABELS[kind]?.[language] || PAYEE_KIND_LABELS.CUSTOM[language];
+}
+
+/** Lifecycle of an issued cheque. */
+const OBLIGATION_STATUS: Record<string, Entry> = {
+  ISSUED: { ru: 'Выдан', he: 'הונפק', uk: 'Виданий', en: 'Issued' },
+  PARTIALLY_SETTLED: {
+    ru: 'Частично закрыт',
+    he: 'נפרע חלקית',
+    uk: 'Частково закритий',
+    en: 'Partly settled',
+  },
+  SETTLED: { ru: 'Закрыт', he: 'נפרע', uk: 'Закритий', en: 'Settled' },
+  OVERDUE: { ru: 'Просрочен', he: 'באיחור', uk: 'Прострочений', en: 'Overdue' },
+};
+
+export function obligationStatusLabel(status: string, language: Language): string {
+  return OBLIGATION_STATUS[status]?.[language] || status;
+}

@@ -46,6 +46,8 @@ import {
 } from '@/constants/categories';
 import { PaymentCalendar } from './payment-calendar';
 import { useT } from '@/i18n/context';
+import type { TranslationKey } from '@/i18n/dictionary';
+import { accountName, categoryName } from '@/i18n/categories';
 import {
   Card,
   EmptyState,
@@ -65,31 +67,35 @@ interface PlannedTabProps {
   autoCreateDefault: boolean;
 }
 
+/** Each section carries translation keys, so the wording follows the language. */
 const PLAN_KIND_META: Record<
   PlanKind,
-  { label: string; addLabel: string; emptyTitle: string; emptyText: string; defaultCategoryId?: string }
+  {
+    label: TranslationKey;
+    addLabel: TranslationKey;
+    emptyTitle: TranslationKey;
+    emptyText: TranslationKey;
+    defaultCategoryId?: string;
+  }
 > = {
   PAYMENT: {
-    label: 'Платежи',
-    addLabel: 'Новый плановый платёж',
-    emptyTitle: 'Плановых платежей нет',
-    emptyText:
-      'Добавьте аренду, страховку или налог — приложение напомнит заранее и создаст операцию в день платежа.',
+    label: 'plans.payments',
+    addLabel: 'pl.addPayment',
+    emptyTitle: 'pl.emptyPayments',
+    emptyText: 'pl.emptyPaymentsText',
   },
   SUBSCRIPTION: {
-    label: 'Подписки',
-    addLabel: 'Новая подписка',
-    emptyTitle: 'Подписок нет',
-    emptyText:
-      'Добавьте сервисы: Netflix, iCloud, спортзал, страховку. Годовые и квартальные подписки пересчитываются в стоимость за месяц.',
+    label: 'plans.subscriptions',
+    addLabel: 'pl.addSubscription',
+    emptyTitle: 'pl.emptySubscriptions',
+    emptyText: 'pl.emptySubscriptionsText',
     defaultCategoryId: SUBSCRIPTION_CATEGORY_ID,
   },
   INVESTMENT: {
-    label: 'Инвестиции',
-    addLabel: 'Новое регулярное вложение',
-    emptyTitle: 'Регулярных вложений нет',
-    emptyText:
-      'Добавьте суммы, которые регулярно откладываете: биржа, пенсионные накопления, криптовалюта.',
+    label: 'plans.investments',
+    addLabel: 'pl.addInvestment',
+    emptyTitle: 'pl.emptyInvestments',
+    emptyText: 'pl.emptyInvestmentsText',
     defaultCategoryId: INVESTMENT_CATEGORY_ID,
   },
 };
@@ -173,17 +179,17 @@ export function PlannedTab({
               <p className="text-2xl font-black text-slate-900 dark:text-slate-100 tabular-nums leading-tight">
                 {formatMoney(totals.monthly, baseCurrency)}
               </p>
-              <p className="text-[10px] font-bold text-slate-400">в месяц</p>
+              <p className="text-[10px] font-bold text-slate-400">{t('pl.perMonth')}</p>
             </div>
             <div className="pb-0.5">
               <p className="text-sm font-black text-slate-500 dark:text-slate-400 tabular-nums leading-tight">
                 {formatMoney(totals.yearly, baseCurrency)}
               </p>
-              <p className="text-[10px] font-bold text-slate-400">в год</p>
+              <p className="text-[10px] font-bold text-slate-400">{t('pl.perYear')}</p>
             </div>
           </div>
           <p className="text-[10px] text-slate-400 font-medium">
-            {totals.rows.length} активных · годовые и квартальные пересчитаны в месячную стоимость
+            {totals.rows.length} {t('pl.activeHint')}
           </p>
         </Card>
       )}
@@ -194,12 +200,12 @@ export function PlannedTab({
         className="w-full py-3 rounded-2xl bg-gradient-to-tr from-sky-500 to-cyan-400 text-white text-xs font-black flex items-center justify-center gap-2 shadow-lg shadow-sky-500/25 active:scale-[0.98] transition-transform"
       >
         <Plus className="w-4 h-4" />
-        {meta.addLabel}
+        {t(meta.addLabel)}
       </button>
 
       {overdue.length > 0 && (
         <div>
-          <SectionTitle title={`Просрочено · ${overdue.length}`} />
+          <SectionTitle title={`${t('pl.overdue')} · ${overdue.length}`} />
           <div className="space-y-2">
             {overdue.map((state) => (
               <PlannedRow
@@ -230,8 +236,8 @@ export function PlannedTab({
                 <CalendarClock className="w-7 h-7" />
               )
             }
-            title={meta.emptyTitle}
-            description={meta.emptyText}
+            title={t(meta.emptyTitle)}
+            description={t(meta.emptyText)}
           />
         ) : (
           <div className="space-y-2">
@@ -252,7 +258,7 @@ export function PlannedTab({
 
       {inactive.length > 0 && (
         <div>
-          <SectionTitle title="Завершённые и приостановленные" />
+          <SectionTitle title={t('pl.finished')} />
           <div className="space-y-2 opacity-60">
             {inactive.map((state) => (
               <PlannedRow
@@ -301,6 +307,7 @@ function PlannedRow({
   isOverdue?: boolean;
   onEdit: () => void;
 }) {
+  const { t } = useT();
   const category = categories.find((c) => c.id === payment.categoryId);
   const Icon = getCategoryIcon(category?.iconName || 'CalendarClock');
   const isRecurring = payment.recurrence !== 'ONCE';
@@ -348,7 +355,7 @@ function PlannedRow({
           {[payment.provider, describeRecurrence(payment), formatDateHuman(payment.nextDueDate)]
             .filter(Boolean)
             .join(' · ')}
-          {payment.autoCreate ? ' · авто' : ''}
+          {payment.autoCreate ? ` · ${t('pl.auto')}` : ''}
         </p>
       </div>
 
@@ -365,7 +372,7 @@ function PlannedRow({
         </p>
         {showsMonthlyHint ? (
           <p className="text-[10px] font-bold text-slate-400 tabular-nums">
-            ≈ {formatMoney(monthlyBase, baseCurrency)}/мес
+            ≈ {formatMoney(monthlyBase, baseCurrency)}/{t('pl.perMonthShort')}
           </p>
         ) : (
           <p
@@ -378,10 +385,10 @@ function PlannedRow({
             }`}
           >
             {isOverdue
-              ? `просрочен на ${Math.abs(daysUntilDue)} дн.`
+              ? `${t('pl.overdueBy')} ${Math.abs(daysUntilDue)} ${t('pl.daysShort')}`
               : daysUntilDue === 0
-              ? 'сегодня'
-              : `через ${daysUntilDue} дн.`}
+              ? t('pl.dueToday')
+              : `${t('pl.inDays')} ${daysUntilDue} ${t('pl.daysShort')}`}
           </p>
         )}
       </div>
@@ -406,6 +413,7 @@ function PlannedPaymentModal({
   autoCreateDefault: boolean;
   onClose: () => void;
 }) {
+  const { t, language } = useT();
   const meta = PLAN_KIND_META[planKind];
   const isPayment = planKind === 'PAYMENT';
 
@@ -437,9 +445,9 @@ function PlannedPaymentModal({
 
   const handleSave = async () => {
     const numericAmount = parseFloat(amount.replace(',', '.'));
-    if (!title.trim()) return setError('Укажите название');
-    if (!Number.isFinite(numericAmount) || numericAmount <= 0) return setError('Укажите сумму');
-    if (!categoryId) return setError('Выберите категорию');
+    if (!title.trim()) return setError(t('pl.enterTitle'));
+    if (!Number.isFinite(numericAmount) || numericAmount <= 0) return setError(t('pl.enterAmount'));
+    if (!categoryId) return setError(t('pl.pickCategory'));
 
     const payload = {
       title: title.trim(),
@@ -467,12 +475,12 @@ function PlannedPaymentModal({
 
   return (
     <ModalShell
-      title={payment ? meta.label : meta.addLabel}
+      title={t(payment ? meta.label : meta.addLabel)}
       subtitle={
         planKind === 'SUBSCRIPTION'
-          ? 'Стоимость за длинный период пересчитается в месячную'
+          ? t('pl.subscriptionSub')
           : planKind === 'INVESTMENT'
-          ? 'Регулярное вложение попадёт в постоянные траты'
+          ? t('pl.investmentSub')
           : undefined
       }
       icon={
@@ -488,7 +496,7 @@ function PlannedPaymentModal({
       footer={
         <div className="space-y-2">
           {error && <p className="text-[11px] font-bold text-rose-500 text-center">{error}</p>}
-          <PrimaryButton onClick={handleSave}>Сохранить</PrimaryButton>
+          <PrimaryButton onClick={handleSave}>{t('common.save')}</PrimaryButton>
 
           {payment && (
             <div className="flex gap-2">
@@ -501,7 +509,7 @@ function PlannedPaymentModal({
                 className="flex-1 py-2.5 rounded-2xl text-[11px] font-black text-emerald-600 bg-emerald-50 dark:bg-emerald-950/40 flex items-center justify-center gap-1.5"
               >
                 <CheckCircle2 className="w-3.5 h-3.5" />
-                {planKind === 'INVESTMENT' ? 'Вложено' : 'Оплачен'}
+                {planKind === 'INVESTMENT' ? t('pl.invested') : t('pl.paid')}
               </button>
               <button
                 type="button"
@@ -512,7 +520,7 @@ function PlannedPaymentModal({
                 className="flex-1 py-2.5 rounded-2xl text-[11px] font-black text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 flex items-center justify-center gap-1.5"
               >
                 {payment.isActive ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}
-                {payment.isActive ? 'Пауза' : 'Возобновить'}
+                {payment.isActive ? t('pl.pause') : t('pl.resume')}
               </button>
               <button
                 type="button"
@@ -529,7 +537,7 @@ function PlannedPaymentModal({
         </div>
       }
     >
-      <Field label={planKind === 'SUBSCRIPTION' ? 'Сервис' : 'Название'}>
+      <Field label={planKind === 'SUBSCRIPTION' ? t('pl.service') : t('pl.title')}>
         <input
           type="text"
           value={title}
@@ -538,8 +546,8 @@ function PlannedPaymentModal({
             planKind === 'SUBSCRIPTION'
               ? 'Netflix'
               : planKind === 'INVESTMENT'
-              ? 'Пополнение брокерского счёта'
-              : 'Аренда квартиры'
+              ? t('pl.investmentPlaceholder')
+              : t('pl.paymentPlaceholder')
           }
           className={inputClass}
           autoFocus
@@ -548,14 +556,16 @@ function PlannedPaymentModal({
 
       {planKind !== 'PAYMENT' && (
         <Field
-          label={planKind === 'INVESTMENT' ? 'Брокер / фонд' : 'Провайдер'}
-          hint="Необязательно"
+          label={planKind === 'INVESTMENT' ? t('pl.broker') : t('pl.provider')}
+          hint={t('pl.optional')}
         >
           <input
             type="text"
             value={provider}
             onChange={(e) => setProvider(e.target.value)}
-            placeholder={planKind === 'INVESTMENT' ? 'Interactive Brokers' : 'Apple, Google, банк'}
+            placeholder={
+              planKind === 'INVESTMENT' ? 'Interactive Brokers' : t('pl.providerPlaceholder')
+            }
             className={inputClass}
           />
         </Field>
@@ -569,13 +579,13 @@ function PlannedPaymentModal({
             setCategoryId('');
           }}
           options={[
-            { value: 'EXPENSE', label: 'РАСХОД' },
-            { value: 'INCOME', label: 'ДОХОД' },
+            { value: 'EXPENSE', label: t('pl.expenseUpper') },
+            { value: 'INCOME', label: t('pl.incomeUpper') },
           ]}
         />
       )}
 
-      <Field label={`Сумма, ${currency}`}>
+      <Field label={`${t('common.amount')}, ${currency}`}>
         <input
           type="text"
           inputMode="decimal"
@@ -586,49 +596,49 @@ function PlannedPaymentModal({
         />
       </Field>
 
-      <Field label="Категория">
+      <Field label={t('common.category')}>
         <select
           value={categoryId}
           onChange={(e) => setCategoryId(e.target.value)}
           className={inputClass}
         >
-          <option value="">Выберите категорию</option>
+          <option value="">{t('pl.pickCategory')}</option>
           {relevantCategories.map((category) => (
             <option key={category.id} value={category.id}>
-              {category.name}
+              {categoryName(category, language)}
             </option>
           ))}
         </select>
       </Field>
 
-      <Field label={planKind === 'INVESTMENT' ? 'Счёт списания' : 'Счёт'}>
+      <Field label={planKind === 'INVESTMENT' ? t('pl.debitAccount') : t('common.account')}>
         <select value={accountId} onChange={(e) => setAccountId(e.target.value)} className={inputClass}>
           {accounts.map((account) => (
             <option key={account.id} value={account.id}>
-              {account.name}
+              {accountName(account, language)}
             </option>
           ))}
         </select>
       </Field>
 
-      <Field label="Периодичность">
+      <Field label={t('pl.frequency')}>
         <select
           value={recurrence}
           onChange={(e) => setRecurrence(e.target.value as RecurrenceKind)}
           className={inputClass}
         >
-          {isPayment && <option value="ONCE">Разовый</option>}
-          <option value="WEEKLY">Еженедельно</option>
-          <option value="MONTHLY">Ежемесячно</option>
-          <option value="QUARTERLY">Раз в квартал</option>
-          <option value="SEMIANNUAL">Раз в полгода</option>
-          <option value="YEARLY">Раз в год</option>
-          <option value="CUSTOM_DAYS">Произвольный интервал</option>
+          {isPayment && <option value="ONCE">{t('pl.once')}</option>}
+          <option value="WEEKLY">{t('pl.weekly')}</option>
+          <option value="MONTHLY">{t('pl.monthly')}</option>
+          <option value="QUARTERLY">{t('pl.quarterly')}</option>
+          <option value="SEMIANNUAL">{t('pl.semiannual')}</option>
+          <option value="YEARLY">{t('pl.yearly')}</option>
+          <option value="CUSTOM_DAYS">{t('pl.customDays')}</option>
         </select>
       </Field>
 
       {recurrence === 'CUSTOM_DAYS' && (
-        <Field label="Интервал, дней">
+        <Field label={t('pl.intervalDays')}>
           <input
             type="number"
             min={1}
@@ -640,7 +650,7 @@ function PlannedPaymentModal({
       )}
 
       <div className="grid grid-cols-2 gap-3">
-        <Field label={planKind === 'PAYMENT' ? 'Дата платежа' : 'Следующее списание'}>
+        <Field label={planKind === 'PAYMENT' ? t('pl.paymentDate') : t('pl.nextCharge')}>
           <input
             type="date"
             value={nextDueDate}
@@ -649,7 +659,7 @@ function PlannedPaymentModal({
           />
         </Field>
         {recurrence !== 'ONCE' && (
-          <Field label="Активен до" hint="Необязательно">
+          <Field label={t('pl.activeUntil')} hint={t('pl.optional')}>
             <input
               type="date"
               value={endDate}
@@ -660,7 +670,7 @@ function PlannedPaymentModal({
         )}
       </div>
 
-      <Field label="Напомнить за (дней)">
+      <Field label={t('pl.remindBefore')}>
         <div className="flex gap-2">
           {[0, 1, 3, 7].map((days) => (
             <button
@@ -673,7 +683,7 @@ function PlannedPaymentModal({
                   : 'bg-slate-50 dark:bg-slate-800 text-slate-500 border-slate-200 dark:border-slate-700'
               }`}
             >
-              {days === 0 ? 'В день' : days}
+              {days === 0 ? t('pl.onTheDay') : days}
             </button>
           ))}
         </div>
@@ -688,10 +698,10 @@ function PlannedPaymentModal({
           <AlarmClock className="w-4 h-4 text-slate-400 mt-0.5 flex-shrink-0" />
           <span>
             <span className="block text-xs font-black text-slate-700 dark:text-slate-200">
-              Создавать операцию автоматически
+              {t('pl.autoCreate')}
             </span>
             <span className="block text-[10px] text-slate-400 font-medium">
-              Иначе приложение спросит подтверждение в день списания
+              {t('pl.autoCreateHint')}
             </span>
           </span>
         </span>

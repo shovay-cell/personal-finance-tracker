@@ -11,6 +11,7 @@ import {
   todayIso,
   updatePlannedPayment,
 } from '@/lib/db';
+import { getActiveLanguage } from '@/i18n/runtime';
 
 export interface PlannedPaymentState {
   payment: PlannedPayment;
@@ -93,43 +94,124 @@ export function nextOccurrence(payment: PlannedPayment, from: string): string | 
   return next;
 }
 
-export function describeRecurrence(payment: PlannedPayment): string {
-  if (payment.intervalUnit && payment.intervalCount) {
-    const count = payment.intervalCount;
-    const unit = payment.intervalUnit;
-    const forms: Record<string, [string, string, string]> = {
-      DAY: ['день', 'дня', 'дней'],
-      WEEK: ['неделю', 'недели', 'недель'],
-      MONTH: ['месяц', 'месяца', 'месяцев'],
-      YEAR: ['год', 'года', 'лет'],
-    };
-    const [one, few, many] = forms[unit];
+/**
+ * Wording of a repeat rule. Russian and Ukrainian need three plural forms, so
+ * every language carries its own table rather than a single template.
+ */
+const INTERVAL_FORMS: Record<string, Record<string, string[]>> = {
+  ru: {
+    DAY: ['день', 'дня', 'дней'],
+    WEEK: ['неделю', 'недели', 'недель'],
+    MONTH: ['месяц', 'месяца', 'месяцев'],
+    YEAR: ['год', 'года', 'лет'],
+  },
+  uk: {
+    DAY: ['день', 'дні', 'днів'],
+    WEEK: ['тиждень', 'тижні', 'тижнів'],
+    MONTH: ['місяць', 'місяці', 'місяців'],
+    YEAR: ['рік', 'роки', 'років'],
+  },
+  en: {
+    DAY: ['day', 'days', 'days'],
+    WEEK: ['week', 'weeks', 'weeks'],
+    MONTH: ['month', 'months', 'months'],
+    YEAR: ['year', 'years', 'years'],
+  },
+  he: {
+    DAY: ['יום', 'ימים', 'ימים'],
+    WEEK: ['שבוע', 'שבועות', 'שבועות'],
+    MONTH: ['חודש', 'חודשים', 'חודשים'],
+    YEAR: ['שנה', 'שנים', 'שנים'],
+  },
+};
+
+const RECURRENCE_LABELS: Record<string, Record<string, string>> = {
+  ru: {
+    ONCE: 'Разовый платёж',
+    WEEKLY: 'Каждую неделю',
+    MONTHLY: 'Каждый месяц',
+    QUARTERLY: 'Раз в квартал',
+    SEMIANNUAL: 'Раз в полгода',
+    YEARLY: 'Раз в год',
+    EVERY: 'Каждые',
+    DAYS_SHORT: 'дн.',
+  },
+  uk: {
+    ONCE: 'Разовий платіж',
+    WEEKLY: 'Щотижня',
+    MONTHLY: 'Щомісяця',
+    QUARTERLY: 'Раз на квартал',
+    SEMIANNUAL: 'Раз на півроку',
+    YEARLY: 'Раз на рік',
+    EVERY: 'Кожні',
+    DAYS_SHORT: 'дн.',
+  },
+  en: {
+    ONCE: 'One-off payment',
+    WEEKLY: 'Every week',
+    MONTHLY: 'Every month',
+    QUARTERLY: 'Every quarter',
+    SEMIANNUAL: 'Twice a year',
+    YEARLY: 'Once a year',
+    EVERY: 'Every',
+    DAYS_SHORT: 'days',
+  },
+  he: {
+    ONCE: 'תשלום חד‑פעמי',
+    WEEKLY: 'כל שבוע',
+    MONTHLY: 'כל חודש',
+    QUARTERLY: 'כל רבעון',
+    SEMIANNUAL: 'פעמיים בשנה',
+    YEARLY: 'פעם בשנה',
+    EVERY: 'כל',
+    DAYS_SHORT: 'ימים',
+  },
+};
+
+function pluralForm(count: number, forms: string[], language: string): string {
+  if (language === 'ru' || language === 'uk') {
     const mod10 = count % 10;
     const mod100 = count % 100;
-    const word =
-      mod10 === 1 && mod100 !== 11
-        ? one
-        : mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)
-        ? few
-        : many;
-    return count === 1 ? `Каждый ${word}` : `Каждые ${count} ${word}`;
+    if (mod10 === 1 && mod100 !== 11) return forms[0];
+    if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return forms[1];
+    return forms[2];
+  }
+  return count === 1 ? forms[0] : forms[1];
+}
+
+export function describeRecurrence(payment: PlannedPayment): string {
+  const language = getActiveLanguage();
+  const labels = RECURRENCE_LABELS[language] || RECURRENCE_LABELS.ru;
+
+  if (payment.intervalUnit && payment.intervalCount) {
+    const count = payment.intervalCount;
+    const forms = (INTERVAL_FORMS[language] || INTERVAL_FORMS.ru)[payment.intervalUnit];
+    const word = pluralForm(count, forms, language);
+    if (count === 1) {
+      // Russian and Ukrainian inflect the article-like word with the noun; the
+      // other two read naturally with the same «every» as the plural branch.
+      if (language === 'ru') return `Каждый ${word}`;
+      if (language === 'uk') return `Кожен ${word}`;
+      return `${labels.EVERY} ${word}`;
+    }
+    return `${labels.EVERY} ${count} ${word}`;
   }
 
   switch (payment.recurrence) {
     case 'ONCE':
-      return 'Разовый платёж';
+      return labels.ONCE;
     case 'WEEKLY':
-      return 'Каждую неделю';
+      return labels.WEEKLY;
     case 'MONTHLY':
-      return 'Каждый месяц';
+      return labels.MONTHLY;
     case 'QUARTERLY':
-      return 'Раз в квартал';
+      return labels.QUARTERLY;
     case 'SEMIANNUAL':
-      return 'Раз в полгода';
+      return labels.SEMIANNUAL;
     case 'YEARLY':
-      return 'Раз в год';
+      return labels.YEARLY;
     case 'CUSTOM_DAYS':
-      return `Каждые ${payment.intervalDays || 30} дн.`;
+      return `${labels.EVERY} ${payment.intervalDays || 30} ${labels.DAYS_SHORT}`;
     default:
       return '';
   }

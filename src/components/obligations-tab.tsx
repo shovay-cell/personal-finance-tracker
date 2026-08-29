@@ -38,8 +38,10 @@ import {
   formatDateHuman,
   formatMoney,
 } from '@/services/analytics';
-import { OBLIGATION_STATUS_LABELS, exportObligationsCsv } from '@/services/export';
-import { PAYEE_KIND_OPTIONS, payeeKindLabel, OBLIGATION_INCOME_CATEGORY_ID } from '@/constants/categories';
+import { exportObligationsCsv } from '@/services/export';
+import { PAYEE_KIND_OPTIONS, OBLIGATION_INCOME_CATEGORY_ID } from '@/constants/categories';
+import { useT } from '@/i18n/context';
+import { accountName, obligationStatusLabel, payeeKindLabelI18n } from '@/i18n/categories';
 import {
   analyzeReceiptWithAI,
   compressForStorage,
@@ -81,6 +83,7 @@ export function ObligationsTab({
   vatSummary,
   vatPayments,
 }: ObligationsTabProps) {
+  const { t } = useT();
   const [editing, setEditing] = useState<Obligation | 'NEW' | null>(null);
   const [settling, setSettling] = useState<ObligationWithBalance | null>(null);
 
@@ -97,17 +100,17 @@ export function ObligationsTab({
     <div className="space-y-4">
       <Card className="p-4">
         <p className="text-[10px] font-black uppercase tracking-wide text-slate-400">
-          Непогашенный остаток по выданным чекам
+          {t('obl.outstandingTitle')}
         </p>
         <p className="text-2xl font-black text-slate-900 dark:text-slate-100 tabular-nums mt-1">
           {formatMoney(totalOutstanding, baseCurrency)}
         </p>
         <p className="text-[11px] text-slate-400 font-medium mt-1">
-          {open.length} открытых обязательств
+          {open.length} {t('obl.openCount')}
           {rows.some((r) => r.status === 'OVERDUE') && (
             <span className="text-rose-500 font-black">
               {' '}
-              · {rows.filter((r) => r.status === 'OVERDUE').length} просрочено
+              · {rows.filter((r) => r.status === 'OVERDUE').length} {t('obl.overdueCount')}
             </span>
           )}
         </p>
@@ -120,7 +123,7 @@ export function ObligationsTab({
           className="flex-1 py-3 rounded-2xl bg-gradient-to-tr from-violet-500 to-fuchsia-400 text-white text-xs font-black flex items-center justify-center gap-2 shadow-lg shadow-violet-500/25 active:scale-[0.98] transition-transform"
         >
           <Plus className="w-4 h-4" />
-          Выдан чек на предъявителя
+          {t('obl.issueCheque')}
         </button>
         {rows.length > 0 && (
           <button
@@ -136,13 +139,13 @@ export function ObligationsTab({
       {rows.length === 0 ? (
         <EmptyState
           icon={<FileSignature className="w-7 h-7" />}
-          title="Обязательств нет"
-          description="Здесь учитываются выданные вами чеки и расписки на предъявителя: сумма, кому выписано, фото документа и остаток задолженности."
+          title={t('obl.emptyTitle')}
+          description={t('obl.emptyText')}
         />
       ) : (
         <>
           <div>
-            <SectionTitle title="Открытые обязательства" />
+            <SectionTitle title={t('obl.openSection')} />
             <div className="space-y-2">
               {open.map((row) => (
                 <ObligationRow
@@ -154,7 +157,7 @@ export function ObligationsTab({
               ))}
               {open.length === 0 && (
                 <Card className="p-4 text-[11px] font-medium text-slate-400 text-center">
-                  Все обязательства закрыты
+                  {t('obl.allClosed')}
                 </Card>
               )}
             </div>
@@ -162,7 +165,7 @@ export function ObligationsTab({
 
           {closed.length > 0 && (
             <div>
-              <SectionTitle title="Закрытые" />
+              <SectionTitle title={t('obl.closedSection')} />
               <div className="space-y-2 opacity-60">
                 {closed.map((row) => (
                   <ObligationRow
@@ -207,6 +210,7 @@ function ObligationRow({
   onEdit: () => void;
   onSettle: () => void;
 }) {
+  const { t, language } = useT();
   const { obligation, settledAmount, outstandingAmount, status } = row;
   const progress = obligation.amount > 0 ? (settledAmount / obligation.amount) * 100 : 0;
 
@@ -219,18 +223,21 @@ function ObligationRow({
 
         <div className="flex-1 min-w-0">
           <p className="text-xs font-black text-slate-800 dark:text-slate-100 truncate">
-            {obligation.payeeLabel || payeeKindLabel(obligation.payeeKind)}
+            {obligation.payeeLabel || payeeKindLabelI18n(obligation.payeeKind, language)}
           </p>
           <p className="text-[10.5px] text-slate-400 font-medium truncate">
-            {payeeKindLabel(obligation.payeeKind)} · выдан {formatDateHuman(obligation.issueDate)}
-            {obligation.dueDate ? ` · до ${formatDateHuman(obligation.dueDate)}` : ''}
+            {payeeKindLabelI18n(obligation.payeeKind, language)} · {t('obl.issuedOn')}{' '}
+            {formatDateHuman(obligation.issueDate)}
+            {obligation.dueDate
+              ? ` · ${t('obl.dueBy')} ${formatDateHuman(obligation.dueDate)}`
+              : ''}
           </p>
         </div>
 
         <span
           className={`text-[9px] font-black px-2 py-1 rounded-lg flex-shrink-0 ${STATUS_STYLES[status]}`}
         >
-          {OBLIGATION_STATUS_LABELS[status]}
+          {obligationStatusLabel(status, language)}
         </span>
       </div>
 
@@ -243,7 +250,7 @@ function ObligationRow({
 
       <div className="flex items-center justify-between text-[11px] font-bold">
         <span className="text-slate-400 tabular-nums">
-          Погашено {formatMoney(settledAmount, obligation.currency)} из{' '}
+          {t('obl.settledOf')} {formatMoney(settledAmount, obligation.currency)} {t('obl.of')}{' '}
           {formatMoney(obligation.amount, obligation.currency)}
         </span>
         <span
@@ -252,8 +259,8 @@ function ObligationRow({
           }`}
         >
           {outstandingAmount > 0
-            ? `Остаток ${formatMoney(outstandingAmount, obligation.currency)}`
-            : 'Закрыт'}
+            ? `${t('obl.remainder')} ${formatMoney(outstandingAmount, obligation.currency)}`
+            : t('obl.closed')}
         </span>
       </div>
 
@@ -288,7 +295,7 @@ function ObligationRow({
           className="w-full py-2.5 rounded-2xl bg-violet-50 dark:bg-violet-950/40 text-violet-600 dark:text-violet-400 text-[11px] font-black flex items-center justify-center gap-1.5 active:scale-95 transition-transform"
         >
           <FileCheck2 className="w-3.5 h-3.5" />
-          Приложить подтверждающий чек
+          {t('obl.attachProof')}
         </button>
       )}
     </Card>
@@ -304,6 +311,7 @@ function ObligationModal({
   baseCurrency: CurrencyCode;
   onClose: () => void;
 }) {
+  const { t, language } = useT();
   const [amount, setAmount] = useState(obligation ? String(obligation.amount) : '');
   const currency: CurrencyCode = obligation?.currency || baseCurrency;
   const [issueDate, setIssueDate] = useState(obligation?.issueDate || todayIso());
@@ -322,9 +330,8 @@ function ObligationModal({
 
   const handleSave = async () => {
     const numericAmount = parseFloat(amount.replace(',', '.'));
-    if (!Number.isFinite(numericAmount) || numericAmount <= 0) return setError('Укажите сумму чека');
-    if (payeeKind === 'CUSTOM' && !payeeLabel.trim())
-      return setError('Укажите, кому или на что выписан чек');
+    if (!Number.isFinite(numericAmount) || numericAmount <= 0) return setError(t('obl.enterAmount'));
+    if (payeeKind === 'CUSTOM' && !payeeLabel.trim()) return setError(t('obl.enterPayee'));
 
     const payload = {
       amount: numericAmount,
@@ -344,14 +351,14 @@ function ObligationModal({
 
   return (
     <ModalShell
-      title={obligation ? 'Выданный чек' : 'Выдан чек на предъявителя'}
-      subtitle="Создаёт открытое обязательство с отслеживанием остатка"
+      title={obligation ? t('obl.issuedCheque') : t('obl.issueCheque')}
+      subtitle={t('obl.modalSub')}
       icon={<FileSignature className="w-5 h-5" />}
       onClose={onClose}
       footer={
         <div className="space-y-2">
           {error && <p className="text-[11px] font-bold text-rose-500 text-center">{error}</p>}
-          <PrimaryButton onClick={handleSave}>Сохранить обязательство</PrimaryButton>
+          <PrimaryButton onClick={handleSave}>{t('obl.save')}</PrimaryButton>
           {obligation && (
             <button
               type="button"
@@ -362,13 +369,13 @@ function ObligationModal({
               className="w-full py-2.5 rounded-2xl text-[11px] font-black text-rose-500 bg-rose-50 dark:bg-rose-950/40 flex items-center justify-center gap-1.5"
             >
               <Trash2 className="w-3.5 h-3.5" />
-              Удалить обязательство
+              {t('obl.delete')}
             </button>
           )}
         </div>
       }
     >
-      <Field label={`Сумма чека, ${currency}`}>
+      <Field label={`${t('obl.chequeAmount')}, ${currency}`}>
         <input
           type="text"
           inputMode="decimal"
@@ -380,7 +387,7 @@ function ObligationModal({
         />
       </Field>
 
-      <Field label="Кому / на что выписано">
+      <Field label={t('obl.payeeField')}>
         <div className="space-y-1.5">
           {PAYEE_KIND_OPTIONS.map((option) => (
             <button
@@ -401,7 +408,7 @@ function ObligationModal({
                 }`}
               />
               <span className="text-xs font-bold text-slate-700 dark:text-slate-200">
-                {option.label}
+                {payeeKindLabelI18n(option.kind, language)}
               </span>
             </button>
           ))}
@@ -409,20 +416,20 @@ function ObligationModal({
       </Field>
 
       <Field
-        label={payeeKind === 'CUSTOM' ? 'Свой вариант' : 'Уточнение'}
-        hint={payeeKind === 'CUSTOM' ? undefined : 'Например, имя арендодателя или номер договора'}
+        label={payeeKind === 'CUSTOM' ? t('obl.ownOption') : t('obl.clarification')}
+        hint={payeeKind === 'CUSTOM' ? undefined : t('obl.clarificationHint')}
       >
         <input
           type="text"
           value={payeeLabel}
           onChange={(e) => setPayeeLabel(e.target.value)}
-          placeholder={payeeKind === 'CUSTOM' ? 'Кому и на что выписан чек' : 'Необязательно'}
+          placeholder={payeeKind === 'CUSTOM' ? t('obl.payeePlaceholder') : t('obl.optional')}
           className={inputClass}
         />
       </Field>
 
       <div className="grid grid-cols-2 gap-3">
-        <Field label="Дата выдачи">
+        <Field label={t('obl.issueDate')}>
           <input
             type="date"
             value={issueDate}
@@ -430,7 +437,7 @@ function ObligationModal({
             className={inputClass}
           />
         </Field>
-        <Field label="Плановая дата закрытия" hint="Определяет статус «Просрочен»">
+        <Field label={t('obl.dueDate')} hint={t('obl.dueDateHint')}>
           <input
             type="date"
             value={dueDate}
@@ -440,20 +447,20 @@ function ObligationModal({
         </Field>
       </div>
 
-      <Field label="Заметка">
+      <Field label={t('obl.note')}>
         <input
           type="text"
           value={note}
           onChange={(e) => setNote(e.target.value)}
-          placeholder="Комментарий"
+          placeholder={t('obl.comment')}
           className={inputClass}
         />
       </Field>
 
-      <Field label="Фото выданного документа">
+      <Field label={t('obl.documentPhoto')}>
         <label className="flex items-center justify-center gap-2 py-2.5 rounded-2xl bg-slate-100 dark:bg-slate-800 text-slate-500 text-[11px] font-black cursor-pointer active:scale-95 transition-transform">
           <ImagePlus className="w-3.5 h-3.5" />
-          {documentPhoto ? 'Заменить фото' : 'Прикрепить фото'}
+          {documentPhoto ? t('obl.replacePhoto') : t('obl.attachPhoto')}
           <input
             type="file"
             accept="image/*"
@@ -465,7 +472,7 @@ function ObligationModal({
           // eslint-disable-next-line @next/next/no-img-element
           <img
             src={documentPhoto}
-            alt="Выданный чек"
+            alt={t('obl.issuedCheque')}
             className="mt-2 w-full max-h-52 object-contain rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800"
           />
         )}
@@ -485,6 +492,7 @@ function SettleObligationModal({
   accounts: FinanceAccount[];
   onClose: () => void;
 }) {
+  const { t, language } = useT();
   const { obligation, outstandingAmount } = row;
   const [amount, setAmount] = useState(String(outstandingAmount));
   const [date, setDate] = useState(todayIso());
@@ -515,11 +523,11 @@ function SettleObligationModal({
       if (parsed.merchant) setNote(parsed.merchant);
       setScanHint(
         parsed.uncertainFields.length > 0
-          ? `ИИ не уверен в полях: ${parsed.uncertainFields.join(', ')} — проверьте сумму и дату`
-          : 'Данные подставлены из документа — проверьте сумму и дату'
+          ? `${t('obl.aiUnsure')}: ${parsed.uncertainFields.join(', ')} — ${t('obl.checkAmountDate')}`
+          : t('obl.filledFromDoc')
       );
     } catch (err: any) {
-      setError(err.message || 'Не удалось распознать документ');
+      setError(err.message || t('obl.scanFailed'));
     } finally {
       setIsScanning(false);
     }
@@ -527,10 +535,10 @@ function SettleObligationModal({
 
   const handleSave = async () => {
     const numericAmount = parseFloat(amount.replace(',', '.'));
-    if (!Number.isFinite(numericAmount) || numericAmount <= 0) return setError('Укажите сумму');
+    if (!Number.isFinite(numericAmount) || numericAmount <= 0) return setError(t('obl.amountRequired'));
     if (numericAmount > outstandingAmount + 0.009) {
       return setError(
-        `Сумма больше остатка (${formatMoney(outstandingAmount, obligation.currency)})`
+        `${t('obl.aboveRemainder')} (${formatMoney(outstandingAmount, obligation.currency)})`
       );
     }
 
@@ -547,7 +555,11 @@ function SettleObligationModal({
         categoryId: settlementCategory?.id || '',
         accountId: accountId || accounts[0]?.id,
         date,
-        note: note.trim() || `Погашение чека: ${obligation.payeeLabel || payeeKindLabel(obligation.payeeKind)}`,
+        note:
+          note.trim() ||
+          `${t('obl.settlementNote')}: ${
+            obligation.payeeLabel || payeeKindLabelI18n(obligation.payeeKind, language)
+          }`,
         receiptPhoto: documentPhoto,
         obligationId: obligation.id,
         source: documentPhoto ? 'RECEIPT_SCAN' : 'MANUAL',
@@ -569,24 +581,24 @@ function SettleObligationModal({
 
   return (
     <ModalShell
-      title="Погашение обязательства"
-      subtitle={`Остаток: ${formatMoney(outstandingAmount, obligation.currency)}`}
+      title={t('obl.settleTitle')}
+      subtitle={`${t('obl.remainder')}: ${formatMoney(outstandingAmount, obligation.currency)}`}
       icon={<FileCheck2 className="w-5 h-5" />}
       onClose={onClose}
       footer={
         <div className="space-y-2">
           {error && <p className="text-[11px] font-bold text-rose-500 text-center">{error}</p>}
           <PrimaryButton onClick={handleSave} disabled={isScanning} variant="success">
-            Списать с остатка
+            {t('obl.settleAction')}
           </PrimaryButton>
         </div>
       }
     >
-      <Field label="Подтверждающий документ">
+      <Field label={t('obl.proofDocument')}>
         <div className="flex gap-2">
           <label className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-2xl bg-violet-50 dark:bg-violet-950/40 text-violet-600 dark:text-violet-400 text-[11px] font-black cursor-pointer active:scale-95 transition-transform">
             <Sparkles className="w-3.5 h-3.5" />
-            Снять и распознать
+            {t('obl.scanIt')}
             <input
               type="file"
               accept="image/*"
@@ -597,7 +609,7 @@ function SettleObligationModal({
           </label>
           <label className="flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-2xl bg-slate-100 dark:bg-slate-800 text-slate-500 text-[11px] font-black cursor-pointer">
             <ImagePlus className="w-3.5 h-3.5" />
-            Файл
+            {t('form.file')}
             <input
               type="file"
               accept="image/*"
@@ -610,7 +622,7 @@ function SettleObligationModal({
         {isScanning && (
           <div className="mt-2 flex items-center gap-2 text-[11px] font-bold text-violet-600 dark:text-violet-400">
             <Loader2 className="w-3.5 h-3.5 animate-spin" />
-            Gemini читает документ…
+            {t('obl.geminiReading')}
           </div>
         )}
 
@@ -625,14 +637,14 @@ function SettleObligationModal({
           // eslint-disable-next-line @next/next/no-img-element
           <img
             src={documentPhoto}
-            alt="Подтверждающий документ"
+            alt={t('obl.proofDocument')}
             className="mt-2 w-full max-h-48 object-contain rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800"
           />
         )}
       </Field>
 
       <div className="grid grid-cols-2 gap-3">
-        <Field label={`Сумма, ${obligation.currency}`}>
+        <Field label={`${t('common.amount')}, ${obligation.currency}`}>
           <input
             type="text"
             inputMode="decimal"
@@ -641,7 +653,7 @@ function SettleObligationModal({
             className={`${inputClass} text-lg font-black`}
           />
         </Field>
-        <Field label="Дата">
+        <Field label={t('common.date')}>
           <input
             type="date"
             value={date}
@@ -651,12 +663,12 @@ function SettleObligationModal({
         </Field>
       </div>
 
-      <Field label="Заметка">
+      <Field label={t('obl.note')}>
         <input
           type="text"
           value={note}
           onChange={(e) => setNote(e.target.value)}
-          placeholder="Например, квитанция об оплате аренды"
+          placeholder={t('obl.notePlaceholder')}
           className={inputClass}
         />
       </Field>
@@ -668,10 +680,10 @@ function SettleObligationModal({
       >
         <span className="text-left">
           <span className="block text-xs font-black text-slate-700 dark:text-slate-200">
-            Создать операцию «Погашение расписки»
+            {t('obl.createIncome')}
           </span>
           <span className="block text-[10px] text-slate-400 font-medium">
-            Доход попадёт в отчёты и на баланс счёта
+            {t('obl.createIncomeHint')}
           </span>
         </span>
         <span
@@ -688,11 +700,11 @@ function SettleObligationModal({
       </button>
 
       {createIncome && (
-        <Field label="Счёт зачисления">
+        <Field label={t('obl.creditAccount')}>
           <select value={accountId} onChange={(e) => setAccountId(e.target.value)} className={inputClass}>
             {accounts.map((account) => (
               <option key={account.id} value={account.id}>
-                {account.name}
+                {accountName(account, language)}
               </option>
             ))}
           </select>

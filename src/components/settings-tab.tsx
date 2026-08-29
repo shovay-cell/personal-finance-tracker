@@ -49,7 +49,6 @@ import {
   updateMember,
 } from '@/lib/db';
 import {
-  ACCOUNT_KIND_LABELS,
   CURRENCY_LIST,
   DEFAULT_EXCHANGE_RATES,
   MEMBER_COLORS,
@@ -72,6 +71,8 @@ import {
 } from '@/services/notifications';
 import { LANGUAGES, SPEECH_LOCALE_BY_LANGUAGE } from '@/i18n/dictionary';
 import { useT } from '@/i18n/context';
+import { accountKindLabel, accountName } from '@/i18n/categories';
+import { numberLocale } from '@/i18n/runtime';
 import { CategoryManagerModal } from './category-manager-modal';
 import { ManagePinModal } from './pin-lock';
 import { JoinProfileModal } from './join-profile-modal';
@@ -143,7 +144,7 @@ export function SettingsTab({
       const result = await action();
       setMessage({ text: result.text, kind: result.ok ? 'ok' : 'error' });
     } catch (err: any) {
-      setMessage({ text: err.message || 'Ошибка операции', kind: 'error' });
+      setMessage({ text: err.message || t('st.opError'), kind: 'error' });
     } finally {
       setBusy(null);
     }
@@ -155,8 +156,8 @@ export function SettingsTab({
       const state = getGoogleDriveState();
       setDriveState({ isConnected: state.isConnected, userEmail: state.userEmail });
       return result.success
-        ? { ok: true, text: 'Google Drive подключён' }
-        : { ok: false, text: result.error || 'Не удалось подключить Google Drive' };
+        ? { ok: true, text: t('st.driveConnected') }
+        : { ok: false, text: result.error || t('st.driveConnectFailed') };
     });
 
   const inviteCode = settings.inviteCode;
@@ -234,8 +235,8 @@ export function SettingsTab({
           </Field>
 
           <Field
-            label="Курсы валют"
-            hint="1 единица валюты в шекелях. Обновляйте вручную при значимых изменениях."
+            label={t('settings.rates')}
+            hint={t('st.ratesHint')}
           >
             <div className="space-y-2">
               {CURRENCY_LIST.filter((c) => c.code !== 'ILS').map((currency) => (
@@ -276,7 +277,7 @@ export function SettingsTab({
             </span>
             <div className="flex-1 min-w-0">
               <p className="text-xs font-black text-slate-800 dark:text-slate-100 truncate">
-                {settings.session?.displayName || 'Не выполнен вход'}
+                {settings.session?.displayName || t('st.notSignedIn')}
               </p>
               <p className="text-[10px] text-slate-400 font-medium truncate">
                 {settings.session?.email}
@@ -289,7 +290,7 @@ export function SettingsTab({
               className="px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-[10px] font-black flex-shrink-0 flex items-center gap-1"
             >
               <LogOut className="w-3 h-3" />
-              Выйти
+              {t('settings.signOut')}
             </button>
           </div>
 
@@ -302,12 +303,10 @@ export function SettingsTab({
               <Lock className="w-4 h-4 text-slate-400 mt-px flex-shrink-0" />
               <span>
                 <span className="block text-xs font-black text-slate-700 dark:text-slate-200">
-                  Код доступа
+                  {t('settings.pin')}
                 </span>
                 <span className="block text-[10px] text-slate-400 font-medium">
-                  {settings.pinEnabled
-                    ? 'Включён · сменить или отключить'
-                    : 'Выключен · защитить вход в приложение'}
+                  {settings.pinEnabled ? t('settings.pinOn') : t('settings.pinOff')}
                 </span>
               </span>
             </span>
@@ -318,7 +317,7 @@ export function SettingsTab({
                   : 'bg-slate-200 text-slate-500 dark:bg-slate-700'
               }`}
             >
-              {settings.pinEnabled ? 'вкл' : 'выкл'}
+              {settings.pinEnabled ? t('st.on') : t('st.off')}
             </span>
           </button>
 
@@ -331,10 +330,10 @@ export function SettingsTab({
           >
             <span>
               <span className="block text-xs font-black text-slate-700 dark:text-slate-200">
-                Показывать, кто добавил операцию
+                {t('settings.showAuthor')}
               </span>
               <span className="block text-[10px] text-slate-400 font-medium">
-                Метка автора в списке, фильтрах и отчётах
+                {t('st.authorHint')}
               </span>
             </span>
             <span
@@ -363,10 +362,10 @@ export function SettingsTab({
           >
             <span>
               <span className="block text-xs font-black text-slate-700 dark:text-slate-200">
-                Отделять НДС от доходов
+                {t('settings.vatSeparate')}
               </span>
               <span className="block text-[10px] text-slate-400 font-medium">
-                Налог уходит из доступной прибыли в обязательства сразу при внесении дохода
+                {t('st.vatToggleHint')}
               </span>
             </span>
             <span
@@ -405,10 +404,10 @@ export function SettingsTab({
               >
                 <span>
                   <span className="block text-xs font-black text-slate-700 dark:text-slate-200">
-                    Включать галочку по умолчанию
+                    {t('st.vatDefault')}
                   </span>
                   <span className="block text-[10px] text-slate-400 font-medium">
-                    Новый доход сразу с отделением НДС
+                    {t('st.vatDefaultHint')}
                   </span>
                 </span>
                 <span
@@ -428,9 +427,9 @@ export function SettingsTab({
                 <div className="flex items-start gap-2 p-2.5 rounded-2xl bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400">
                   <Percent className="w-3.5 h-3.5 mt-px flex-shrink-0" />
                   <p className="text-[10.5px] font-bold leading-relaxed">
-                    К выплате: {formatMoney(vatSummary.outstanding, settings.baseCurrency)} ·
-                    отложено {formatMoney(vatSummary.accrued, settings.baseCurrency)} ·
-                    выплачено {formatMoney(vatSummary.paid, settings.baseCurrency)}
+                    {t('st.vatDue')}: {formatMoney(vatSummary.outstanding, settings.baseCurrency)} ·{' '}
+                    {t('st.vatAccrued')} {formatMoney(vatSummary.accrued, settings.baseCurrency)} ·{' '}
+                    {t('st.vatPaid')} {formatMoney(vatSummary.paid, settings.baseCurrency)}
                   </p>
                 </div>
               )}
@@ -449,7 +448,7 @@ export function SettingsTab({
               onClick={() => setEditingAccount('NEW')}
               className="text-[10px] font-black text-sky-600 dark:text-sky-400"
             >
-              + Добавить
+              {t('st.addAccount')}
             </button>
           }
         />
@@ -467,13 +466,13 @@ export function SettingsTab({
               />
               <span className="flex-1 min-w-0">
                 <span className="block text-xs font-black text-slate-800 dark:text-slate-100 truncate">
-                  {account.name}
+                  {accountName(account, language)}
                   {account.isArchived && (
-                    <span className="text-[10px] text-slate-400 font-bold"> · в архиве</span>
+                    <span className="text-[10px] text-slate-400 font-bold"> · {t('st.archived')}</span>
                   )}
                 </span>
                 <span className="block text-[10px] text-slate-400 font-medium">
-                  {ACCOUNT_KIND_LABELS[account.kind]} · {account.currency}
+                  {accountKindLabel(account.kind, language)} · {account.currency}
                 </span>
               </span>
               <span className="text-xs font-black text-slate-700 dark:text-slate-200 tabular-nums">
@@ -495,10 +494,10 @@ export function SettingsTab({
         </span>
         <span className="flex-1 text-left">
           <span className="block text-xs font-black text-slate-800 dark:text-slate-100">
-            Категории и подкатегории
+            {t('settings.categories')}
           </span>
           <span className="block text-[10px] text-slate-400 font-medium">
-            {categories.filter((c) => !c.isHidden).length} активных · свои цвета и иконки
+            {categories.filter((c) => !c.isHidden).length} {t('st.categoriesHint')}
           </span>
         </span>
       </button>
@@ -515,7 +514,7 @@ export function SettingsTab({
                 className="text-[10px] font-black text-sky-600 dark:text-sky-400 flex items-center gap-1"
               >
                 <UserPlus className="w-3 h-3" />
-                Пригласить
+                {t('st.invite')}
               </button>
             ) : undefined
           }
@@ -537,15 +536,15 @@ export function SettingsTab({
                 <span className="block text-xs font-black text-slate-800 dark:text-slate-100 truncate">
                   {member.displayName}
                   {member.id === currentMemberId && (
-                    <span className="text-[10px] text-sky-500 font-bold"> · это устройство</span>
+                    <span className="text-[10px] text-sky-500 font-bold"> · {t('st.thisDevice')}</span>
                   )}
                 </span>
                 <span className="block text-[10px] text-slate-400 font-medium truncate">
                   {member.role === 'OWNER'
-                    ? 'Владелец'
+                    ? t('st.owner')
                     : member.role === 'VIEWER'
-                    ? 'Только просмотр'
-                    : 'Полный доступ'}
+                    ? t('st.viewer')
+                    : t('st.fullAccess')}
                   {member.email ? ` · ${member.email}` : ''}
                 </span>
               </button>
@@ -555,7 +554,7 @@ export function SettingsTab({
                   onClick={() => setCurrentMemberId(member.id)}
                   className="text-[10px] font-black text-slate-400 px-2 py-1 rounded-lg bg-slate-50 dark:bg-slate-800"
                 >
-                  Это я
+                  {t('st.itsMe')}
                 </button>
               )}
             </div>
@@ -563,9 +562,7 @@ export function SettingsTab({
 
           <div className="pt-2 border-t border-slate-50 dark:border-slate-800 space-y-2">
             <p className="text-[10px] text-slate-400 font-medium leading-relaxed">
-              Второй участник устанавливает приложение, на первом экране выбирает «У меня есть код
-              приглашения», вводит этот код и подключает тот же Google Drive. Перед этим сделайте
-              выгрузку копии — из неё партнёр получит профиль, категории и операции.
+              {t('st.partnerHint')}
             </p>
             <div className="flex gap-2">
               <div className="flex-1 px-3 py-2.5 rounded-2xl bg-slate-50 dark:bg-slate-800 text-center">
@@ -580,7 +577,7 @@ export function SettingsTab({
                   saveFinanceSettings({ inviteCode: code });
                 }}
                 className="px-3 rounded-2xl bg-slate-100 dark:bg-slate-800 text-slate-500"
-                title="Сгенерировать код"
+                title={t('st.generateCode')}
               >
                 <RefreshCw className="w-4 h-4" />
               </button>
@@ -602,7 +599,7 @@ export function SettingsTab({
             className="w-full py-2.5 rounded-2xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-[11px] font-black flex items-center justify-center gap-1.5"
           >
             <UserPlus className="w-3.5 h-3.5" />
-            Ввести код и присоединиться к профилю
+            {t('st.joinByCode')}
           </button>
         </Card>
       </div>
@@ -615,10 +612,10 @@ export function SettingsTab({
             <Bell className="w-4 h-4 text-slate-400 flex-shrink-0" />
             <div className="flex-1">
               <p className="text-xs font-black text-slate-800 dark:text-slate-100">
-                Лимиты и плановые платежи
+                {t('st.limitsAndPlans')}
               </p>
               <p className="text-[10px] text-slate-400 font-medium">
-                Оповещения при 80% и 100% лимита, напоминания о платежах
+                {t('st.limitsHint')}
               </p>
             </div>
             <button
@@ -627,13 +624,13 @@ export function SettingsTab({
                 run('notify', async () => {
                   const granted = await requestNotificationsPermission();
                   return granted
-                    ? { ok: true, text: 'Уведомления включены' }
-                    : { ok: false, text: 'Разрешение на уведомления не выдано' };
+                    ? { ok: true, text: t('st.notifEnabled') }
+                    : { ok: false, text: t('st.notifDenied') };
                 })
               }
               className="px-3 py-1.5 rounded-xl bg-sky-500 text-white text-[10px] font-black flex-shrink-0"
             >
-              {notificationsPermission() === 'granted' ? 'Включены' : 'Включить'}
+              {notificationsPermission() === 'granted' ? t('st.enabled') : t('st.enable')}
             </button>
           </div>
 
@@ -646,10 +643,10 @@ export function SettingsTab({
           >
             <span className="text-left">
               <span className="block text-xs font-black text-slate-700 dark:text-slate-200">
-                Плановые платежи — автоматически
+                {t('st.autoPlans')}
               </span>
               <span className="block text-[10px] text-slate-400 font-medium">
-                Иначе приложение спросит подтверждение в день платежа
+                {t('st.autoPlansHint')}
               </span>
             </span>
             <span
@@ -681,12 +678,12 @@ export function SettingsTab({
             >
               <ServerCog className="w-3.5 h-3.5 mt-px flex-shrink-0" />
               <p className="text-[10.5px] font-bold leading-relaxed">
-                Ключ Gemini на сервере:{' '}
+                {t('st.serverKey')}:{' '}
                 {!serverKey.serverKeyConfigured
-                  ? 'не найден'
+                  ? t('st.keyNotFound')
                   : serverKey.keyLooksValid
-                  ? 'настроен'
-                  : 'задан, но не похож на ключ Gemini'}
+                  ? t('st.keyConfigured')
+                  : t('st.keyWrongShape')}
                 <span className="font-medium opacity-80"> ({serverKey.environment})</span>
                 <br />
                 <span className="font-medium">{serverKey.hint}</span>
@@ -694,14 +691,13 @@ export function SettingsTab({
             </div>
           ) : (
             <p className="text-[10.5px] font-bold text-slate-400">
-              Проверяем ключ распознавания на сервере…
+              {t('st.serverKeyChecking')}
             </p>
           )}
 
           <p className="text-[10px] text-slate-400 font-medium flex items-start gap-1.5">
             <Mic className="w-3 h-3 mt-0.5 flex-shrink-0" />
-            Голосовой ввод работает независимо через распознавание речи браузера и не отправляет
-            аудио в Gemini.
+            {t('st.voiceNote')}
           </p>
         </Card>
       </div>
@@ -722,11 +718,10 @@ export function SettingsTab({
             </span>
             <div className="flex-1 min-w-0">
               <p className="text-xs font-black text-slate-800 dark:text-slate-100">
-                {driveState.isConnected ? 'Google Drive подключён' : 'Google Drive не подключён'}
+                {driveState.isConnected ? t('st.driveConnected') : t('st.driveNotConnected')}
               </p>
               <p className="text-[10px] text-slate-400 font-medium truncate">
-                {driveState.userEmail ||
-                  'Бэкап хранится в скрытой служебной папке приложения (appDataFolder)'}
+                {driveState.userEmail || t('st.driveFolderHint')}
               </p>
             </div>
             <button
@@ -744,16 +739,16 @@ export function SettingsTab({
               {busy === 'connect' ? (
                 <Loader2 className="w-3 h-3 animate-spin" />
               ) : driveState.isConnected ? (
-                'Отключить'
+                t('st.disconnect')
               ) : (
-                'Войти'
+                t('st.signIn')
               )}
             </button>
           </div>
 
           {settings.lastBackupDate && (
             <p className="text-[10px] text-slate-400 font-medium">
-              Последний бэкап: {new Date(settings.lastBackupDate).toLocaleString('ru-RU')}
+              {t('st.lastBackup')}: {new Date(settings.lastBackupDate).toLocaleString(numberLocale())}
             </p>
           )}
 
@@ -765,8 +760,8 @@ export function SettingsTab({
                 run('upload', async () => {
                   const result = await uploadFinanceBackup();
                   return result.success
-                    ? { ok: true, text: 'Бэкап выгружен в Google Drive' }
-                    : { ok: false, text: result.error || 'Ошибка выгрузки' };
+                    ? { ok: true, text: t('st.backupUploaded') }
+                    : { ok: false, text: result.error || t('st.uploadError') };
                 })
               }
               className="py-2.5 rounded-2xl bg-sky-50 dark:bg-sky-950/40 text-sky-600 dark:text-sky-400 text-[11px] font-black flex items-center justify-center gap-1.5 disabled:opacity-40"
@@ -776,7 +771,7 @@ export function SettingsTab({
               ) : (
                 <CloudUpload className="w-3.5 h-3.5" />
               )}
-              Выгрузить
+              {t('st.upload')}
             </button>
 
             <button
@@ -786,8 +781,8 @@ export function SettingsTab({
                 run('sync', async () => {
                   const result = await syncFinanceFromDrive();
                   return result.success
-                    ? { ok: true, text: `Синхронизировано записей: ${result.merged || 0}` }
-                    : { ok: false, text: result.error || 'Ошибка синхронизации' };
+                    ? { ok: true, text: `${t('st.syncedRecords')}: ${result.merged || 0}` }
+                    : { ok: false, text: result.error || t('st.syncError') };
                 })
               }
               className="py-2.5 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 text-[11px] font-black flex items-center justify-center gap-1.5 disabled:opacity-40"
@@ -797,7 +792,7 @@ export function SettingsTab({
               ) : (
                 <RefreshCw className="w-3.5 h-3.5" />
               )}
-              Синхронизировать
+              {t('st.sync')}
             </button>
 
             <button
@@ -807,14 +802,14 @@ export function SettingsTab({
                 run('restore', async () => {
                   const result = await restoreLatestFinanceBackup();
                   return result.success
-                    ? { ok: true, text: `Восстановлено из ${result.fileName}` }
-                    : { ok: false, text: result.error || 'Ошибка восстановления' };
+                    ? { ok: true, text: `${t('st.restoredFrom')} ${result.fileName}` }
+                    : { ok: false, text: result.error || t('st.restoreError') };
                 })
               }
               className="py-2.5 rounded-2xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-[11px] font-black flex items-center justify-center gap-1.5 disabled:opacity-40"
             >
               <Download className="w-3.5 h-3.5" />
-              Восстановить
+              {t('st.restore')}
             </button>
 
             <button
@@ -822,13 +817,13 @@ export function SettingsTab({
               onClick={() =>
                 run('local', async () => {
                   downloadFinanceBackupFile(await exportFinanceDatabaseJson());
-                  return { ok: true, text: 'Файл бэкапа сохранён' };
+                  return { ok: true, text: t('st.backupFileSaved') };
                 })
               }
               className="py-2.5 rounded-2xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-[11px] font-black flex items-center justify-center gap-1.5"
             >
               <Download className="w-3.5 h-3.5" />
-              Файл на устройство
+              {t('st.fileToDevice')}
             </button>
           </div>
 
@@ -836,7 +831,7 @@ export function SettingsTab({
 
           <label className="block">
             <span className="text-[10px] font-black text-slate-400 uppercase tracking-wide">
-              Восстановить из файла
+              {t('st.restoreFromFile')}
             </span>
             <input
               type="file"
@@ -847,8 +842,8 @@ export function SettingsTab({
                 await run('file-restore', async () => {
                   const result = await restoreFinanceFromLocalFile(file);
                   return result.success
-                    ? { ok: true, text: 'Данные восстановлены из файла' }
-                    : { ok: false, text: result.error || 'Ошибка восстановления' };
+                    ? { ok: true, text: t('st.restoredFromFile') }
+                    : { ok: false, text: result.error || t('st.restoreError') };
                 });
               }}
               className="mt-1 w-full text-[11px] text-slate-500 file:mr-3 file:py-2 file:px-3 file:rounded-xl file:border-0 file:bg-slate-100 dark:file:bg-slate-800 file:text-slate-600 file:text-[11px] file:font-black"
@@ -864,13 +859,13 @@ export function SettingsTab({
         className="w-full py-3 rounded-2xl bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 text-[11px] font-black flex items-center justify-center gap-2"
       >
         <Trash2 className="w-4 h-4" />
-        Удалить все финансовые данные
+        {t('st.deleteAllData')}
       </button>
 
       {showResetConfirm && (
         <ModalShell
-          title="Удалить все данные?"
-          subtitle="Операции, бюджеты, обязательства и счета будут стёрты с этого устройства"
+          title={t('st.deleteAllTitle')}
+          subtitle={t('st.deleteAllSub')}
           icon={<AlertTriangle className="w-5 h-5" />}
           onClose={() => setShowResetConfirm(false)}
           maxWidthClass="max-w-sm"
@@ -881,24 +876,23 @@ export function SettingsTab({
                 onClick={() => setShowResetConfirm(false)}
                 className="flex-1 py-3 rounded-2xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-xs font-black"
               >
-                Отмена
+                {t('common.cancel')}
               </button>
               <PrimaryButton
                 variant="danger"
                 onClick={async () => {
                   await clearAllFinanceData();
                   setShowResetConfirm(false);
-                  setMessage({ text: 'Данные удалены', kind: 'ok' });
+                  setMessage({ text: t('st.dataDeleted'), kind: 'ok' });
                 }}
               >
-                Удалить
+                {t('common.delete')}
               </PrimaryButton>
             </div>
           }
         >
           <p className="text-xs text-slate-500 font-medium leading-relaxed">
-            Бэкапы в Google Drive не удаляются — данные можно будет восстановить кнопкой
-            «Восстановить».
+            {t('st.deleteAllNote')}
           </p>
         </ModalShell>
       )}
@@ -907,7 +901,7 @@ export function SettingsTab({
         <JoinProfileModal
           session={settings.session}
           onClose={() => setIsJoining(false)}
-          onJoined={(name) => setMessage({ text: `Профиль «${name}» подключён`, kind: 'ok' })}
+          onJoined={(name) => setMessage({ text: `«${name}» — ${t('st.profileConnected')}`, kind: 'ok' })}
         />
       )}
 
@@ -944,6 +938,7 @@ export function SettingsTab({
  * the two that are impossible to guess from a failed login.
  */
 function DriveSetupStatus() {
+  const { t } = useT();
   const [origin, setOrigin] = useState('');
   useEffect(() => setOrigin(window.location.origin), []);
 
@@ -955,11 +950,10 @@ function DriveSetupStatus() {
       <div className="flex items-start gap-2 p-2.5 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400">
         <ServerCog className="w-3.5 h-3.5 mt-px flex-shrink-0" />
         <p className="text-[10.5px] font-bold leading-relaxed break-all">
-          Client ID загружен: …{clientId.slice(-32)}
+          {t('st.driveClientLoaded')}: …{clientId.slice(-32)}
           <br />
           <span className="font-medium">
-            Если окно Google не открывается — добавьте {origin} в «Authorized JavaScript
-            origins» этого OAuth-клиента.
+            {origin} — {t('st.driveOriginHint')}
           </span>
         </p>
       </div>
@@ -970,14 +964,12 @@ function DriveSetupStatus() {
     <div className="flex items-start gap-2 p-2.5 rounded-2xl bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400">
       <ServerCog className="w-3.5 h-3.5 mt-px flex-shrink-0" />
       <p className="text-[10.5px] font-bold leading-relaxed break-all">
-        {!clientId
-          ? 'Google Drive не настроен: этот деплой не видит NEXT_PUBLIC_GOOGLE_CLIENT_ID. Переменная попадает в приложение только при новой сборке — после добавления нужен передеплой.'
-          : 'NEXT_PUBLIC_GOOGLE_CLIENT_ID не похож на Client ID: он должен заканчиваться на .apps.googleusercontent.com.'}
+        {!clientId ? t('st.driveMissing') : t('st.driveWrongId')}
         {origin && (
           <>
             <br />
             <span className="font-medium">
-              Домен для «Authorized JavaScript origins»: {origin}
+              {t('st.driveOrigin')}: {origin}
             </span>
           </>
         )}
@@ -995,6 +987,7 @@ function AccountModal({
   baseCurrency: CurrencyCode;
   onClose: () => void;
 }) {
+  const { t, language } = useT();
   const [name, setName] = useState(account?.name || '');
   const [kind, setKind] = useState<AccountKind>(account?.kind || 'CARD');
   const [currency, setCurrency] = useState<CurrencyCode>(account?.currency || baseCurrency);
@@ -1003,7 +996,7 @@ function AccountModal({
   const [error, setError] = useState<string | null>(null);
 
   const handleSave = async () => {
-    if (!name.trim()) return setError('Введите название счёта');
+    if (!name.trim()) return setError(t('st.enterAccountName'));
 
     const payload = {
       name: name.trim(),
@@ -1021,14 +1014,14 @@ function AccountModal({
 
   return (
     <ModalShell
-      title={account ? 'Счёт' : 'Новый счёт'}
+      title={account ? t('st.account') : t('st.newAccount')}
       icon={<Wallet className="w-5 h-5" />}
       onClose={onClose}
       maxWidthClass="max-w-md"
       footer={
         <div className="space-y-2">
           {error && <p className="text-[11px] font-bold text-rose-500 text-center">{error}</p>}
-          <PrimaryButton onClick={handleSave}>Сохранить</PrimaryButton>
+          <PrimaryButton onClick={handleSave}>{t('common.save')}</PrimaryButton>
           {account && (
             <button
               type="button"
@@ -1038,13 +1031,13 @@ function AccountModal({
               }}
               className="w-full py-2.5 rounded-2xl text-[11px] font-black text-rose-500 bg-rose-50 dark:bg-rose-950/40"
             >
-              Удалить (или отправить в архив, если есть операции)
+              {t('st.deleteAccountHint')}
             </button>
           )}
         </div>
       }
     >
-      <Field label="Название">
+      <Field label={t('st.fieldName')}>
         <input
           type="text"
           value={name}
@@ -1055,22 +1048,22 @@ function AccountModal({
         />
       </Field>
 
-      <Field label="Тип счёта">
+      <Field label={t('st.fieldAccountKind')}>
         <select
           value={kind}
           onChange={(e) => setKind(e.target.value as AccountKind)}
           className={inputClass}
         >
-          {Object.entries(ACCOUNT_KIND_LABELS).map(([value, label]) => (
+          {(['CASH', 'CARD', 'BANK', 'SAVINGS'] as AccountKind[]).map((value) => (
             <option key={value} value={value}>
-              {label}
+              {accountKindLabel(value, language)}
             </option>
           ))}
         </select>
       </Field>
 
       <div className="grid grid-cols-2 gap-3">
-        <Field label="Валюта">
+        <Field label={t('st.fieldCurrency')}>
           <select
             value={currency}
             onChange={(e) => setCurrency(e.target.value as CurrencyCode)}
@@ -1083,7 +1076,7 @@ function AccountModal({
             ))}
           </select>
         </Field>
-        <Field label="Начальный баланс">
+        <Field label={t('st.fieldOpeningBalance')}>
           <input
             type="text"
             inputMode="decimal"
@@ -1094,7 +1087,7 @@ function AccountModal({
         </Field>
       </div>
 
-      <Field label="Цвет">
+      <Field label={t('st.fieldColor')}>
         <ColorPicker value={colorHex} onChange={setColorHex} />
       </Field>
     </ModalShell>
@@ -1110,6 +1103,7 @@ function MemberModal({
   memberCount: number;
   onClose: () => void;
 }) {
+  const { t } = useT();
   const [displayName, setDisplayName] = useState(member?.displayName || '');
   const [email, setEmail] = useState(member?.email || '');
   const [role, setRole] = useState(member?.role || 'FULL');
@@ -1121,7 +1115,7 @@ function MemberModal({
   const [error, setError] = useState<string | null>(null);
 
   const handleSave = async () => {
-    if (!displayName.trim()) return setError('Введите имя участника');
+    if (!displayName.trim()) return setError(t('st.enterMemberName'));
 
     const payload = {
       displayName: displayName.trim(),
@@ -1140,15 +1134,15 @@ function MemberModal({
 
   return (
     <ModalShell
-      title={member ? 'Участник профиля' : 'Пригласить участника'}
-      subtitle={member ? undefined : 'Второй участник видит те же операции, бюджеты и счета'}
+      title={member ? t('st.member') : t('st.inviteMember')}
+      subtitle={member ? undefined : t('st.inviteMemberSub')}
       icon={<Users className="w-5 h-5" />}
       onClose={onClose}
       maxWidthClass="max-w-md"
       footer={
         <div className="space-y-2">
           {error && <p className="text-[11px] font-bold text-rose-500 text-center">{error}</p>}
-          <PrimaryButton onClick={handleSave}>Сохранить</PrimaryButton>
+          <PrimaryButton onClick={handleSave}>{t('common.save')}</PrimaryButton>
           {member && member.role !== 'OWNER' && (
             <button
               type="button"
@@ -1158,24 +1152,24 @@ function MemberModal({
               }}
               className="w-full py-2.5 rounded-2xl text-[11px] font-black text-rose-500 bg-rose-50 dark:bg-rose-950/40"
             >
-              Удалить участника
+              {t('st.deleteMember')}
             </button>
           )}
         </div>
       }
     >
-      <Field label="Имя">
+      <Field label={t('st.fieldMemberName')}>
         <input
           type="text"
           value={displayName}
           onChange={(e) => setDisplayName(e.target.value)}
-          placeholder="Супруг(а)"
+          placeholder={t('st.spousePlaceholder')}
           className={inputClass}
           autoFocus
         />
       </Field>
 
-      <Field label="Email" hint="Используется для приглашения на второе устройство">
+      <Field label="Email" hint={t('st.emailHint')}>
         <input
           type="email"
           value={email}
@@ -1185,20 +1179,20 @@ function MemberModal({
         />
       </Field>
 
-      <Field label="Права доступа">
+      <Field label={t('st.fieldRights')}>
         <select
           value={role}
           onChange={(e) => setRole(e.target.value as ProfileMember['role'])}
           className={inputClass}
           disabled={member?.role === 'OWNER'}
         >
-          <option value="FULL">Полный доступ</option>
-          <option value="VIEWER">Только просмотр</option>
-          {member?.role === 'OWNER' && <option value="OWNER">Владелец</option>}
+          <option value="FULL">{t('st.fullAccess')}</option>
+          <option value="VIEWER">{t('st.viewer')}</option>
+          {member?.role === 'OWNER' && <option value="OWNER">{t('st.owner')}</option>}
         </select>
       </Field>
 
-      <Field label="Цвет метки автора">
+      <Field label={t('st.fieldAuthorColor')}>
         <ColorPicker value={colorHex} onChange={setColorHex} />
       </Field>
 
@@ -1209,10 +1203,10 @@ function MemberModal({
       >
         <span className="text-left">
           <span className="block text-xs font-black text-slate-700 dark:text-slate-200">
-            Уведомлять о крупных операциях
+            {t('st.notifyLarge')}
           </span>
           <span className="block text-[10px] text-slate-400 font-medium">
-            Приходит на устройство этого участника
+            {t('st.notifyLargeHint')}
           </span>
         </span>
         <span
@@ -1229,7 +1223,7 @@ function MemberModal({
       </button>
 
       {notify && (
-        <Field label="Порог крупной операции">
+        <Field label={t('st.largeThreshold')}>
           <div className="flex items-center gap-2">
             <Coins className="w-4 h-4 text-slate-400" />
             <input
