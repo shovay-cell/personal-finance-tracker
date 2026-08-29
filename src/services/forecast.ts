@@ -1,3 +1,4 @@
+import { tr } from '@/i18n/t';
 import {
   CashFlowForecast,
   CurrencyCode,
@@ -116,7 +117,7 @@ export function forecastCashFlow(input: {
     const list = eventsByDate.get(installment.dueDate) || [];
     list.push({
       date: installment.dueDate,
-      title: debt ? `${debt.title} · ${installment.index}` : 'Платёж по рассрочке',
+      title: debt ? `${debt.title} · ${installment.index}` : tr('fc.installmentPayment'),
       amount: -Math.round(base * 100) / 100,
       planKind: 'PAYMENT',
       categoryId: debt?.categoryId || '',

@@ -1,6 +1,7 @@
 'use client';
 
 import { FinanceBackupPayload, GoogleDriveBackupFile } from '@/types';
+import { tr } from '@/i18n/t';
 import {
   authenticateGoogleDrive,
   disconnectGoogleDrive,
@@ -36,7 +37,7 @@ export async function uploadFinanceBackup(): Promise<{
 }> {
   const { isConnected, accessToken } = getGoogleDriveState();
   if (!isConnected || !accessToken) {
-    return { success: false, error: 'Google Drive не подключен. Нажмите «Войти через Google».' };
+    return { success: false, error: tr('drive.notConnected') };
   }
 
   try {
@@ -45,7 +46,7 @@ export async function uploadFinanceBackup(): Promise<{
 
     const metadata = {
       name: fileName,
-      description: 'Резервная копия финансового трекера FinTrack (общая для семейного профиля)',
+      description: tr('drive.backupDescription'),
       parents: ['appDataFolder'],
       mimeType: 'application/json',
     };
@@ -77,7 +78,10 @@ export async function uploadFinanceBackup(): Promise<{
 
     if (!response.ok) {
       const err = await response.json().catch(() => ({}));
-      return { success: false, error: err.error?.message || `Ошибка Google Drive (${response.status})` };
+      return {
+        success: false,
+        error: err.error?.message || `${tr('drive.error')} (${response.status})`,
+      };
     }
 
     const data = await response.json();
@@ -88,7 +92,7 @@ export async function uploadFinanceBackup(): Promise<{
 
     return { success: true, fileId: data.id };
   } catch (err: any) {
-    return { success: false, error: err.message || 'Не удалось выгрузить бэкап в Google Drive' };
+    return { success: false, error: err.message || tr('drive.uploadFailed') };
   }
 }
 
@@ -99,7 +103,7 @@ export async function listFinanceBackups(): Promise<{
 }> {
   const { isConnected, accessToken } = getGoogleDriveState();
   if (!isConnected || !accessToken) {
-    return { success: false, error: 'Google Drive не авторизован' };
+    return { success: false, error: tr('drive.notAuthorized') };
   }
 
   try {
@@ -110,24 +114,27 @@ export async function listFinanceBackups(): Promise<{
     const res = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
-      return { success: false, error: err.error?.message || `Ошибка списка файлов (${res.status})` };
+      return {
+        success: false,
+        error: err.error?.message || `${tr('drive.listError')} (${res.status})`,
+      };
     }
 
     const data = await res.json();
     return { success: true, files: (data.files || []).filter(isFinanceBackup) };
   } catch (err: any) {
-    return { success: false, error: err.message || 'Сбой запроса к Google Drive' };
+    return { success: false, error: err.message || tr('drive.requestFailed') };
   }
 }
 
 async function downloadBackupText(fileId: string): Promise<{ text?: string; error?: string }> {
   const { accessToken } = getGoogleDriveState();
-  if (!accessToken) return { error: 'Google Drive не авторизован' };
+  if (!accessToken) return { error: tr('drive.notAuthorized') };
 
   const res = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`, {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
-  if (!res.ok) return { error: `Не удалось скачать файл из Google Drive (${res.status})` };
+  if (!res.ok) return { error: `${tr('drive.downloadFailed')} (${res.status})` };
   return { text: await res.text() };
 }
 
@@ -152,7 +159,7 @@ export async function syncFinanceFromDrive(): Promise<{
 }> {
   const list = await listFinanceBackups();
   if (!list.success || !list.files || list.files.length === 0) {
-    return { success: false, error: 'В Google Drive нет ни одного бэкапа FinTrack' };
+    return { success: false, error: tr('drive.noBackups') };
   }
 
   const latest = list.files[0];
@@ -170,7 +177,7 @@ export async function restoreLatestFinanceBackup(): Promise<{
 }> {
   const list = await listFinanceBackups();
   if (!list.success || !list.files || list.files.length === 0) {
-    return { success: false, error: 'В Google Drive нет ни одного бэкапа FinTrack' };
+    return { success: false, error: tr('drive.noBackups') };
   }
 
   const latest = list.files[0];
@@ -185,10 +192,10 @@ export async function restoreFinanceFromLocalFile(
     const reader = new FileReader();
     reader.onload = async (e) => {
       const text = e.target?.result as string;
-      if (!text) return resolve({ success: false, error: 'Файл пуст' });
+      if (!text) return resolve({ success: false, error: tr('drive.emptyFile') });
       resolve(await importFinanceDatabaseJson(text));
     };
-    reader.onerror = () => resolve({ success: false, error: 'Ошибка чтения файла' });
+    reader.onerror = () => resolve({ success: false, error: tr('drive.readError') });
     reader.readAsText(file);
   });
 }
@@ -224,7 +231,7 @@ export async function fetchProfileBackupByCode(code: string): Promise<{
 }> {
   const normalized = code.trim().toUpperCase();
   if (normalized.length < 4) {
-    return { success: false, error: 'Введите код приглашения из профиля партнёра' };
+    return { success: false, error: tr('drive.enterCode') };
   }
 
   const list = await listFinanceBackups();
@@ -232,7 +239,7 @@ export async function fetchProfileBackupByCode(code: string): Promise<{
     return {
       success: false,
       error:
-        'В этом Google Drive нет резервной копии FinTrack. Убедитесь, что вошли в тот же Google-аккаунт, что и партнёр, и что он сделал выгрузку.',
+        tr('drive.noBackupHere'),
     };
   }
 
@@ -242,7 +249,7 @@ export async function fetchProfileBackupByCode(code: string): Promise<{
   try {
     const payload = JSON.parse(text) as FinanceBackupPayload;
     if (payload.appName !== 'FinTrack') {
-      return { success: false, error: 'Файл в Drive не является резервной копией FinTrack' };
+      return { success: false, error: tr('drive.notABackupFile') };
     }
 
     const expected = (payload.settings?.inviteCode || '').trim().toUpperCase();
@@ -250,16 +257,16 @@ export async function fetchProfileBackupByCode(code: string): Promise<{
       return {
         success: false,
         error:
-          'В профиле партнёра ещё не создан код приглашения. Попросите его открыть Настройки → Семейный доступ и сгенерировать код.',
+          tr('drive.noCodeYet'),
       };
     }
 
     if (expected !== normalized) {
-      return { success: false, error: 'Код не совпадает с кодом этого профиля' };
+      return { success: false, error: tr('drive.codeMismatch') };
     }
 
     return { success: true, payload, json: text, fileName: list.files[0].name };
   } catch (err: any) {
-    return { success: false, error: err.message || 'Не удалось прочитать резервную копию' };
+    return { success: false, error: err.message || tr('drive.readBackupFailed') };
   }
 }

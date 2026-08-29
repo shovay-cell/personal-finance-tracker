@@ -15,6 +15,7 @@ import {
 import { signInWithGoogle } from '@/services/auth';
 import { markSessionUnlocked } from './../services/security/session-lock';
 import { useT } from '@/i18n/context';
+import { seededName } from '@/i18n/categories';
 import { ModalShell, PrimaryButton, inputClass } from './ui';
 
 const KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '', '0', 'DEL'];
@@ -85,7 +86,7 @@ export function PinLockScreen({
   settings: FinanceSettings;
   onUnlocked: () => void;
 }) {
-  const { t } = useT();
+  const { t, language } = useT();
   const [pin, setPin] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [isRecovering, setIsRecovering] = useState(false);
@@ -209,7 +210,7 @@ export function PinLockScreen({
         </div>
         <h2 className="text-lg font-black text-slate-900 dark:text-slate-100">{t('pin.enterCode')}</h2>
         <p className="text-[11px] text-slate-400 font-medium">
-          {settings.profileName}
+          {seededName('profile', settings.profileName, language)}
           {session?.email ? ` · ${session.email}` : ''}
         </p>
 

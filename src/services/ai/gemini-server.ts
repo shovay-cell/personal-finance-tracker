@@ -115,7 +115,7 @@ export async function analyzeImageWithGemini(input: {
   return {
     ok: false,
     error: 'GEMINI_API_ERROR',
-    message: `Ошибка обращения к Gemini API: ${lastError}`,
+    message: `Gemini API request failed: ${lastError}`,
     status: lastStatus,
   };
 }

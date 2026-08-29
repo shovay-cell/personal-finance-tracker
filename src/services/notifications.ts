@@ -3,6 +3,7 @@
 import { BudgetProgress, PlannedPayment, ProfileMember, Transaction } from '@/types';
 import { formatMoney } from './analytics';
 import { describeRecurrence, plannedPaymentState } from './planned';
+import { tr } from '@/i18n/t';
 
 const NOTIFIED_KEY = 'fintrack_notified_keys';
 
@@ -76,8 +77,10 @@ export function checkBudgetAlerts(
     }-${crossed}`;
 
     notify(
-      crossed >= 100 ? '🚨 Лимит исчерпан' : '⚠️ Лимит почти исчерпан',
-      `${item.categoryName}: ${formatMoney(item.spent, item.budget.currency)} из ${formatMoney(
+      crossed >= 100 ? tr('svc.limitReached') : tr('svc.limitClose'),
+      `${item.categoryName}: ${formatMoney(item.spent, item.budget.currency)} ${tr(
+        'svc.of'
+      )} ${formatMoney(
         item.effectiveLimit,
         item.budget.currency
       )} (${item.percent.toFixed(0)}%)`,
@@ -93,10 +96,10 @@ export function checkPlannedPaymentReminders(payments: PlannedPayment[]): void {
 
     if (state.isOverdue) {
       notify(
-        '⏰ Просроченный платёж',
-        `${payment.title} — ${formatMoney(payment.amount, payment.currency)}, срок был ${
-          payment.nextDueDate
-        }`,
+        tr('svc.overduePayment'),
+        `${payment.title} — ${formatMoney(payment.amount, payment.currency)}, ${tr(
+          'svc.dueWas'
+        )} ${payment.nextDueDate}`,
         `planned-overdue-${payment.id}-${payment.nextDueDate}`
       );
       continue;
@@ -104,10 +107,10 @@ export function checkPlannedPaymentReminders(payments: PlannedPayment[]): void {
 
     if (state.isWithinReminderWindow) {
       notify(
-        '📅 Скоро платёж',
-        `${payment.title} — ${formatMoney(payment.amount, payment.currency)} через ${
+        tr('svc.paymentSoon'),
+        `${payment.title} — ${formatMoney(payment.amount, payment.currency)} ${tr('svc.inDays')} ${
           state.daysUntilDue
-        } дн. (${describeRecurrence(payment)})`,
+        } ${tr('svc.daysShort')} (${describeRecurrence(payment)})`,
         `planned-soon-${payment.id}-${payment.nextDueDate}`
       );
     }
@@ -129,8 +132,11 @@ export function checkLargeTransactionAlert(
 
   const author = members.find((m) => m.id === transaction.authorId);
   notify(
-    '💸 Крупная операция',
-    `${author?.displayName || 'Партнёр'}: ${formatMoney(transaction.amount, transaction.currency)}${
+    tr('svc.largeOperation'),
+    `${author?.displayName || tr('svc.partner')}: ${formatMoney(
+      transaction.amount,
+      transaction.currency
+    )}${
       transaction.merchant ? ` · ${transaction.merchant}` : ''
     }`,
     `large-tx-${transaction.id}`

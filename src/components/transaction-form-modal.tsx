@@ -51,6 +51,7 @@ import { CURRENCIES } from '@/constants/categories';
 import { useT } from '@/i18n/context';
 import type { TranslationKey } from '@/i18n/dictionary';
 import { unitNoun } from '@/i18n/plurals';
+import { seededName } from '@/i18n/categories';
 import { translate } from '@/i18n/dictionary';
 import { getActiveLanguage } from '@/i18n/runtime';
 import { netFromGross, vatFromGross } from '@/services/vat';
@@ -152,7 +153,7 @@ export function TransactionFormModal({
   const [firstPaymentPaid, setFirstPaymentPaid] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [keyError, setKeyError] = useState<string | null>(null);
-  const { t } = useT();
+  const { t, language } = useT();
   const [lastScanFile, setLastScanFile] = useState<File | null>(null);
 
   const rootCategories = useMemo(
@@ -788,7 +789,7 @@ export function TransactionFormModal({
           >
             {members.map((member) => (
               <option key={member.id} value={member.id}>
-                {member.displayName}
+                {seededName('owner', member.displayName, language)}
               </option>
             ))}
           </select>

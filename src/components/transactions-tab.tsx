@@ -29,7 +29,7 @@ import {
   sumBase,
 } from '@/services/analytics';
 import { useT } from '@/i18n/context';
-import { accountKindLabel, accountName, categoryName } from '@/i18n/categories';
+import { accountKindLabel, accountName, categoryName, seededName } from '@/i18n/categories';
 import { Card, EmptyState, SectionTitle, SegmentedControl, inputClass } from './ui';
 
 interface TransactionsTabProps {
@@ -196,7 +196,7 @@ export function TransactionsTab({
             <option value="ALL">{t('tx.allAuthors')}</option>
             {members.map((member) => (
               <option key={member.id} value={member.id}>
-                {member.displayName}
+                {seededName('owner', member.displayName, language)}
               </option>
             ))}
           </select>
@@ -304,7 +304,7 @@ export function TransactionsTab({
                                 color: author.colorHex,
                               }}
                             >
-                              {author.displayName}
+                              {seededName('owner', author.displayName, language)}
                             </span>
                           )}
                         </span>

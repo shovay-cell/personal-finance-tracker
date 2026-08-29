@@ -1,3 +1,4 @@
+import { tr } from '@/i18n/t';
 import {
   CurrencyCode,
   DebtInstallment,
@@ -127,7 +128,7 @@ export function upcomingByMonth(input: {
     items.push({
       id: row.obligation.id,
       date: row.obligation.dueDate,
-      title: row.obligation.payeeLabel || 'Чек на предъявителя',
+      title: row.obligation.payeeLabel || tr('rp.bearerCheque'),
       amount: input.toBase(row.outstandingAmount, row.obligation.currency),
       source: 'CHEQUE',
       isOverdue: row.status === 'OVERDUE',

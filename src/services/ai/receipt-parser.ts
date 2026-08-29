@@ -11,6 +11,7 @@ import {
   ReceiptLineItem,
 } from '@/types';
 import { RECEIPT_CATEGORY_HINTS } from '@/constants/categories';
+import { tr } from '@/i18n/t';
 
 const GEMINI_KEY_STORAGE_KEYS = ['fintrack_gemini_api_key', 'gemini_api_key'];
 
@@ -74,7 +75,7 @@ export function readFileAsDataUrl(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => resolve(String(reader.result || ''));
-    reader.onerror = () => reject(new Error('Не удалось прочитать файл'));
+    reader.onerror = () => reject(new Error(tr('scan.readFileFailed')));
     reader.readAsDataURL(file);
   });
 }
@@ -299,7 +300,7 @@ function classifyServerError(error?: string, message?: string): ReceiptScanError
   if (error === 'NO_API_KEY') {
     return new ReceiptScanError(
       'NO_API_KEY',
-      'Ключ Gemini не настроен. Вставьте свой ключ — он сохранится только на этом устройстве.'
+      tr('scan.noKey')
     );
   }
 
@@ -308,27 +309,27 @@ function classifyServerError(error?: string, message?: string): ReceiptScanError
   if (/ACCESS_TOKEN_TYPE_UNSUPPORTED/i.test(text)) {
     return new ReceiptScanError(
       'KEY_TYPE_UNSUPPORTED',
-      'Google не принимает этот ключ для Gemini API (ACCESS_TOKEN_TYPE_UNSUPPORTED). Создайте ключ в проекте, где включён Generative Language API, и попробуйте снова.'
+      tr('scan.wrongKeyType')
     );
   }
 
   if (/\b(400|401|403)\b/.test(text) || /API[_ ]?key not valid|invalid.*key|PERMISSION_DENIED/i.test(text)) {
     return new ReceiptScanError(
       'INVALID_KEY',
-      'Google отклонил ключ Gemini. Проверьте, что ключ активен и скопирован целиком.'
+      tr('scan.keyRejected')
     );
   }
 
   if (/\b429\b/.test(text) || /quota|RESOURCE_EXHAUSTED/i.test(text)) {
     return new ReceiptScanError(
       'QUOTA',
-      'Исчерпан лимит запросов к Gemini. Попробуйте позже или используйте свой ключ.'
+      tr('scan.quota')
     );
   }
 
   return new ReceiptScanError(
     'MODEL_ERROR',
-    message || 'Gemini не смог обработать снимок. Попробуйте переснять чек при хорошем освещении.'
+    message || tr('scan.badImage')
   );
 }
 
@@ -346,7 +347,7 @@ export async function analyzeReceiptWithAI(
   if (typeof navigator !== 'undefined' && navigator.onLine === false) {
     throw new ReceiptScanError(
       'OFFLINE',
-      'Нет подключения к сети. Запишите операцию вручную — чек можно распознать позже.'
+      tr('scan.offline')
     );
   }
 
@@ -430,13 +431,13 @@ export async function analyzeReceiptWithAI(
   if (routeUnreachable) {
     throw new ReceiptScanError(
       'OFFLINE',
-      'Сервер распознавания недоступен. Проверьте соединение и попробуйте ещё раз.'
+      tr('scan.serverDown')
     );
   }
 
   throw new ReceiptScanError(
     'UNKNOWN',
-    'Не удалось распознать чек. Попробуйте ещё раз или запишите операцию вручную.'
+    tr('scan.failed')
   );
 }
 
@@ -507,7 +508,7 @@ export async function analyzeStatementWithAI(
   const apiKey = (userKey || getStoredGeminiKey() || '').trim();
 
   if (typeof navigator !== 'undefined' && navigator.onLine === false) {
-    throw new ReceiptScanError('OFFLINE', 'Нет подключения к сети — список нельзя распознать.');
+    throw new ReceiptScanError('OFFLINE', tr('scan.offlineList'));
   }
 
   // Statements are dense text: keep more pixels than a receipt scan does.
@@ -524,7 +525,7 @@ export async function analyzeStatementWithAI(
   if (!res) {
     throw new ReceiptScanError(
       'OFFLINE',
-      'Сервер распознавания недоступен. Проверьте соединение и попробуйте ещё раз.'
+      tr('scan.serverDown')
     );
   }
 
@@ -535,7 +536,7 @@ export async function analyzeStatementWithAI(
     if (parsed.rows.length === 0) {
       throw new ReceiptScanError(
         'MODEL_ERROR',
-        'В списке не распознано ни одной операции. Снимите список крупнее и без бликов.'
+        tr('scan.emptyList')
       );
     }
     return parsed;

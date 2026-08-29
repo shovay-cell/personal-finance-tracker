@@ -1,4 +1,5 @@
 import Dexie, { Table } from 'dexie';
+import { tr } from '@/i18n/t';
 import {
   Budget,
   CurrencyCode,
@@ -396,11 +397,11 @@ export async function updateCategory(
  */
 export async function deleteCategory(id: string): Promise<{ deleted: boolean; reason?: string }> {
   const category = await financeDb.categories.get(id);
-  if (!category) return { deleted: false, reason: 'Категория не найдена' };
+  if (!category) return { deleted: false, reason: tr('dbx.categoryNotFound') };
 
   if (category.isSystem) {
     await financeDb.categories.update(id, { isHidden: true });
-    return { deleted: false, reason: 'Системная категория скрыта, а не удалена' };
+    return { deleted: false, reason: tr('dbx.systemHidden') };
   }
 
   const inUse =
@@ -409,7 +410,10 @@ export async function deleteCategory(id: string): Promise<{ deleted: boolean; re
 
   if (inUse > 0) {
     await financeDb.categories.update(id, { isHidden: true });
-    return { deleted: false, reason: `Категория используется в ${inUse} операциях — скрыта` };
+    return {
+      deleted: false,
+      reason: `${tr('dbx.categoryInUseA')} ${inUse} ${tr('dbx.categoryInUseB')}`,
+    };
   }
 
   const children = await financeDb.categories.where('parentId').equals(id).toArray();
@@ -647,7 +651,7 @@ export async function importFinanceDatabaseJson(
   try {
     const data = JSON.parse(jsonString) as FinanceBackupPayload;
     if (data.appName !== 'FinTrack') {
-      return { success: false, error: 'Файл не является бэкапом финансового трекера' };
+      return { success: false, error: tr('dbx.notABackup') };
     }
 
     await financeDb.transaction(
@@ -689,7 +693,7 @@ export async function importFinanceDatabaseJson(
 
     return { success: true };
   } catch (err: any) {
-    return { success: false, error: err.message || 'Не удалось прочитать файл бэкапа' };
+    return { success: false, error: err.message || tr('dbx.readFailed') };
   }
 }
 
@@ -704,7 +708,7 @@ export async function mergeFinanceDatabaseJson(
   try {
     const data = JSON.parse(jsonString) as FinanceBackupPayload;
     if (data.appName !== 'FinTrack') {
-      return { success: false, error: 'Файл не является бэкапом финансового трекера' };
+      return { success: false, error: tr('dbx.notABackup') };
     }
 
     let merged = 0;
@@ -737,7 +741,7 @@ export async function mergeFinanceDatabaseJson(
 
     return { success: true, merged };
   } catch (err: any) {
-    return { success: false, error: err.message || 'Не удалось прочитать файл бэкапа' };
+    return { success: false, error: err.message || tr('dbx.readFailed') };
   }
 }
 
@@ -1021,7 +1025,7 @@ export async function payDebtInstallment(
     categoryId: debt.categoryId,
     accountId: debt.accountId,
     date,
-    note: `${debt.title} · платёж ${installment.index}/${await financeDb.debtInstallments
+    note: `${debt.title} · ${tr('dbx.payment')} ${installment.index}/${await financeDb.debtInstallments
       .where('debtId')
       .equals(debt.id)
       .count()}`,

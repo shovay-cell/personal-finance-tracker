@@ -265,7 +265,7 @@ export function OnboardingWizard({
                         {t('ob.yourProfit')}: {formatMoney(netFromGross(1000, rate), currency)}
                       </span>
                       <span className="text-amber-600 dark:text-amber-400">
-                        НДС: {formatMoney(vatFromGross(1000, rate), currency)}
+                        {t('settings.vat')}: {formatMoney(vatFromGross(1000, rate), currency)}
                       </span>
                     </div>
                     <p className="text-[10px] text-slate-400 font-medium leading-relaxed">
@@ -440,7 +440,7 @@ export function OnboardingWizard({
           onJoined={(profileName) => {
             if (hasJoined) return;
             setHasJoined(true);
-            onFinish(`Вы в профиле «${profileName}»`);
+            onFinish(`${t('ob.youAreIn')} «${profileName}»`);
           }}
         />
       )}

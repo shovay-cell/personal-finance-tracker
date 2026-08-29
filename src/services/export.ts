@@ -11,7 +11,14 @@ import {
   Transaction,
 } from '@/types';
 import { formatMoney, DateRange } from './analytics';
-import { payeeKindLabel } from '@/constants/categories';
+import { tr } from '@/i18n/t';
+import {
+  accountName as localizedAccountName,
+  categoryName as localizedCategoryName,
+  obligationStatusLabel,
+  payeeKindLabelI18n,
+} from '@/i18n/categories';
+import { getActiveLanguage, numberLocale } from '@/i18n/runtime';
 
 function downloadBlob(content: BlobPart, fileName: string, mimeType: string) {
   const blob = new Blob([content], { type: mimeType });
@@ -42,32 +49,39 @@ export function exportTransactionsCsv(
   members: ProfileMember[],
   range: DateRange
 ): void {
-  const categoryName = (id?: string) => categories.find((c) => c.id === id)?.name || '';
-  const accountName = (id: string) => accounts.find((a) => a.id === id)?.name || '';
+  const language = getActiveLanguage();
+  const categoryName = (id?: string) => {
+    const category = categories.find((c) => c.id === id);
+    return category ? localizedCategoryName(category, language) : '';
+  };
+  const accountName = (id: string) => {
+    const account = accounts.find((a) => a.id === id);
+    return account ? localizedAccountName(account, language) : '';
+  };
   const memberName = (id: string) => members.find((m) => m.id === id)?.displayName || '';
 
   const rows: (string | number | undefined)[][] = [
     [
-      'Дата',
-      'Тип',
-      'Сумма',
-      'Валюта',
-      'Сумма в базовой валюте',
-      'Курс',
-      'Категория',
-      'Подкатегория',
-      'Счёт',
-      'Продавец',
-      'Заметка',
-      'Автор',
-      'Источник',
+      tr('ex.date'),
+      tr('ex.type'),
+      tr('ex.amount'),
+      tr('ex.currency'),
+      tr('ex.baseAmount'),
+      tr('ex.rate'),
+      tr('ex.category'),
+      tr('ex.subcategory'),
+      tr('ex.account'),
+      tr('ex.merchant'),
+      tr('ex.note'),
+      tr('ex.author'),
+      tr('ex.source'),
     ],
     ...transactions
       .slice()
       .sort((a, b) => a.date.localeCompare(b.date))
       .map((t) => [
         t.date,
-        t.kind === 'EXPENSE' ? 'Расход' : 'Доход',
+        tr(t.kind === 'EXPENSE' ? 'common.expense' : 'common.income'),
         t.amount,
         t.currency,
         t.baseAmount,
@@ -92,26 +106,26 @@ export function exportTransactionsCsv(
 export function exportObligationsCsv(rows: ObligationWithBalance[]): void {
   const csvRows: (string | number | undefined)[][] = [
     [
-      'Дата выдачи',
-      'Плановая дата закрытия',
-      'Кому/на что выписано',
-      'Уточнение',
-      'Сумма',
-      'Валюта',
-      'Погашено',
-      'Остаток',
-      'Статус',
+      tr('ex.issueDate'),
+      tr('ex.dueDate'),
+      tr('ex.payee'),
+      tr('ex.clarification'),
+      tr('ex.amount'),
+      tr('ex.currency'),
+      tr('ex.settled'),
+      tr('ex.remainder'),
+      tr('ex.status'),
     ],
     ...rows.map((r) => [
       r.obligation.issueDate,
       r.obligation.dueDate || '',
-      payeeKindLabel(r.obligation.payeeKind),
+      payeeKindLabelI18n(r.obligation.payeeKind, getActiveLanguage()),
       r.obligation.payeeLabel,
       r.obligation.amount,
       r.obligation.currency,
       r.settledAmount,
       r.outstandingAmount,
-      OBLIGATION_STATUS_LABELS[r.status],
+      obligationStatusLabel(r.status, getActiveLanguage()),
     ]),
   ];
 
@@ -121,13 +135,6 @@ export function exportObligationsCsv(rows: ObligationWithBalance[]): void {
     'text/csv;charset=utf-8;'
   );
 }
-
-export const OBLIGATION_STATUS_LABELS: Record<string, string> = {
-  ISSUED: 'Выдан',
-  PARTIALLY_SETTLED: 'Частично закрыт',
-  SETTLED: 'Закрыт',
-  OVERDUE: 'Просрочен',
-};
 
 interface PdfReportInput {
   title: string;
@@ -163,9 +170,11 @@ export function exportReportPdf(input: PdfReportInput): void {
 
   const breakdownTable = (rows: CategoryBreakdownRow[]) =>
     rows.length === 0
-      ? '<p class="muted">Нет операций за период</p>'
+      ? `<p class="muted">${tr('ex.noOperations')}</p>`
       : `<table>
-          <thead><tr><th>Категория</th><th>Операций</th><th>Доля</th><th class="num">Сумма</th></tr></thead>
+          <thead><tr><th>${tr('ex.category')}</th><th>${tr('ex.operations')}</th><th>${tr(
+          'ex.share'
+        )}</th><th class="num">${tr('ex.amount')}</th></tr></thead>
           <tbody>
             ${rows
               .map(
@@ -182,9 +191,13 @@ export function exportReportPdf(input: PdfReportInput): void {
 
   const budgetTable =
     budgets.length === 0
-      ? '<p class="muted">Лимиты не заданы</p>'
+      ? `<p class="muted">${tr('ex.noLimits')}</p>`
       : `<table>
-          <thead><tr><th>Бюджет</th><th class="num">План</th><th class="num">Факт</th><th class="num">Остаток</th><th>Исполнение</th></tr></thead>
+          <thead><tr><th>${tr('ex.budget')}</th><th class="num">${tr(
+          'ex.plan'
+        )}</th><th class="num">${tr('ex.fact')}</th><th class="num">${tr(
+          'ex.remainder'
+        )}</th><th>${tr('ex.execution')}</th></tr></thead>
           <tbody>
             ${budgets
               .map(
@@ -202,21 +215,27 @@ export function exportReportPdf(input: PdfReportInput): void {
 
   const obligationsTable =
     obligations.length === 0
-      ? '<p class="muted">Открытых обязательств нет</p>'
+      ? `<p class="muted">${tr('ex.noObligations')}</p>`
       : `<table>
-          <thead><tr><th>Выдан</th><th>Кому/на что</th><th class="num">Сумма</th><th class="num">Погашено</th><th class="num">Остаток</th><th>Статус</th></tr></thead>
+          <thead><tr><th>${tr('ex.issued')}</th><th>${tr('ex.payeeShort')}</th><th class="num">${tr(
+          'ex.amount'
+        )}</th><th class="num">${tr('ex.settled')}</th><th class="num">${tr(
+          'ex.remainder'
+        )}</th><th>${tr('ex.status')}</th></tr></thead>
           <tbody>
             ${obligations
               .map(
                 (o) => `<tr>
                   <td>${o.obligation.issueDate}</td>
-                  <td>${escapeHtml(payeeKindLabel(o.obligation.payeeKind))}${
+                  <td>${escapeHtml(
+                    payeeKindLabelI18n(o.obligation.payeeKind, getActiveLanguage())
+                  )}${
                     o.obligation.payeeLabel ? ` — ${escapeHtml(o.obligation.payeeLabel)}` : ''
                   }</td>
                   <td class="num">${formatMoney(o.obligation.amount, o.obligation.currency)}</td>
                   <td class="num">${formatMoney(o.settledAmount, o.obligation.currency)}</td>
                   <td class="num">${formatMoney(o.outstandingAmount, o.obligation.currency)}</td>
-                  <td>${OBLIGATION_STATUS_LABELS[o.status]}</td>
+                  <td>${obligationStatusLabel(o.status, getActiveLanguage())}</td>
                 </tr>`
               )
               .join('')}
@@ -224,7 +243,9 @@ export function exportReportPdf(input: PdfReportInput): void {
         </table>`;
 
   const html = `<!doctype html>
-<html lang="ru"><head><meta charset="utf-8"><title>${escapeHtml(title)}</title>
+<html lang="${getActiveLanguage()}" dir="${
+    getActiveLanguage() === 'he' ? 'rtl' : 'ltr'
+  }"><head><meta charset="utf-8"><title>${escapeHtml(title)}</title>
 <style>
   * { box-sizing: border-box; }
   body { font-family: -apple-system, 'Segoe UI', Roboto, Arial, sans-serif; color:#0F172A; margin:32px; }
@@ -247,27 +268,35 @@ export function exportReportPdf(input: PdfReportInput): void {
 </style></head>
 <body>
   <h1>${escapeHtml(title)}</h1>
-  <div class="period">Период: ${escapeHtml(period)} · Базовая валюта: ${baseCurrency}</div>
+  <div class="period">${tr('ex.period')}: ${escapeHtml(period)} · ${tr(
+    'ex.baseCurrency'
+  )}: ${baseCurrency}</div>
 
   <div class="cards">
-    <div class="card"><div class="label">Расходы</div><div class="value expense">${money(totalExpense)}</div></div>
-    <div class="card"><div class="label">Доходы</div><div class="value income">${money(totalIncome)}</div></div>
-    <div class="card"><div class="label">Баланс периода</div><div class="value">${money(totalIncome - totalExpense)}</div></div>
+    <div class="card"><div class="label">${tr('common.expenses')}</div><div class="value expense">${money(
+    totalExpense
+  )}</div></div>
+    <div class="card"><div class="label">${tr('common.incomes')}</div><div class="value income">${money(
+    totalIncome
+  )}</div></div>
+    <div class="card"><div class="label">${tr('ex.periodBalance')}</div><div class="value">${money(
+    totalIncome - totalExpense
+  )}</div></div>
   </div>
 
-  <h2>Расходы по категориям</h2>
+  <h2>${tr('ex.expensesByCategory')}</h2>
   ${breakdownTable(expenseBreakdown)}
 
-  <h2>Доходы по категориям</h2>
+  <h2>${tr('ex.incomesByCategory')}</h2>
   ${breakdownTable(incomeBreakdown)}
 
-  <h2>План / факт по бюджетам</h2>
+  <h2>${tr('ex.planFact')}</h2>
   ${budgetTable}
 
-  <h2>Открытые обязательства (чеки на предъявителя)</h2>
+  <h2>${tr('ex.openObligations')}</h2>
   ${obligationsTable}
 
-  <footer>Сформировано FinTrack · ${new Date().toLocaleString('ru-RU')}</footer>
+  <footer>${tr('ex.generatedBy')} · ${new Date().toLocaleString(numberLocale())}</footer>
   <script>window.onload = function () { window.print(); };</script>
 </body></html>`;
 

@@ -2,6 +2,7 @@
 
 import { AuthProvider, AuthSession } from '@/types';
 import { GOOGLE_OAUTH_CLIENT_ID } from './backup/google-drive';
+import { tr } from '@/i18n/t';
 
 const GIS_SCRIPT_URL = 'https://accounts.google.com/gsi/client';
 
@@ -13,13 +14,13 @@ const GIS_SCRIPT_URL = 'https://accounts.google.com/gsi/client';
  */
 function loadGisScript(): Promise<void> {
   return new Promise((resolve, reject) => {
-    if (typeof window === 'undefined') return reject(new Error('Только в браузере'));
+    if (typeof window === 'undefined') return reject(new Error(tr('svc.browserOnly')));
     if ((window as any).google?.accounts?.id) return resolve();
 
     const existing = document.querySelector<HTMLScriptElement>(`script[src="${GIS_SCRIPT_URL}"]`);
     if (existing) {
       existing.addEventListener('load', () => resolve());
-      existing.addEventListener('error', () => reject(new Error('Не удалось загрузить Google Identity Services')));
+      existing.addEventListener('error', () => reject(new Error(tr('svc.gisLoadFailed'))));
       return;
     }
 
@@ -28,7 +29,7 @@ function loadGisScript(): Promise<void> {
     script.async = true;
     script.defer = true;
     script.onload = () => resolve();
-    script.onerror = () => reject(new Error('Не удалось загрузить Google Identity Services'));
+    script.onerror = () => reject(new Error(tr('svc.gisLoadFailed')));
     document.head.appendChild(script);
   });
 }
@@ -57,14 +58,14 @@ export async function signInWithGoogle(): Promise<
     return {
       success: false,
       error:
-        'Вход через Google не настроен: в проекте нет NEXT_PUBLIC_GOOGLE_CLIENT_ID. Войдите по email или добавьте переменную и передеплойте.',
+        tr('svc.googleNotConfigured'),
     };
   }
 
   try {
     await loadGisScript();
   } catch (err: any) {
-    return { success: false, error: err.message || 'Google Identity Services недоступен' };
+    return { success: false, error: err.message || tr('svc.gisUnavailable') };
   }
 
   return new Promise((resolve) => {
@@ -76,7 +77,7 @@ export async function signInWithGoogle(): Promise<
       resolve({
         success: false,
         error:
-          'Окно Google не открылось. Разрешите всплывающие окна и сторонние cookie для этого сайта — или войдите по email.',
+          tr('svc.popupBlocked'),
       });
     }, 60000);
 
@@ -86,13 +87,13 @@ export async function signInWithGoogle(): Promise<
         callback: (response: any) => {
           clearTimeout(timeout);
           if (!response?.credential) {
-            resolve({ success: false, error: 'Google не вернул данные входа' });
+            resolve({ success: false, error: tr('svc.googleNoData') });
             return;
           }
 
           const claims = decodeIdToken(response.credential);
           if (!claims.email) {
-            resolve({ success: false, error: 'Google не сообщил email аккаунта' });
+            resolve({ success: false, error: tr('svc.googleNoEmail') });
             return;
           }
 
@@ -117,13 +118,13 @@ export async function signInWithGoogle(): Promise<
           resolve({
             success: false,
             error:
-              'Google не показал окно входа: проверьте, что домен приложения добавлен в «Authorized JavaScript origins», и что не блокируются сторонние cookie.',
+              tr('svc.googleNoPrompt'),
           });
         }
       });
     } catch (err: any) {
       clearTimeout(timeout);
-      resolve({ success: false, error: err.message || 'Ошибка запуска входа через Google' });
+      resolve({ success: false, error: err.message || tr('svc.googleStartError') });
     }
   });
 }
@@ -136,7 +137,7 @@ export function signInWithEmail(
 ): { success: true; session: AuthSession } | { success: false; error: string } {
   const trimmed = email.trim().toLowerCase();
   if (!EMAIL_PATTERN.test(trimmed)) {
-    return { success: false, error: 'Введите корректный email' };
+    return { success: false, error: tr('svc.badEmail') };
   }
 
   return {

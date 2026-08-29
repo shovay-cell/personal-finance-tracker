@@ -172,3 +172,20 @@ const GENERIC: Record<string, Entry> = {
 export function genericLabel(id: keyof typeof GENERIC | string, language: Language): string {
   return GENERIC[id]?.[language] || GENERIC[id]?.ru || id;
 }
+
+/** The seeded profile and owner names, translated until the user renames them. */
+const SEEDED: Record<string, Entry> = {
+  profile: {
+    ru: 'Семейный бюджет',
+    he: 'תקציב משפחתי',
+    uk: 'Сімейний бюджет',
+    en: 'Family budget',
+  },
+  owner: { ru: 'Я', he: 'אני', uk: 'Я', en: 'Me' },
+};
+
+export function seededName(id: 'profile' | 'owner', current: string, language: Language): string {
+  const entry = SEEDED[id];
+  // Any other wording is the user's own and stands in every language.
+  return current === entry.ru ? entry[language] || current : current;
+}

@@ -7,6 +7,8 @@
  * inside its own hidden application folder and nothing else in the user's Drive.
  */
 
+import { tr } from '@/i18n/t';
+
 const CLIENT_ID_KEY = 'fintrack_gdrive_client_id';
 const ACCESS_TOKEN_KEY = 'fintrack_gdrive_access_token';
 const TOKEN_EXPIRY_KEY = 'fintrack_gdrive_token_expiry';
@@ -90,7 +92,7 @@ function loadGisScript(): Promise<void> {
     const existing = document.querySelector<HTMLScriptElement>(`script[src="${GIS_SCRIPT_URL}"]`);
     if (existing) {
       existing.addEventListener('load', () => resolve());
-      existing.addEventListener('error', () => reject(new Error('Не удалось загрузить Google Identity Services')));
+      existing.addEventListener('error', () => reject(new Error(tr('svc.gisLoadFailed'))));
       return;
     }
 
@@ -99,7 +101,7 @@ function loadGisScript(): Promise<void> {
     script.async = true;
     script.defer = true;
     script.onload = () => resolve();
-    script.onerror = () => reject(new Error('Не удалось загрузить Google Identity Services'));
+    script.onerror = () => reject(new Error(tr('svc.gisLoadFailed')));
     document.head.appendChild(script);
   });
 }
@@ -122,7 +124,7 @@ export async function authenticateGoogleDrive(
   customClientId?: string
 ): Promise<{ success: boolean; token?: string; error?: string }> {
   if (typeof window === 'undefined') {
-    return { success: false, error: 'OAuth доступен только в браузере' };
+    return { success: false, error: tr('drive.browserOnly') };
   }
 
   const clientId = (customClientId || getCustomClientId() || GOOGLE_OAUTH_CLIENT_ID).trim();
@@ -130,7 +132,7 @@ export async function authenticateGoogleDrive(
     return {
       success: false,
       error:
-        'Google Drive не настроен: в проекте нет переменной NEXT_PUBLIC_GOOGLE_CLIENT_ID. Добавьте Web OAuth Client ID из Google Cloud Console и передеплойте.',
+        tr('drive.notConfigured'),
     };
   }
 
@@ -138,14 +140,14 @@ export async function authenticateGoogleDrive(
     return {
       success: false,
       error:
-        'NEXT_PUBLIC_GOOGLE_CLIENT_ID не похож на Client ID: он должен заканчиваться на .apps.googleusercontent.com (это не ключ Gemini).',
+        tr('drive.badClientId'),
     };
   }
 
   try {
     await loadGisScript();
   } catch (err: any) {
-    return { success: false, error: err.message || 'Google Identity Services недоступен' };
+    return { success: false, error: err.message || tr('svc.gisUnavailable') };
   }
 
   return new Promise((resolve) => {
@@ -157,7 +159,7 @@ export async function authenticateGoogleDrive(
           if (response.error || !response.access_token) {
             resolve({
               success: false,
-              error: response.error_description || response.error || 'Google не выдал токен доступа',
+              error: response.error_description || response.error || tr('drive.noToken'),
             });
             return;
           }
@@ -179,7 +181,7 @@ export async function authenticateGoogleDrive(
         resolve({
           success: false,
           error:
-            'Окно Google не открылось. Разрешите всплывающие окна для этого сайта и попробуйте снова.',
+            tr('drive.popupBlocked'),
         });
       }, 60000);
 
@@ -191,7 +193,7 @@ export async function authenticateGoogleDrive(
 
       tokenClient.requestAccessToken({ prompt: '' });
     } catch (err: any) {
-      resolve({ success: false, error: err.message || 'Ошибка запуска Google OAuth' });
+      resolve({ success: false, error: err.message || tr('drive.oauthStartError') });
     }
   });
 }

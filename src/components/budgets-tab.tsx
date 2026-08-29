@@ -32,7 +32,7 @@ import {
 } from '@/services/analytics';
 import { getCategoryIcon } from '@/constants/categories';
 import { useT } from '@/i18n/context';
-import { categoryName } from '@/i18n/categories';
+import { categoryName, seededName } from '@/i18n/categories';
 import { ProgressBar } from './charts';
 import { SafeToSpendCard } from './safe-to-spend-card';
 import { PacingChart } from './pacing-chart';
@@ -461,7 +461,7 @@ function BudgetEditorModal({
             <option value="SHARED">{t('bg.shared')}</option>
             {members.map((member) => (
               <option key={member.id} value={member.id}>
-                {t('bg.personalLimit')}: {member.displayName}
+                {t('bg.personalLimit')}: {seededName('owner', member.displayName, language)}
               </option>
             ))}
           </select>

@@ -2,9 +2,9 @@ import type { Metadata, Viewport } from 'next';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'FinTrack — доходы и расходы',
+  title: 'FinTrack',
   description:
-    'Персональный и семейный трекер доходов и расходов с ИИ-сканированием чеков, бюджетами и учётом чеков на предъявителя',
+    'Personal and family income & expense tracker with AI receipt scanning, budgets and liability tracking',
   manifest: '/manifest.json',
   appleWebApp: {
     capable: true,

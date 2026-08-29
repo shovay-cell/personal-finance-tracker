@@ -5,6 +5,7 @@ import {
   AlertTriangle,
   Bell,
   Cloud,
+  Coffee,
   CloudUpload,
   Copy,
   Coins,
@@ -14,6 +15,7 @@ import {
   Lock,
   LogOut,
   Percent,
+  Mail,
   Mic,
   RefreshCw,
   ServerCog,
@@ -71,7 +73,7 @@ import {
 } from '@/services/notifications';
 import { LANGUAGES, SPEECH_LOCALE_BY_LANGUAGE } from '@/i18n/dictionary';
 import { useT } from '@/i18n/context';
-import { accountKindLabel, accountName } from '@/i18n/categories';
+import { accountKindLabel, accountName, seededName } from '@/i18n/categories';
 import { numberLocale } from '@/i18n/runtime';
 import { CategoryManagerModal } from './category-manager-modal';
 import { ManagePinModal } from './pin-lock';
@@ -209,7 +211,7 @@ export function SettingsTab({
           <Field label={t('settings.profileName')}>
             <input
               type="text"
-              value={settings.profileName}
+              value={seededName('profile', settings.profileName, language)}
               onChange={(e) => saveFinanceSettings({ profileName: e.target.value })}
               className={inputClass}
             />
@@ -526,7 +528,7 @@ export function SettingsTab({
                 className="w-9 h-9 rounded-2xl flex items-center justify-center text-[11px] font-black text-white flex-shrink-0"
                 style={{ backgroundColor: member.colorHex }}
               >
-                {member.displayName.slice(0, 2).toUpperCase()}
+                {seededName('owner', member.displayName, language).slice(0, 2).toUpperCase()}
               </span>
               <button
                 type="button"
@@ -534,7 +536,7 @@ export function SettingsTab({
                 className="flex-1 min-w-0 text-left"
               >
                 <span className="block text-xs font-black text-slate-800 dark:text-slate-100 truncate">
-                  {member.displayName}
+                  {seededName('owner', member.displayName, language)}
                   {member.id === currentMemberId && (
                     <span className="text-[10px] text-sky-500 font-bold"> · {t('st.thisDevice')}</span>
                   )}
@@ -849,6 +851,51 @@ export function SettingsTab({
               className="mt-1 w-full text-[11px] text-slate-500 file:mr-3 file:py-2 file:px-3 file:rounded-xl file:border-0 file:bg-slate-100 dark:file:bg-slate-800 file:text-slate-600 file:text-[11px] file:font-black"
             />
           </label>
+        </Card>
+      </div>
+
+      {/* ------------------------------------------------------- credits */}
+      <div>
+        <SectionTitle title={t('cr.title')} />
+        <Card className="p-4 space-y-3">
+          <div className="flex items-center gap-3">
+            <span className="w-10 h-10 rounded-2xl bg-slate-100 dark:bg-slate-800 text-slate-500 flex items-center justify-center flex-shrink-0 font-black text-xs">
+              SK
+            </span>
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-black text-slate-800 dark:text-slate-100 truncate">
+                Stas Krupetsky
+              </p>
+              <p className="text-[10px] text-slate-400 font-medium truncate">
+                {t('cr.author')} · © {new Date().getFullYear()}
+              </p>
+            </div>
+          </div>
+
+          <a
+            href="mailto:shovay@gmail.com"
+            className="flex items-center gap-2 p-2.5 rounded-2xl bg-slate-50 dark:bg-slate-800/70 text-slate-600 dark:text-slate-300 text-[11px] font-black"
+          >
+            <Mail className="w-3.5 h-3.5 flex-shrink-0 text-slate-400" />
+            shovay@gmail.com
+          </a>
+
+          <a
+            href="https://buymeacoffee.com/shovay_apps"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-2.5 p-3 rounded-2xl bg-amber-50 dark:bg-amber-950/40 active:scale-[0.99] transition-transform"
+          >
+            <Coffee className="w-4 h-4 text-amber-600 dark:text-amber-400 flex-shrink-0" />
+            <span className="flex-1 min-w-0">
+              <span className="block text-[11px] font-black text-amber-700 dark:text-amber-300">
+                {t('cr.support')}
+              </span>
+              <span className="block text-[10px] text-amber-600/80 dark:text-amber-400/80 font-medium">
+                {t('cr.supportHint')}
+              </span>
+            </span>
+          </a>
         </Card>
       </div>
 

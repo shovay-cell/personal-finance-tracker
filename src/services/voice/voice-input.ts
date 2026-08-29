@@ -1,5 +1,6 @@
 'use client';
 
+import { tr } from '@/i18n/t';
 import {
   CurrencyCode,
   FinanceCategory,
@@ -42,7 +43,7 @@ export function startVoiceCapture(
 ): VoiceSession | null {
   const Recognition = getSpeechRecognition();
   if (!Recognition) {
-    handlers.onError('Голосовой ввод не поддерживается этим браузером');
+    handlers.onError(tr('svc.voiceUnsupported'));
     return null;
   }
 
@@ -66,12 +67,12 @@ export function startVoiceCapture(
 
   recognition.onerror = (event: any) => {
     const map: Record<string, string> = {
-      'no-speech': 'Речь не распознана — попробуйте ещё раз',
-      'audio-capture': 'Микрофон недоступен',
-      'not-allowed': 'Доступ к микрофону запрещён в настройках браузера',
-      network: 'Нет соединения с сервисом распознавания речи',
+      'no-speech': tr('svc.noSpeech'),
+      'audio-capture': tr('svc.noMic'),
+      'not-allowed': tr('svc.micDenied'),
+      network: tr('svc.speechNetwork'),
     };
-    handlers.onError(map[event.error] || `Ошибка распознавания: ${event.error}`);
+    handlers.onError(map[event.error] || `${tr('svc.recognitionError')}: ${event.error}`);
   };
 
   recognition.onend = () => {
@@ -82,7 +83,7 @@ export function startVoiceCapture(
   try {
     recognition.start();
   } catch (err: any) {
-    handlers.onError(err.message || 'Не удалось запустить микрофон');
+    handlers.onError(err.message || tr('svc.micStartFailed'));
     return null;
   }
 

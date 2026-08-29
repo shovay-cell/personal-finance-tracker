@@ -24,7 +24,6 @@ import {
   rangeForPreset,
   monthLabel,
   formatMoney,
-  pluralRu,
 } from '@/services/analytics';
 import {
   materializePlannedPayment,
@@ -45,7 +44,9 @@ import { ReportsTab } from '@/components/reports-tab';
 import { SettingsTab } from '@/components/settings-tab';
 import { QuickAddSheet } from '@/components/quick-add-sheet';
 import { StatementImportModal } from '@/components/statement-import-modal';
-import { LanguageProvider } from '@/i18n/context';
+import { LanguageProvider, useT } from '@/i18n/context';
+import { seededName } from '@/i18n/categories';
+import { tr } from '@/i18n/t';
 import { AuthGate } from '@/components/auth-gate';
 import { OnboardingWizard } from '@/components/onboarding-wizard';
 import { PinLockScreen } from '@/components/pin-lock';
@@ -60,6 +61,7 @@ import {
 } from '@/components/transaction-form-modal';
 
 function FinanceApp() {
+  const { t } = useT();
   const searchParams = useSearchParams();
   const [mounted, setMounted] = useState(false);
   const [activeTab, setActiveTab] = useState<FinanceTab>('transactions');
@@ -117,7 +119,7 @@ function FinanceApp() {
       if (cancelled) return;
 
       if (created.length > 0) {
-        setToast(`Создано плановых операций: ${created.length}`);
+        setToast(`${tr('app.plansCreated')}: ${created.length}`);
       }
       setPendingPlanned(awaitingConfirmation);
 
@@ -169,10 +171,10 @@ function FinanceApp() {
     (transaction: Transaction) => {
       checkLargeTransactionAlert(transaction, members, getCurrentMemberId());
       setToast(
-        `${transaction.kind === 'EXPENSE' ? 'Расход' : 'Доход'} ${formatMoney(
+        `${tr(transaction.kind === 'EXPENSE' ? 'common.expense' : 'common.income')} ${formatMoney(
           transaction.amount,
           transaction.currency
-        )} записан`
+        )} — ${tr('app.recorded')}`
       );
     },
     [members]
@@ -226,7 +228,7 @@ function FinanceApp() {
         onFinish={(message) => {
           // The PIN was just chosen here — do not ask for it on the next frame.
           markSessionUnlocked();
-          setToast(message || 'Настройки сохранены');
+          setToast(message || t('app.settingsSaved'));
         }}
       />
     );
@@ -235,12 +237,12 @@ function FinanceApp() {
   const periodSubtitle =
     activeTab === 'budgets'
       ? monthLabel(month)
-      : `${range.from} — ${range.to} · база ${settings.baseCurrency}`;
+      : `${range.from} — ${range.to} · ${t('app.base')} ${settings.baseCurrency}`;
 
   return (
     <div className="min-h-screen flex flex-col">
       <FinanceHeader
-        profileName={settings.profileName}
+        profileName={seededName('profile', settings.profileName, settings.language || 'ru')}
         subtitle={periodSubtitle}
         activeTab={activeTab}
         onTabChange={setActiveTab}
@@ -253,10 +255,10 @@ function FinanceApp() {
               <CalendarClock className="w-4 h-4 text-amber-600 dark:text-amber-400 mt-0.5 flex-shrink-0" />
               <div className="flex-1">
                 <p className="text-xs font-black text-amber-700 dark:text-amber-300">
-                  Плановые платежи ждут подтверждения
+                  {t('app.plansWaiting')}
                 </p>
                 <p className="text-[10.5px] text-amber-600/80 dark:text-amber-400/80 font-medium">
-                  Наступил срок — подтвердите создание операции
+                  {t('app.plansWaitingHint')}
                 </p>
               </div>
             </div>
@@ -279,12 +281,12 @@ function FinanceApp() {
                   onClick={async () => {
                     await materializePlannedPayment(payment);
                     setPendingPlanned((prev) => prev.filter((p) => p.id !== payment.id));
-                    setToast('Плановая операция создана');
+                    setToast(t('app.planCreated'));
                   }}
                   className="px-3 py-1.5 rounded-xl bg-emerald-500 text-white text-[10px] font-black flex items-center gap-1"
                 >
                   <CheckCircle2 className="w-3 h-3" />
-                  Создать
+                  {t('common.create')}
                 </button>
                 <button
                   type="button"
@@ -410,7 +412,7 @@ function FinanceApp() {
           onClose={() => setQuickAddMode(null)}
           onOpenFullForm={(prefill) => setFormPrefill(prefill)}
           onOpenStatementImport={() => setIsImportingStatement(true)}
-          onSaved={() => setToast('Операция записана')}
+          onSaved={() => setToast(t('app.operationSaved'))}
         />
       )}
 
@@ -422,9 +424,7 @@ function FinanceApp() {
           baseCurrency={settings.baseCurrency}
           onClose={() => setIsImportingStatement(false)}
           onImported={(count) =>
-            setToast(
-              `Внесено ${count} ${pluralRu(count, 'операция', 'операции', 'операций')}`
-            )
+            setToast(`${t('app.imported')}: ${count}`)
           }
         />
       )}
