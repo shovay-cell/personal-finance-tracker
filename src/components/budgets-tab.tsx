@@ -11,6 +11,7 @@ import {
   Users,
 } from 'lucide-react';
 import {
+  BearerCheque,
   Budget,
   BudgetProgress,
   DebtInstallment,
@@ -54,6 +55,7 @@ interface BudgetsTabProps {
   members: ProfileMember[];
   plannedPayments: PlannedPayment[];
   installments: DebtInstallment[];
+  bearerCheques: BearerCheque[];
   settings: FinanceSettings;
   month: string;
   onMonthChange: (month: string) => void;
@@ -67,6 +69,7 @@ export function BudgetsTab({
   members,
   plannedPayments,
   installments,
+  bearerCheques,
   settings,
   month,
   onMonthChange,
@@ -89,9 +92,10 @@ export function BudgetsTab({
         budgets,
         plannedPayments,
         installments,
+        bearerCheques,
         toBase: (amount, currency) => convertToBase(amount, currency, settings).baseAmount,
       }),
-    [month, transactions, budgets, plannedPayments, installments, settings]
+    [month, transactions, budgets, plannedPayments, installments, bearerCheques, settings]
   );
 
   const pacing = useMemo(() => pacingComparison(transactions, month), [transactions, month]);

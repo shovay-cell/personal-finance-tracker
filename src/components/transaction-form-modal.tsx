@@ -3,6 +3,7 @@
 import React, { useMemo, useState } from 'react';
 import {
   Coins,
+  FileSignature,
   ImagePlus,
   Percent,
   Repeat,
@@ -29,6 +30,7 @@ import {
   DebtKind,
 } from '@/types';
 import {
+  addBearerCheque,
   addDebtPlan,
   addPlannedPayment,
   addTransaction,
@@ -47,7 +49,7 @@ import {
   fieldClass,
   inputClass,
 } from './ui';
-import { CURRENCIES } from '@/constants/categories';
+import { BEARER_CHEQUE_CATEGORY_ID, CURRENCIES } from '@/constants/categories';
 import { useT } from '@/i18n/context';
 import type { TranslationKey } from '@/i18n/dictionary';
 import { unitNoun } from '@/i18n/plurals';
@@ -151,10 +153,17 @@ export function TransactionFormModal({
   const [installmentInterval, setInstallmentInterval] = useState('1');
   const [firstDueDate, setFirstDueDate] = useState(todayIso());
   const [firstPaymentPaid, setFirstPaymentPaid] = useState(true);
+  const [chequePayee, setChequePayee] = useState('');
+  const [chequeNumber, setChequeNumber] = useState('');
+  const [chequeDueDate, setChequeDueDate] = useState(todayIso());
   const [error, setError] = useState<string | null>(null);
   const [keyError, setKeyError] = useState<string | null>(null);
   const { t, language } = useT();
   const [lastScanFile, setLastScanFile] = useState<File | null>(null);
+
+  // A cheque is its own mechanic, not an option layered on top of the debt
+  // toggle: picking this category is enough, no extra switch to flip.
+  const isBearerCheque = kind === 'EXPENSE' && categoryId === BEARER_CHEQUE_CATEGORY_ID;
 
   const rootCategories = useMemo(
     () => categories.filter((c) => c.kind === kind && !c.parentId && !c.isHidden),
@@ -224,6 +233,10 @@ export function TransactionFormModal({
       setError(t('tf.pickAccount'));
       return;
     }
+    if (isBearerCheque && !chequePayee.trim()) {
+      setError(t('bc.enterPayee'));
+      return;
+    }
 
     setIsSaving(true);
     try {
@@ -257,6 +270,24 @@ export function TransactionFormModal({
       if (existing) {
         await updateTransaction(existing.id, payload as Partial<Transaction>);
         onSaved?.({ ...existing, ...payload } as Transaction);
+        onClose();
+        return;
+      }
+
+      // A cheque is not an expense today either — it clears (or doesn't) on
+      // its own date, tracked separately until then.
+      if (!existing && isBearerCheque) {
+        await addBearerCheque({
+          payee: chequePayee.trim(),
+          chequeNumber: chequeNumber.trim() || undefined,
+          amount: numericAmount,
+          currency,
+          categoryId,
+          accountId,
+          issueDate: date,
+          dueDate: chequeDueDate,
+          note: note.trim() || undefined,
+        });
         onClose();
         return;
       }
@@ -442,7 +473,46 @@ export function TransactionFormModal({
         </Field>
       )}
 
-      {kind === 'EXPENSE' && !existing && (
+      {isBearerCheque && !existing && (
+        <div className="rounded-2xl border border-violet-200 dark:border-violet-900 bg-violet-50/60 dark:bg-violet-950/20 p-3 space-y-2.5">
+          <p className="flex items-start gap-2 text-[10.5px] font-bold text-violet-600 dark:text-violet-400">
+            <FileSignature className="w-3.5 h-3.5 mt-px flex-shrink-0" />
+            {t('bc.formHint')}
+          </p>
+
+          <Field label={t('bc.payee')}>
+            <input
+              type="text"
+              value={chequePayee}
+              onChange={(e) => setChequePayee(e.target.value)}
+              placeholder={t('bc.payeePlaceholder')}
+              className={inputClass}
+              autoFocus
+            />
+          </Field>
+
+          <div className="grid grid-cols-2 gap-3">
+            <Field label={t('bc.dueDate')}>
+              <input
+                type="date"
+                value={chequeDueDate}
+                onChange={(e) => setChequeDueDate(e.target.value)}
+                className={inputClass}
+              />
+            </Field>
+            <Field label={t('bc.chequeNumber')} hint={t('bc.chequeNumberOptional')}>
+              <input
+                type="text"
+                value={chequeNumber}
+                onChange={(e) => setChequeNumber(e.target.value)}
+                className={inputClass}
+              />
+            </Field>
+          </div>
+        </div>
+      )}
+
+      {kind === 'EXPENSE' && !existing && !isBearerCheque && (
         <div className="rounded-2xl border border-slate-200 dark:border-slate-700 p-3 space-y-2.5">
           <button
             type="button"
@@ -758,18 +828,20 @@ export function TransactionFormModal({
         </Field>
       </div>
 
-      <Field label={t('form.merchant')} warn={uncertainFields.includes('merchant')}>
-        <input
-          type="text"
-          value={merchant}
-          onChange={(e) => {
-            setMerchant(e.target.value);
-            confirmField('merchant');
-          }}
-          placeholder={t('tf.merchantPlaceholder')}
-          className={fieldClass(uncertainFields, 'merchant')}
-        />
-      </Field>
+      {!isBearerCheque && (
+        <Field label={t('form.merchant')} warn={uncertainFields.includes('merchant')}>
+          <input
+            type="text"
+            value={merchant}
+            onChange={(e) => {
+              setMerchant(e.target.value);
+              confirmField('merchant');
+            }}
+            placeholder={t('tf.merchantPlaceholder')}
+            className={fieldClass(uncertainFields, 'merchant')}
+          />
+        </Field>
+      )}
 
       <Field label={t('common.note')}>
         <input

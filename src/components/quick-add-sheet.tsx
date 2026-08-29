@@ -18,7 +18,7 @@ import {
 } from './ui';
 import { TransactionPrefill } from './transaction-form-modal';
 import { CategoryEditorModal } from './category-manager-modal';
-import { CURRENCIES } from '@/constants/categories';
+import { BEARER_CHEQUE_CATEGORY_ID, CURRENCIES } from '@/constants/categories';
 import { useT } from '@/i18n/context';
 import { GeminiKeyPrompt } from './gemini-key-prompt';
 import {
@@ -174,6 +174,21 @@ export function QuickAddSheet({
     }
     if (!categoryId) {
       setError(t('qa.pickCategory'));
+      return;
+    }
+
+    // A cheque needs payee/due-date/number the keypad sheet has no room for —
+    // hand it to the full form instead of saving it as a plain expense.
+    if (categoryId === BEARER_CHEQUE_CATEGORY_ID) {
+      onOpenFullForm({
+        kind: 'EXPENSE',
+        amount: numericAmount,
+        currency,
+        categoryId,
+        accountId: accountId || accounts[0]?.id,
+        date: new Date().toISOString().slice(0, 10),
+      });
+      onClose();
       return;
     }
 

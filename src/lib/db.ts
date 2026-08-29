@@ -2,6 +2,8 @@ import Dexie, { Table } from 'dexie';
 import { tr } from '@/i18n/t';
 import { getDeviceName } from '@/services/device';
 import {
+  BearerCheque,
+  BearerChequeStatus,
   Budget,
   CurrencyCode,
   FinanceAccount,
@@ -43,6 +45,7 @@ export class FinanceDatabase extends Dexie {
   vatPayments!: Table<VatPayment, string>;
   debts!: Table<DebtPlan, string>;
   debtInstallments!: Table<DebtInstallment, string>;
+  bearerCheques!: Table<BearerCheque, string>;
   settings!: Table<FinanceSettings, string>;
 
   constructor() {
@@ -68,6 +71,12 @@ export class FinanceDatabase extends Dexie {
     this.version(3).stores({
       debts: 'id, kind, startDate',
       debtInstallments: 'id, debtId, dueDate, isPaid',
+    });
+
+    // v4 adds postdated cheques issued from the user's own account, tracked as
+    // a scheduled future debit rather than an ordinary expense until cleared.
+    this.version(4).stores({
+      bearerCheques: 'id, status, dueDate, accountId',
     });
   }
 }
@@ -615,6 +624,10 @@ export async function exportFinanceDatabaseJson(): Promise<string> {
     obligationSettlements,
     budgets,
     members,
+    vatPayments,
+    debts,
+    debtInstallments,
+    bearerCheques,
     settings,
   ] = await Promise.all([
     financeDb.accounts.toArray(),
@@ -625,6 +638,10 @@ export async function exportFinanceDatabaseJson(): Promise<string> {
     financeDb.obligationSettlements.toArray(),
     financeDb.budgets.toArray(),
     financeDb.members.toArray(),
+    financeDb.vatPayments.toArray(),
+    financeDb.debts.toArray(),
+    financeDb.debtInstallments.toArray(),
+    financeDb.bearerCheques.toArray(),
     financeDb.settings.get('default'),
   ]);
 
@@ -641,6 +658,10 @@ export async function exportFinanceDatabaseJson(): Promise<string> {
     obligationSettlements,
     budgets,
     members,
+    vatPayments,
+    debts,
+    debtInstallments,
+    bearerCheques,
     settings: settings || null,
   };
 
@@ -667,6 +688,10 @@ export async function importFinanceDatabaseJson(
         financeDb.obligationSettlements,
         financeDb.budgets,
         financeDb.members,
+        financeDb.vatPayments,
+        financeDb.debts,
+        financeDb.debtInstallments,
+        financeDb.bearerCheques,
         financeDb.settings,
       ],
       async () => {
@@ -679,6 +704,10 @@ export async function importFinanceDatabaseJson(
           [financeDb.obligationSettlements, data.obligationSettlements],
           [financeDb.budgets, data.budgets],
           [financeDb.members, data.members],
+          [financeDb.vatPayments, data.vatPayments],
+          [financeDb.debts, data.debts],
+          [financeDb.debtInstallments, data.debtInstallments],
+          [financeDb.bearerCheques, data.bearerCheques],
         ];
 
         for (const [table, rows] of tables) {
@@ -735,6 +764,10 @@ export async function mergeFinanceDatabaseJson(
       [financeDb.obligationSettlements, data.obligationSettlements],
       [financeDb.budgets, data.budgets],
       [financeDb.members, data.members],
+      [financeDb.vatPayments, data.vatPayments],
+      [financeDb.debts, data.debts],
+      [financeDb.debtInstallments, data.debtInstallments],
+      [financeDb.bearerCheques, data.bearerCheques],
     ] as [Table<any, string>, any[] | undefined][]) {
       if (!Array.isArray(rows) || rows.length === 0) continue;
       await table.bulkPut(rows);
@@ -757,6 +790,10 @@ export async function clearAllFinanceData(): Promise<void> {
     financeDb.categories.clear(),
     financeDb.accounts.clear(),
     financeDb.members.clear(),
+    financeDb.vatPayments.clear(),
+    financeDb.debts.clear(),
+    financeDb.debtInstallments.clear(),
+    financeDb.bearerCheques.clear(),
     financeDb.settings.clear(),
   ]);
   await initializeFinanceDb();
@@ -1065,6 +1102,110 @@ export async function deleteDebtPlan(id: string): Promise<void> {
     await financeDb.debtInstallments.delete(installment.id);
   }
   await financeDb.debts.delete(id);
+}
+
+// ------------------------------------------------------ bearer cheques
+// A postdated cheque drawn on the user's own account. Picking the «Чеки на
+// предъявителя» category books one of these instead of an ordinary expense —
+// it only becomes a real transaction once it actually clears, so the amount
+// does not hit the ledger before the bank has taken it.
+
+export interface NewBearerChequeInput {
+  payee: string;
+  chequeNumber?: string;
+  amount: number;
+  currency: CurrencyCode;
+  categoryId: string;
+  accountId: string;
+  issueDate: string;
+  dueDate: string;
+  note?: string;
+}
+
+export async function addBearerCheque(input: NewBearerChequeInput): Promise<BearerCheque> {
+  const now = new Date().toISOString();
+  const cheque: BearerCheque = {
+    id: newId('cheque'),
+    payee: input.payee,
+    chequeNumber: input.chequeNumber,
+    amount: input.amount,
+    currency: input.currency,
+    categoryId: input.categoryId,
+    accountId: input.accountId,
+    issueDate: input.issueDate,
+    dueDate: input.dueDate,
+    status: 'ISSUED',
+    note: input.note,
+    authorId: getCurrentMemberId(),
+    createdAt: now,
+    updatedAt: now,
+  };
+  await financeDb.bearerCheques.put(cheque);
+  return cheque;
+}
+
+export async function updateBearerCheque(
+  id: string,
+  updates: Partial<NewBearerChequeInput>
+): Promise<void> {
+  await financeDb.bearerCheques.update(id, { ...updates, updatedAt: new Date().toISOString() });
+}
+
+/** Marks the cheque cleared and books the expense it represents. */
+export async function clearBearerCheque(id: string, clearedDate?: string): Promise<void> {
+  const cheque = await financeDb.bearerCheques.get(id);
+  if (!cheque || cheque.status !== 'ISSUED') return;
+
+  const date = clearedDate || todayIso();
+  const transaction = await addTransaction({
+    kind: 'EXPENSE',
+    amount: cheque.amount,
+    currency: cheque.currency,
+    categoryId: cheque.categoryId,
+    accountId: cheque.accountId,
+    date,
+    note: cheque.note || `${tr('bc.chequeNoun')} ${cheque.payee}`,
+    merchant: cheque.payee,
+    source: 'MANUAL',
+  } as any);
+
+  await financeDb.bearerCheques.update(id, {
+    status: 'CLEARED' as BearerChequeStatus,
+    transactionId: transaction.id,
+    updatedAt: new Date().toISOString(),
+  });
+}
+
+/** Reverts a clearance: deletes the booked expense and reopens the cheque. */
+export async function unclearBearerCheque(id: string): Promise<void> {
+  const cheque = await financeDb.bearerCheques.get(id);
+  if (!cheque || cheque.status !== 'CLEARED') return;
+
+  if (cheque.transactionId) {
+    await financeDb.transactions.delete(cheque.transactionId);
+  }
+  await financeDb.bearerCheques.update(id, {
+    status: 'ISSUED' as BearerChequeStatus,
+    transactionId: undefined,
+    updatedAt: new Date().toISOString(),
+  });
+}
+
+export async function cancelBearerCheque(id: string): Promise<void> {
+  const cheque = await financeDb.bearerCheques.get(id);
+  if (!cheque || cheque.status === 'CLEARED') return;
+  await financeDb.bearerCheques.update(id, {
+    status: 'CANCELLED' as BearerChequeStatus,
+    updatedAt: new Date().toISOString(),
+  });
+}
+
+export async function deleteBearerCheque(id: string): Promise<void> {
+  const cheque = await financeDb.bearerCheques.get(id);
+  if (cheque?.transactionId) {
+    await financeDb.transactions.delete(cheque.transactionId);
+  }
+  await financeDb.bearerCheques.delete(id);
 }
 
 export function describeDebt(

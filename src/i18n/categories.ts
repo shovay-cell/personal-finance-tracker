@@ -28,6 +28,12 @@ const CATEGORY_NAMES: Record<string, Entry> = {
   'cat-education': { ru: 'Образование', he: 'לימודים', uk: 'Освіта', en: 'Education' },
   'cat-fees': { ru: 'Платежи, комиссии', he: 'תשלומים ועמלות', uk: 'Платежі, комісії', en: 'Fees & payments' },
   'cat-taxes': { ru: 'Налоги', he: 'מיסים', uk: 'Податки', en: 'Taxes' },
+  'cat-bearer_cheques': {
+    ru: 'Чеки на предъявителя',
+    he: 'צ׳קים למוכ״ז',
+    uk: 'Чеки на пред’явника',
+    en: 'Bearer cheques',
+  },
   'cat-taxes_vat': { ru: 'НДС', he: 'מע״מ', uk: 'ПДВ', en: 'VAT' },
   'cat-taxes_authority': {
     ru: 'Налоговая',

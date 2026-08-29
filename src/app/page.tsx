@@ -95,6 +95,7 @@ function FinanceApp() {
   const vatPayments = useLiveQuery(() => financeDb.vatPayments.toArray(), [], []);
   const debts = useLiveQuery(() => financeDb.debts.toArray(), [], []);
   const installments = useLiveQuery(() => financeDb.debtInstallments.toArray(), [], []);
+  const bearerCheques = useLiveQuery(() => financeDb.bearerCheques.toArray(), [], []);
   const settingsRow = useLiveQuery(() => financeDb.settings.get('default'), []);
 
   const settings = settingsRow || DEFAULT_SETTINGS;
@@ -322,6 +323,7 @@ function FinanceApp() {
             members={members}
             plannedPayments={plannedPayments}
             installments={installments}
+            bearerCheques={bearerCheques}
             settings={settings}
             month={month}
             onMonthChange={handleMonthChange}
@@ -348,6 +350,7 @@ function FinanceApp() {
             settlements={settlements}
             debts={debts}
             installments={installments}
+            bearerCheques={bearerCheques}
             plannedPayments={plannedPayments}
             vatSummary={vatSummary}
             vatPayments={vatPayments}

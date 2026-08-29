@@ -1,4 +1,5 @@
 import {
+  BearerCheque,
   Budget,
   DebtInstallment,
   PlannedPayment,
@@ -383,10 +384,13 @@ export function safeToSpend(input: {
   plannedPayments: PlannedPayment[];
   /** Unpaid instalment payments falling inside the month. */
   installments?: DebtInstallment[];
+  /** Uncleared bearer cheques due inside the month — reserved, not yet spent. */
+  bearerCheques?: BearerCheque[];
   toBase: (amount: number, currency: CurrencyCode) => number;
 }): SafeToSpend {
   const { month, transactions, budgets, plannedPayments, toBase } = input;
   const installments = input.installments || [];
+  const bearerCheques = input.bearerCheques || [];
   const today = input.today || todayIso();
   const range = monthRange(month);
   const inMonth = transactions.filter((t) => isWithin(t.date, range));
@@ -418,12 +422,18 @@ export function safeToSpend(input: {
     return sum + toBase(installment.amount, installment.currency);
   }, 0);
 
+  const upcomingCheques = bearerCheques.reduce((sum, cheque) => {
+    if (cheque.status !== 'ISSUED') return sum;
+    if (cheque.dueDate < today || cheque.dueDate > range.to) return sum;
+    return sum + toBase(cheque.amount, cheque.currency);
+  }, 0);
+
   const total = daysInMonth(month);
   const currentDay = today.slice(0, 7) === month ? Number(today.slice(8, 10)) : total;
   // The current day still counts: money can be spent today.
   const daysLeft = Math.max(1, total - currentDay + 1);
 
-  const committed = upcomingCommitted + upcomingInstallments;
+  const committed = upcomingCommitted + upcomingInstallments + upcomingCheques;
   const available = Math.round((planned - spent - committed) * 100) / 100;
 
   return {

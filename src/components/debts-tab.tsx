@@ -3,7 +3,9 @@
 import React, { useMemo, useState } from 'react';
 import {
   AlertTriangle,
+  Ban,
   CalendarClock,
+  Check,
   CreditCard,
   FileSignature,
   Landmark,
@@ -12,6 +14,7 @@ import {
   Wallet,
 } from 'lucide-react';
 import {
+  BearerCheque,
   CurrencyCode,
   DebtInstallment,
   DebtKind,
@@ -25,7 +28,7 @@ import {
   VatPayment,
   VatSummary,
 } from '@/types';
-import { convertToBase } from '@/lib/db';
+import { cancelBearerCheque, clearBearerCheque, convertToBase, todayIso } from '@/lib/db';
 import { formatDateHuman, formatMoney, monthLabel } from '@/services/analytics';
 import { debtsOverview, describeAllDebts, upcomingByMonth } from '@/services/debts';
 import { VatCard } from './vat-card';
@@ -45,6 +48,7 @@ interface DebtsTabProps {
   settlements: ObligationSettlement[];
   debts: DebtPlan[];
   installments: DebtInstallment[];
+  bearerCheques: BearerCheque[];
   plannedPayments: PlannedPayment[];
   vatSummary?: VatSummary;
   vatPayments: VatPayment[];
@@ -62,6 +66,7 @@ export function DebtsTab({
   settlements,
   debts,
   installments,
+  bearerCheques,
   plannedPayments,
   vatSummary,
   vatPayments,
@@ -74,9 +79,10 @@ export function DebtsTab({
     convertToBase(amount, currency, settings).baseAmount;
 
   const overview = useMemo(
-    () => debtsOverview({ vatSummary, obligations, settlements, debts, installments, toBase }),
+    () =>
+      debtsOverview({ vatSummary, obligations, settlements, debts, installments, bearerCheques, toBase }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [vatSummary, obligations, settlements, debts, installments, settings]
+    [vatSummary, obligations, settlements, debts, installments, bearerCheques, settings]
   );
 
   const upcoming = useMemo(
@@ -86,12 +92,13 @@ export function DebtsTab({
         installments,
         obligations,
         settlements,
+        bearerCheques,
         plannedPayments,
         months: 3,
         toBase,
       }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [debts, installments, obligations, settlements, plannedPayments, settings]
+    [debts, installments, obligations, settlements, bearerCheques, plannedPayments, settings]
   );
 
   const described = useMemo(() => describeAllDebts(debts, installments), [debts, installments]);
@@ -258,6 +265,11 @@ export function DebtsTab({
 
       {segment === 'CHEQUE' && (
         <>
+          <div>
+            <SectionTitle title={t('bc.pendingTitle')} />
+            <PendingChequesList cheques={bearerCheques} currency={baseCurrency} />
+          </div>
+
           <DebtList kind="CHEQUE" rows={ofKind('CHEQUE')} currency={baseCurrency} />
 
           <div>
@@ -316,6 +328,85 @@ function DebtList({
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+/**
+ * Cheques the profile itself wrote and that have not cleared yet — a bearer
+ * cheque is its own mechanic (issue now, clear later), so it lives here
+ * rather than inside the debt-plan or obligation lists above.
+ */
+function PendingChequesList({
+  cheques,
+  currency,
+}: {
+  cheques: BearerCheque[];
+  currency: CurrencyCode;
+}) {
+  const { t } = useT();
+  const today = todayIso();
+  const pending = cheques
+    .filter((c) => c.status === 'ISSUED')
+    .sort((a, b) => a.dueDate.localeCompare(b.dueDate));
+
+  if (pending.length === 0) {
+    return (
+      <EmptyState
+        icon={<FileSignature className="w-7 h-7" />}
+        title={t('bc.emptyPending')}
+        description={t('bc.emptyPendingHint')}
+      />
+    );
+  }
+
+  return (
+    <div className="space-y-2">
+      {pending.map((cheque) => {
+        const isOverdue = cheque.dueDate < today;
+        return (
+          <Card key={cheque.id} className="p-3 space-y-2">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <p className="text-xs font-black text-slate-800 dark:text-slate-100 truncate">
+                  {cheque.payee}
+                </p>
+                <p
+                  className={`text-[10px] font-bold mt-0.5 flex items-center gap-1 ${
+                    isOverdue ? 'text-rose-500' : 'text-slate-400'
+                  }`}
+                >
+                  {isOverdue && <AlertTriangle className="w-3 h-3 flex-shrink-0" />}
+                  {isOverdue ? t('bc.statusOverdue') : t('bc.dueOn')} · {formatDateHuman(cheque.dueDate)}
+                  {cheque.chequeNumber ? ` · №${cheque.chequeNumber}` : ''}
+                </p>
+              </div>
+              <span className="text-xs font-black text-slate-900 dark:text-slate-100 tabular-nums flex-shrink-0">
+                {formatMoney(cheque.amount, cheque.currency)}
+              </span>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => clearBearerCheque(cheque.id)}
+                className="flex-1 py-2 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 text-[10.5px] font-black flex items-center justify-center gap-1.5 active:scale-95 transition-transform"
+              >
+                <Check className="w-3.5 h-3.5" />
+                {t('bc.markCleared')}
+              </button>
+              <button
+                type="button"
+                onClick={() => cancelBearerCheque(cheque.id)}
+                className="flex-1 py-2 rounded-xl bg-slate-50 dark:bg-slate-800/60 text-slate-500 dark:text-slate-400 text-[10.5px] font-black flex items-center justify-center gap-1.5 active:scale-95 transition-transform"
+              >
+                <Ban className="w-3.5 h-3.5" />
+                {t('bc.cancelCheque')}
+              </button>
+            </div>
+          </Card>
+        );
+      })}
     </div>
   );
 }

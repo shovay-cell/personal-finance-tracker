@@ -32,6 +32,7 @@ import {
   HardHat,
   UserRound,
   CreditCard,
+  FileSignature,
   type LucideIcon,
 } from 'lucide-react';
 import {
@@ -93,6 +94,7 @@ export const CATEGORY_ICONS: Record<string, LucideIcon> = {
   Landmark,
   PiggyBank,
   FileCheck2,
+  FileSignature,
   Banknote,
   Building2,
   ShieldCheck,
@@ -172,6 +174,13 @@ const EXPENSE_SEEDS: CategorySeed[] = [
   { key: 'education', name: 'Образование', iconName: 'GraduationCap', colorHex: '#6366F1' },
   { key: 'fees', name: 'Платежи, комиссии', iconName: 'Receipt', colorHex: '#78716C' },
   {
+    key: 'bearer_cheques',
+    name: 'Чеки на предъявителя',
+    iconName: 'FileSignature',
+    colorHex: '#A855F7',
+    order: 137,
+  },
+  {
     key: 'taxes',
     name: 'Налоги',
     iconName: 'Landmark',
@@ -241,6 +250,7 @@ export const OBLIGATION_INCOME_CATEGORY_ID = 'cat-obligation_settlement';
 export const SUBSCRIPTION_CATEGORY_ID = 'cat-subscriptions';
 export const INVESTMENT_CATEGORY_ID = 'cat-investments';
 export const ADJUSTMENT_CATEGORY_ID = 'cat-adjustment';
+export const BEARER_CHEQUE_CATEGORY_ID = 'cat-bearer_cheques';
 export const FALLBACK_EXPENSE_CATEGORY_ID = 'cat-other_expense';
 export const FALLBACK_INCOME_CATEGORY_ID = 'cat-other_income';
 

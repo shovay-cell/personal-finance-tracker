@@ -1,5 +1,6 @@
 import { tr } from '@/i18n/t';
 import {
+  BearerCheque,
   CurrencyCode,
   DebtInstallment,
   DebtPlan,
@@ -31,13 +32,18 @@ export function debtsOverview(input: {
   settlements: ObligationSettlement[];
   debts: DebtPlan[];
   installments: DebtInstallment[];
+  bearerCheques?: BearerCheque[];
   toBase: (amount: number, currency: CurrencyCode) => number;
 }): DebtsOverview {
-  const { vatSummary, obligations, settlements, debts, installments, toBase } = input;
+  const { vatSummary, obligations, settlements, debts, installments, bearerCheques = [], toBase } = input;
 
   const issuedCheques = obligationsWithBalance(obligations, settlements)
     .filter((row) => row.status !== 'SETTLED')
     .reduce((sum, row) => sum + toBase(row.outstandingAmount, row.obligation.currency), 0);
+
+  const pendingCheques = bearerCheques
+    .filter((cheque) => cheque.status === 'ISSUED')
+    .reduce((sum, cheque) => sum + toBase(cheque.amount, cheque.currency), 0);
 
   const byKind = (kind: DebtPlan['kind']) =>
     debts
@@ -51,8 +57,8 @@ export function debtsOverview(input: {
 
   const overview: DebtsOverview = {
     vat: round(vatSummary?.outstanding || 0),
-    // Cheques the user has to pay, plus what is still open on cheques they issued.
-    cheques: round(issuedCheques + byKind('CHEQUE')),
+    // Cheques the user has to pay, cheques they issued, plus their own bearer cheques.
+    cheques: round(issuedCheques + byKind('CHEQUE') + pendingCheques),
     installments: round(byKind('INSTALLMENT')),
     taxes: round(byKind('TAX')),
     loans: round(byKind('LOAN')),
@@ -91,6 +97,7 @@ export function upcomingByMonth(input: {
   installments: DebtInstallment[];
   obligations: Obligation[];
   settlements: ObligationSettlement[];
+  bearerCheques?: BearerCheque[];
   plannedPayments: PlannedPayment[];
   months: number;
   today?: string;
@@ -135,6 +142,19 @@ export function upcomingByMonth(input: {
     });
   }
 
+  for (const cheque of input.bearerCheques || []) {
+    if (cheque.status !== 'ISSUED' || cheque.dueDate > horizon) continue;
+
+    items.push({
+      id: cheque.id,
+      date: cheque.dueDate,
+      title: cheque.payee,
+      amount: input.toBase(cheque.amount, cheque.currency),
+      source: 'BEARER_CHEQUE',
+      isOverdue: cheque.dueDate < today,
+    });
+  }
+
   for (const payment of input.plannedPayments) {
     if (!payment.isActive || payment.kind !== 'EXPENSE') continue;
     for (const date of occurrencesBetween(payment, today, horizon)) {
@@ -174,5 +194,19 @@ export function installmentsDueInMonth(
   const total = installments
     .filter((i) => !i.isPaid && i.dueDate.slice(0, 7) === month && i.dueDate >= today)
     .reduce((sum, i) => sum + toBase(i.amount, i.currency), 0);
+  return Math.round(total * 100) / 100;
+}
+
+/** Uncleared bearer cheques due inside the given month, in base currency —
+ *  the money is already spoken for even though it has not left the account yet. */
+export function bearerChequesDueInMonth(
+  bearerCheques: BearerCheque[],
+  month: string,
+  toBase: (amount: number, currency: CurrencyCode) => number,
+  today = todayIso()
+): number {
+  const total = bearerCheques
+    .filter((c) => c.status === 'ISSUED' && c.dueDate.slice(0, 7) === month && c.dueDate >= today)
+    .reduce((sum, c) => sum + toBase(c.amount, c.currency), 0);
   return Math.round(total * 100) / 100;
 }

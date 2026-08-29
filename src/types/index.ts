@@ -234,8 +234,38 @@ export interface UpcomingItem {
   date: string;
   title: string;
   amount: number;
-  source: 'VAT' | 'CHEQUE' | 'INSTALLMENT' | 'TAX' | 'LOAN' | 'PLANNED';
+  source: 'VAT' | 'CHEQUE' | 'INSTALLMENT' | 'TAX' | 'LOAN' | 'PLANNED' | 'BEARER_CHEQUE';
   isOverdue: boolean;
+}
+
+/**
+ * A postdated cheque issued from one of the user's own accounts: money that
+ * will leave on a known future date, not today. Picking the «Чеки на
+ * предъявителя» category in the expense form creates one of these instead of
+ * an ordinary transaction; clearing it later is what turns it into one.
+ * Distinct from `Obligation` (a bearer note handed to someone else, settled
+ * whenever they present it) — this is a cheque drawn on the user's own
+ * account with a specific expected debit date.
+ */
+export type BearerChequeStatus = 'ISSUED' | 'CLEARED' | 'CANCELLED';
+
+export interface BearerCheque {
+  id: string;
+  payee: string;
+  chequeNumber?: string;
+  amount: number;
+  currency: CurrencyCode;
+  categoryId: string;
+  accountId: string;
+  issueDate: string;
+  dueDate: string;
+  status: BearerChequeStatus;
+  note?: string;
+  authorId: string;
+  /** Expense created once the cheque actually clears. */
+  transactionId?: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export type ObligationStatus = 'ISSUED' | 'PARTIALLY_SETTLED' | 'SETTLED' | 'OVERDUE';
@@ -551,6 +581,10 @@ export interface FinanceBackupPayload {
   obligationSettlements: ObligationSettlement[];
   budgets: Budget[];
   members: ProfileMember[];
+  vatPayments?: VatPayment[];
+  debts?: DebtPlan[];
+  debtInstallments?: DebtInstallment[];
+  bearerCheques?: BearerCheque[];
   settings: FinanceSettings | null;
 }
 
