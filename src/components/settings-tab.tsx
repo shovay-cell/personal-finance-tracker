@@ -20,6 +20,7 @@ import {
   RefreshCw,
   ServerCog,
   Shapes,
+  ShieldAlert,
   Trash2,
   UserPlus,
   Users,
@@ -62,11 +63,13 @@ import {
   authenticateGoogleDrive,
   disconnectGoogleDrive,
   getGoogleDriveState,
+  getLastSyncInfo,
   restoreFinanceFromLocalFile,
   restoreLatestFinanceBackup,
-  syncFinanceFromDrive,
+  syncNow,
   uploadFinanceBackup,
 } from '@/services/backup/drive-backup';
+import { getDeviceName, setDeviceName } from '@/services/device';
 import {
   notificationsPermission,
   requestNotificationsPermission,
@@ -123,6 +126,11 @@ export function SettingsTab({
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [isManagingPin, setIsManagingPin] = useState(false);
   const [isJoining, setIsJoining] = useState(false);
+  const [syncInfo, setSyncInfo] = useState(() => getLastSyncInfo());
+  const [deviceNameInput, setDeviceNameInput] = useState(() => getDeviceName());
+  const [restoreConfirm, setRestoreConfirm] = useState<
+    { kind: 'drive' } | { kind: 'file'; file: File } | null
+  >(null);
   const currentMemberId = getCurrentMemberId();
   const { t, language } = useT();
 
@@ -704,9 +712,9 @@ export function SettingsTab({
         </Card>
       </div>
 
-      {/* ------------------------------------------------------- backup */}
+      {/* ------------------------------------------------------- sync */}
       <div>
-        <SectionTitle title={t('settings.backup')} />
+        <SectionTitle title={t('sb.syncTitle')} />
         <Card className="p-4 space-y-3">
           <div className="flex items-center gap-3">
             <span
@@ -748,71 +756,140 @@ export function SettingsTab({
             </button>
           </div>
 
+          <div className="space-y-1 py-1">
+            <p className="text-[10px] text-slate-400 font-medium flex items-center justify-between gap-2">
+              <span>{t('sb.lastSyncDevice')}</span>
+              <span className="font-black text-slate-500 dark:text-slate-400">
+                {syncInfo.lastSyncTime
+                  ? new Date(syncInfo.lastSyncTime).toLocaleString(numberLocale())
+                  : t('sb.never')}
+              </span>
+            </p>
+            <p className="text-[10px] text-slate-400 font-medium flex items-center justify-between gap-2">
+              <span>{t('sb.lastKnownDriveCopy')}</span>
+              <span className="font-black text-slate-500 dark:text-slate-400 truncate max-w-[55%] text-end">
+                {syncInfo.lastKnownDriveDevice || t('sb.unknown')}
+                {syncInfo.lastKnownDriveTime
+                  ? ` · ${new Date(syncInfo.lastKnownDriveTime).toLocaleString(numberLocale())}`
+                  : ''}
+              </span>
+            </p>
+          </div>
+
+          {transactions.length === 0 && driveState.isConnected && (
+            <div className="flex items-start gap-2 p-2.5 rounded-2xl bg-sky-50 dark:bg-sky-950/40 text-sky-700 dark:text-sky-400">
+              <Cloud className="w-3.5 h-3.5 mt-px flex-shrink-0" />
+              <div className="flex-1 min-w-0">
+                <p className="text-[10.5px] font-bold leading-relaxed">{t('sb.newDeviceHint')}</p>
+                <button
+                  type="button"
+                  onClick={() => setRestoreConfirm({ kind: 'drive' })}
+                  className="mt-1.5 text-[10.5px] font-black underline underline-offset-2"
+                >
+                  {t('sb.newDeviceAction')}
+                </button>
+              </div>
+            </div>
+          )}
+
+          <button
+            type="button"
+            disabled={!driveState.isConnected || busy !== null}
+            onClick={() =>
+              run('syncnow', async () => {
+                const result = await syncNow();
+                setSyncInfo(getLastSyncInfo());
+                if (!result.success) return { ok: false, text: result.error || t('st.syncError') };
+                const text =
+                  result.pulledFrom === undefined
+                    ? t('sb.pushedFresh')
+                    : `${t('sb.syncedOk')}: ${result.merged ?? 0} ${t('sb.pulledAndMerged')}`;
+                return { ok: true, text };
+              })
+            }
+            className="w-full py-3.5 rounded-2xl bg-gradient-to-tr from-sky-500 to-cyan-400 text-white text-xs font-black flex items-center justify-center gap-2 shadow-lg shadow-sky-500/25 active:scale-[0.98] transition-transform disabled:opacity-40 disabled:shadow-none"
+          >
+            {busy === 'syncnow' ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <RefreshCw className="w-4 h-4" />
+            )}
+            {t('sb.syncNow')}
+          </button>
+          <p className="text-[10px] text-slate-400 font-medium text-center leading-relaxed px-2">
+            {t('sb.syncNowHint')}
+          </p>
+          <p className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold text-center">
+            {t('sb.syncSafeNote')}
+          </p>
+        </Card>
+      </div>
+
+      {/* ------------------------------------------------------- backup */}
+      <div>
+        <SectionTitle title={t('sb.backupTitle')} />
+        <Card className="p-4 space-y-3">
+          <button
+            type="button"
+            onClick={() =>
+              saveFinanceSettings({ autoBackupEnabled: !(settings.autoBackupEnabled !== false) })
+            }
+            className="w-full flex items-center justify-between gap-3 p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/70 text-left"
+          >
+            <span>
+              <span className="block text-xs font-black text-slate-700 dark:text-slate-200">
+                {t('sb.autoBackup')}
+              </span>
+              <span className="block text-[10px] text-slate-400 font-medium">
+                {t('sb.autoBackupInterval')}
+              </span>
+            </span>
+            <span
+              className={`w-11 h-6 rounded-full flex items-center px-0.5 transition-colors flex-shrink-0 ${
+                settings.autoBackupEnabled !== false
+                  ? 'bg-emerald-500'
+                  : 'bg-slate-300 dark:bg-slate-700'
+              }`}
+            >
+              <span
+                className={`w-5 h-5 rounded-full bg-white shadow transition-transform ${
+                  settings.autoBackupEnabled !== false ? 'translate-x-5' : ''
+                }`}
+              />
+            </span>
+          </button>
+
           {settings.lastBackupDate && (
             <p className="text-[10px] text-slate-400 font-medium">
               {t('st.lastBackup')}: {new Date(settings.lastBackupDate).toLocaleString(numberLocale())}
             </p>
           )}
 
-          <div className="grid grid-cols-2 gap-2">
+          <div className="space-y-2">
             <button
               type="button"
               disabled={!driveState.isConnected || busy !== null}
               onClick={() =>
                 run('upload', async () => {
                   const result = await uploadFinanceBackup();
+                  setSyncInfo(getLastSyncInfo());
                   return result.success
                     ? { ok: true, text: t('st.backupUploaded') }
                     : { ok: false, text: result.error || t('st.uploadError') };
                 })
               }
-              className="py-2.5 rounded-2xl bg-sky-50 dark:bg-sky-950/40 text-sky-600 dark:text-sky-400 text-[11px] font-black flex items-center justify-center gap-1.5 disabled:opacity-40"
+              className="w-full py-2.5 rounded-2xl bg-sky-50 dark:bg-sky-950/40 text-sky-600 dark:text-sky-400 text-[11px] font-black flex items-center justify-center gap-1.5 disabled:opacity-40"
             >
               {busy === 'upload' ? (
                 <Loader2 className="w-3.5 h-3.5 animate-spin" />
               ) : (
                 <CloudUpload className="w-3.5 h-3.5" />
               )}
-              {t('st.upload')}
+              {t('sb.createBackup')}
             </button>
-
-            <button
-              type="button"
-              disabled={!driveState.isConnected || busy !== null}
-              onClick={() =>
-                run('sync', async () => {
-                  const result = await syncFinanceFromDrive();
-                  return result.success
-                    ? { ok: true, text: `${t('st.syncedRecords')}: ${result.merged || 0}` }
-                    : { ok: false, text: result.error || t('st.syncError') };
-                })
-              }
-              className="py-2.5 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 text-[11px] font-black flex items-center justify-center gap-1.5 disabled:opacity-40"
-            >
-              {busy === 'sync' ? (
-                <Loader2 className="w-3.5 h-3.5 animate-spin" />
-              ) : (
-                <RefreshCw className="w-3.5 h-3.5" />
-              )}
-              {t('st.sync')}
-            </button>
-
-            <button
-              type="button"
-              disabled={!driveState.isConnected || busy !== null}
-              onClick={() =>
-                run('restore', async () => {
-                  const result = await restoreLatestFinanceBackup();
-                  return result.success
-                    ? { ok: true, text: `${t('st.restoredFrom')} ${result.fileName}` }
-                    : { ok: false, text: result.error || t('st.restoreError') };
-                })
-              }
-              className="py-2.5 rounded-2xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-[11px] font-black flex items-center justify-center gap-1.5 disabled:opacity-40"
-            >
-              <Download className="w-3.5 h-3.5" />
-              {t('st.restore')}
-            </button>
+            <p className="text-[10px] text-slate-400 font-medium text-center -mt-1">
+              {t('sb.createBackupHint')}
+            </p>
 
             <button
               type="button"
@@ -822,38 +899,118 @@ export function SettingsTab({
                   return { ok: true, text: t('st.backupFileSaved') };
                 })
               }
-              className="py-2.5 rounded-2xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-[11px] font-black flex items-center justify-center gap-1.5"
+              className="w-full py-2.5 rounded-2xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-[11px] font-black flex items-center justify-center gap-1.5"
             >
               <Download className="w-3.5 h-3.5" />
-              {t('st.fileToDevice')}
+              {t('sb.exportFile')}
             </button>
+            <p className="text-[10px] text-slate-400 font-medium text-center -mt-1">
+              {t('sb.exportFileHint')}
+            </p>
           </div>
 
           <DriveSetupStatus />
 
-          <label className="block">
-            <span className="text-[10px] font-black text-slate-400 uppercase tracking-wide">
-              {t('st.restoreFromFile')}
+          <Field label={t('sb.thisDeviceName')} hint={t('sb.thisDeviceNameHint')}>
+            <input
+              type="text"
+              value={deviceNameInput}
+              onChange={(e) => setDeviceNameInput(e.target.value)}
+              onBlur={() => setDeviceName(deviceNameInput)}
+              className={inputClass}
+            />
+          </Field>
+        </Card>
+      </div>
+
+      {/* -------------------------------------------------- danger zone */}
+      <div>
+        <SectionTitle title={t('sb.dangerTitle')} />
+        <Card className="p-4 space-y-3 ring-1 ring-rose-200 dark:ring-rose-900/60">
+          <div className="flex items-start gap-2 text-rose-500">
+            <ShieldAlert className="w-4 h-4 mt-px flex-shrink-0" />
+            <p className="text-[10.5px] font-bold leading-relaxed">
+              {t('sb.restoreFromDriveHint')}
+            </p>
+          </div>
+
+          <button
+            type="button"
+            disabled={!driveState.isConnected || busy !== null}
+            onClick={() => setRestoreConfirm({ kind: 'drive' })}
+            className="w-full py-2.5 rounded-2xl bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 text-[11px] font-black flex items-center justify-center gap-1.5 disabled:opacity-40"
+          >
+            <Download className="w-3.5 h-3.5" />
+            {t('sb.restoreFromDrive')}
+          </button>
+
+          <label className="block pt-1 border-t border-rose-100 dark:border-rose-900/40">
+            <span className="text-[10px] font-black text-rose-500 uppercase tracking-wide">
+              {t('sb.restoreFromFileButton')}
+            </span>
+            <span className="block text-[10px] text-slate-400 font-medium mb-1">
+              {t('sb.restoreFromFileHint')}
             </span>
             <input
               type="file"
               accept=".fintrack,application/json"
-              onChange={async (e) => {
+              onChange={(e) => {
                 const file = e.target.files?.[0];
                 if (!file) return;
-                await run('file-restore', async () => {
-                  const result = await restoreFinanceFromLocalFile(file);
-                  return result.success
-                    ? { ok: true, text: t('st.restoredFromFile') }
-                    : { ok: false, text: result.error || t('st.restoreError') };
-                });
+                setRestoreConfirm({ kind: 'file', file });
+                e.target.value = '';
               }}
-              className="mt-1 w-full text-[11px] text-slate-500 file:mr-3 file:py-2 file:px-3 file:rounded-xl file:border-0 file:bg-slate-100 dark:file:bg-slate-800 file:text-slate-600 file:text-[11px] file:font-black"
+              className="mt-1 w-full text-[11px] text-slate-500 file:mr-3 file:py-2 file:px-3 file:rounded-xl file:border-0 file:bg-rose-50 dark:file:bg-rose-950/40 file:text-rose-600 dark:file:text-rose-400 file:text-[11px] file:font-black"
             />
           </label>
         </Card>
       </div>
 
+      {restoreConfirm && (
+        <ModalShell
+          title={t('sb.confirmRestoreTitle')}
+          icon={<ShieldAlert className="w-5 h-5" />}
+          onClose={() => setRestoreConfirm(null)}
+          maxWidthClass="max-w-sm"
+          footer={
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setRestoreConfirm(null)}
+                className="flex-1 py-3 rounded-2xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-xs font-black"
+              >
+                {t('common.cancel')}
+              </button>
+              <PrimaryButton
+                variant="danger"
+                disabled={busy !== null}
+                onClick={async () => {
+                  const pending = restoreConfirm;
+                  setRestoreConfirm(null);
+                  await run('restore', async () => {
+                    const result =
+                      pending.kind === 'drive'
+                        ? await restoreLatestFinanceBackup()
+                        : await restoreFinanceFromLocalFile(pending.file);
+                    setSyncInfo(getLastSyncInfo());
+                    return result.success
+                      ? { ok: true, text: t('st.restoredFromFile') }
+                      : { ok: false, text: result.error || t('st.restoreError') };
+                  });
+                }}
+              >
+                {t('sb.confirmRestoreAction')}
+              </PrimaryButton>
+            </div>
+          }
+        >
+          <p className="text-xs text-slate-500 font-medium leading-relaxed">
+            {restoreConfirm.kind === 'drive'
+              ? t('sb.confirmRestoreDriveWarning')
+              : t('sb.confirmRestoreFileWarning')}
+          </p>
+        </ModalShell>
+      )}
       {/* ------------------------------------------------------- credits */}
       <div>
         <SectionTitle title={t('cr.title')} />

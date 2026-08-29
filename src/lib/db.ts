@@ -1,5 +1,6 @@
 import Dexie, { Table } from 'dexie';
 import { tr } from '@/i18n/t';
+import { getDeviceName } from '@/services/device';
 import {
   Budget,
   CurrencyCode,
@@ -631,6 +632,7 @@ export async function exportFinanceDatabaseJson(): Promise<string> {
     version: 1,
     appName: 'FinTrack',
     exportedAt: new Date().toISOString(),
+    deviceName: getDeviceName(),
     accounts,
     categories,
     transactions,

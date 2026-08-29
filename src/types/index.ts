@@ -474,6 +474,9 @@ export interface FinanceSettings {
   pinHash?: string;
   pinSalt?: string;
 
+  /** Daily Drive auto-backup; on by default, so absent means enabled. */
+  autoBackupEnabled?: boolean;
+
   updatedAt: string;
 }
 
@@ -538,6 +541,8 @@ export interface FinanceBackupPayload {
   version: number;
   appName: 'FinTrack';
   exportedAt: string;
+  /** Friendly label of the device that created this copy, e.g. "MacBook". */
+  deviceName?: string;
   accounts: FinanceAccount[];
   categories: FinanceCategory[];
   transactions: Transaction[];

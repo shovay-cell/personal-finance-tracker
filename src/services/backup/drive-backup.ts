@@ -2,6 +2,7 @@
 
 import { FinanceBackupPayload, GoogleDriveBackupFile } from '@/types';
 import { tr } from '@/i18n/t';
+import { getDeviceName } from '@/services/device';
 import {
   authenticateGoogleDrive,
   disconnectGoogleDrive,
@@ -10,6 +11,7 @@ import {
 } from './google-drive';
 import {
   exportFinanceDatabaseJson,
+  getFinanceSettings,
   importFinanceDatabaseJson,
   mergeFinanceDatabaseJson,
   saveFinanceSettings,
@@ -23,8 +25,51 @@ import {
  */
 const FINANCE_FILE_PREFIX = 'FinTrack_Backup_';
 const AUTO_BACKUP_KEY = 'fintrack_last_auto_backup';
+/** «Sync now» also runs an upload, so the folder is pruned to this many
+ *  newest copies each time — otherwise a button people tap daily would fill
+ *  Drive with files nobody ever opens again. */
+const KEEP_BACKUPS = 10;
+const LAST_SYNC_TIME_KEY = 'fintrack_last_sync_time';
+const LAST_KNOWN_DRIVE_DEVICE_KEY = 'fintrack_last_known_drive_device';
+const LAST_KNOWN_DRIVE_TIME_KEY = 'fintrack_last_known_drive_time';
 
 export { authenticateGoogleDrive, disconnectGoogleDrive, getGoogleDriveState };
+
+/** What this device has learned about the shared Drive copy and its own last
+ *  sync — read straight from localStorage so the settings screen can render
+ *  it without a network round trip. */
+export interface LastSyncInfo {
+  /** When this device itself last completed a sync or a manual backup. */
+  lastSyncTime: string | null;
+  /** Device name embedded in the newest Drive copy this device has seen. */
+  lastKnownDriveDevice: string | null;
+  /** That copy's own timestamp, as reported by the device that made it. */
+  lastKnownDriveTime: string | null;
+}
+
+export function getLastSyncInfo(): LastSyncInfo {
+  if (typeof window === 'undefined') {
+    return { lastSyncTime: null, lastKnownDriveDevice: null, lastKnownDriveTime: null };
+  }
+  return {
+    lastSyncTime: localStorage.getItem(LAST_SYNC_TIME_KEY),
+    lastKnownDriveDevice: localStorage.getItem(LAST_KNOWN_DRIVE_DEVICE_KEY),
+    lastKnownDriveTime: localStorage.getItem(LAST_KNOWN_DRIVE_TIME_KEY),
+  };
+}
+
+function recordLastSync(): void {
+  if (typeof window === 'undefined') return;
+  localStorage.setItem(LAST_SYNC_TIME_KEY, new Date().toISOString());
+}
+
+/** Remembers whose device made the copy this one just downloaded, so the
+ *  settings screen can say "MacBook, 18:08" instead of a bare timestamp. */
+function recordKnownDriveCopy(payload: FinanceBackupPayload): void {
+  if (typeof window === 'undefined') return;
+  if (payload.deviceName) localStorage.setItem(LAST_KNOWN_DRIVE_DEVICE_KEY, payload.deviceName);
+  localStorage.setItem(LAST_KNOWN_DRIVE_TIME_KEY, payload.exportedAt);
+}
 
 function isFinanceBackup(file: GoogleDriveBackupFile): boolean {
   return file.name.startsWith(FINANCE_FILE_PREFIX);
@@ -89,11 +134,32 @@ export async function uploadFinanceBackup(): Promise<{
     setLastBackupTimestamp(nowIso);
     localStorage.setItem(AUTO_BACKUP_KEY, nowIso);
     await saveFinanceSettings({ lastBackupDate: nowIso });
+    recordLastSync();
+
+    // Best-effort: a prune failure should never turn a successful upload into
+    // a failed one — the new copy already exists either way.
+    pruneOldBackups().catch(() => {});
 
     return { success: true, fileId: data.id };
   } catch (err: any) {
     return { success: false, error: err.message || tr('drive.uploadFailed') };
   }
+}
+
+async function deleteBackupFile(fileId: string): Promise<void> {
+  const { accessToken } = getGoogleDriveState();
+  if (!accessToken) return;
+  await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${accessToken}` },
+  }).catch(() => {});
+}
+
+async function pruneOldBackups(): Promise<void> {
+  const list = await listFinanceBackups();
+  if (!list.success || !list.files) return;
+  const stale = list.files.slice(KEEP_BACKUPS);
+  await Promise.all(stale.map((file) => deleteBackupFile(file.id)));
 }
 
 export async function listFinanceBackups(): Promise<{
@@ -170,6 +236,56 @@ export async function syncFinanceFromDrive(): Promise<{
   return { ...result, fileName: latest.name };
 }
 
+/**
+ * The one-button flow: pull the newest Drive copy and merge it in (transactions
+ * keep whichever side is newer; nothing is ever deleted), then push the
+ * resulting, now-merged state back up so Drive holds the union too. Two taps —
+ * one per device — are enough to bring both fully in sync; a first-ever sync
+ * with nothing in Drive yet just pushes.
+ */
+export async function syncNow(): Promise<{
+  success: boolean;
+  merged?: number;
+  pulledFrom?: string;
+  error?: string;
+}> {
+  const { isConnected } = getGoogleDriveState();
+  if (!isConnected) {
+    return { success: false, error: tr('drive.notConnected') };
+  }
+
+  const list = await listFinanceBackups();
+  if (!list.success) {
+    return { success: false, error: list.error };
+  }
+
+  let merged: number | undefined;
+  let pulledFrom: string | undefined;
+
+  if (list.files && list.files.length > 0) {
+    const latest = list.files[0];
+    const { text, error } = await downloadBackupText(latest.id);
+    if (!text) return { success: false, error };
+
+    try {
+      recordKnownDriveCopy(JSON.parse(text) as FinanceBackupPayload);
+    } catch {
+      // A malformed copy still merges below on its own terms; the label is
+      // cosmetic and not worth failing the sync over.
+    }
+
+    const mergeResult = await mergeFinanceDatabaseJson(text);
+    if (!mergeResult.success) return mergeResult;
+    merged = mergeResult.merged;
+    pulledFrom = latest.name;
+  }
+
+  const uploadResult = await uploadFinanceBackup();
+  if (!uploadResult.success) return { success: false, error: uploadResult.error };
+
+  return { success: true, merged, pulledFrom };
+}
+
 export async function restoreLatestFinanceBackup(): Promise<{
   success: boolean;
   error?: string;
@@ -182,6 +298,7 @@ export async function restoreLatestFinanceBackup(): Promise<{
 
   const latest = list.files[0];
   const result = await restoreFinanceBackup(latest.id);
+  if (result.success) recordLastSync();
   return { ...result, fileName: latest.name };
 }
 
@@ -193,7 +310,9 @@ export async function restoreFinanceFromLocalFile(
     reader.onload = async (e) => {
       const text = e.target?.result as string;
       if (!text) return resolve({ success: false, error: tr('drive.emptyFile') });
-      resolve(await importFinanceDatabaseJson(text));
+      const result = await importFinanceDatabaseJson(text);
+      if (result.success) recordLastSync();
+      resolve(result);
     };
     reader.onerror = () => resolve({ success: false, error: tr('drive.readError') });
     reader.readAsText(file);
@@ -208,6 +327,9 @@ export async function runDailyAutoBackup(): Promise<void> {
   if (typeof window === 'undefined') return;
   const { isConnected } = getGoogleDriveState();
   if (!isConnected) return;
+
+  const settings = await getFinanceSettings();
+  if (settings.autoBackupEnabled === false) return;
 
   const last = localStorage.getItem(AUTO_BACKUP_KEY);
   if (last && Date.now() - new Date(last).getTime() < 24 * 60 * 60 * 1000) return;
