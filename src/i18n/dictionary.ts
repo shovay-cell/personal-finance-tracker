@@ -1891,6 +1891,19 @@ export const DICTIONARY = {
     en: 'The app is free — a coffee for the author helps make it better',
   },
   'ob.youAreIn': { ru: 'Вы в профиле', he: 'אתם בפרופיל', uk: 'Ви у профілі', en: 'You are in the profile' },
+  'pl.note': { ru: 'Заметка', he: 'הערה', uk: 'Нотатка', en: 'Note' },
+  'pl.notePlaceholder': {
+    ru: 'Название платежа, номер договора, назначение',
+    he: 'שם התשלום, מספר חוזה, ייעוד',
+    uk: 'Назва платежу, номер договору, призначення',
+    en: 'Payment name, contract number, purpose',
+  },
+  'pl.noteHint': {
+    ru: 'Подставится в операцию, когда платёж будет проведён',
+    he: 'ייכנס לתנועה כשהתשלום יבוצע',
+    uk: 'Підставиться в операцію, коли платіж буде проведено',
+    en: 'Carried into the operation when the payment is booked',
+  },
   // --------------------------------------------------------------- form
   'form.newExpense': { ru: 'Новый расход', he: 'הוצאה חדשה', uk: 'Нова витрата', en: 'New expense' },
   'form.newIncome': { ru: 'Новый доход', he: 'הכנסה חדשה', uk: 'Новий дохід', en: 'New income' },

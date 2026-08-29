@@ -70,6 +70,11 @@ export function DebtCard({
               ? ` · ${t('dc.next')} ${formatDateHuman(nextInstallment.dueDate)}`
               : ` · ${t('dc.closed')}`}
           </p>
+          {debt.note && (
+            <p className="text-[10.5px] text-slate-500 dark:text-slate-400 font-medium truncate">
+              {debt.note}
+            </p>
+          )}
         </div>
 
         <div className="text-right flex-shrink-0">

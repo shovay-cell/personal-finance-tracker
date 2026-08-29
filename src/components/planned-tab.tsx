@@ -357,6 +357,11 @@ function PlannedRow({
             .join(' · ')}
           {payment.autoCreate ? ` · ${t('pl.auto')}` : ''}
         </p>
+        {payment.note && (
+          <p className="text-[10.5px] text-slate-500 dark:text-slate-400 font-medium truncate">
+            {payment.note}
+          </p>
+        )}
       </div>
 
       <div className="text-right flex-shrink-0">
@@ -434,6 +439,7 @@ function PlannedPaymentModal({
   const [intervalDays, setIntervalDays] = useState(String(payment?.intervalDays || 30));
   const [nextDueDate, setNextDueDate] = useState(payment?.nextDueDate || todayIso());
   const [endDate, setEndDate] = useState(payment?.endDate || '');
+  const [note, setNote] = useState(payment?.note || '');
   const [remindDaysBefore, setRemindDaysBefore] = useState(String(payment?.remindDaysBefore ?? 3));
   const [autoCreate, setAutoCreate] = useState(payment?.autoCreate ?? autoCreateDefault);
   const [error, setError] = useState<string | null>(null);
@@ -462,6 +468,7 @@ function PlannedPaymentModal({
       intervalDays: recurrence === 'CUSTOM_DAYS' ? parseInt(intervalDays, 10) || 30 : undefined,
       nextDueDate,
       endDate: endDate || undefined,
+      note: note.trim() || undefined,
       remindDaysBefore: parseInt(remindDaysBefore, 10) || 0,
       autoCreate,
       isActive: payment?.isActive ?? true,
@@ -669,6 +676,16 @@ function PlannedPaymentModal({
           </Field>
         )}
       </div>
+
+      <Field label={t('pl.note')} hint={t('pl.noteHint')}>
+        <input
+          type="text"
+          value={note}
+          onChange={(e) => setNote(e.target.value)}
+          placeholder={t('pl.notePlaceholder')}
+          className={inputClass}
+        />
+      </Field>
 
       <Field label={t('pl.remindBefore')}>
         <div className="flex gap-2">
