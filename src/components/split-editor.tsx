@@ -5,6 +5,8 @@ import { Plus, Scissors, Trash2 } from 'lucide-react';
 import { CurrencyCode, FinanceCategory, TransactionSplit } from '@/types';
 import { formatMoney } from '@/services/analytics';
 import { getCategoryIcon } from '@/constants/categories';
+import { useT } from '@/i18n/context';
+import { categoryName } from '@/i18n/categories';
 import { inputClass } from './ui';
 
 /**
@@ -25,6 +27,7 @@ export function SplitEditor({
   splits: TransactionSplit[];
   onChange: (splits: TransactionSplit[]) => void;
 }) {
+  const { t, language } = useT();
   const assigned = splits.reduce((sum, part) => sum + (part.amount || 0), 0);
   const remainder = Math.round((amount - assigned) * 100) / 100;
 
@@ -65,10 +68,10 @@ export function SplitEditor({
                 onChange={(e) => update(index, { categoryId: e.target.value })}
                 className={`${inputClass} text-xs py-2 flex-1`}
               >
-                <option value="">Категория</option>
+                <option value="">{t('sp.category')}</option>
                 {categories.map((category) => (
                   <option key={category.id} value={category.id}>
-                    {category.name}
+                    {categoryName(category, language)}
                   </option>
                 ))}
               </select>
@@ -121,7 +124,7 @@ export function SplitEditor({
           className="flex-1 py-2.5 rounded-2xl border border-dashed border-slate-300 dark:border-slate-600 text-slate-400 text-[11px] font-black flex items-center justify-center gap-1.5"
         >
           <Plus className="w-3.5 h-3.5" />
-          Добавить часть
+          {t('sp.addPart')}
         </button>
 
         <span
@@ -132,14 +135,14 @@ export function SplitEditor({
           }`}
         >
           {Math.abs(remainder) < 0.01
-            ? 'Сходится'
-            : `Остаток ${formatMoney(remainder, currency)}`}
+            ? t('sp.balanced')
+            : `${t('sp.remainder')} ${formatMoney(remainder, currency)}`}
         </span>
       </div>
 
       <p className="text-[10px] text-slate-400 font-medium flex items-start gap-1.5">
         <Scissors className="w-3 h-3 mt-px flex-shrink-0" />
-        Остаток автоматически добавится к последней части при сохранении.
+        {t('sp.remainderHint')}
       </p>
     </div>
   );

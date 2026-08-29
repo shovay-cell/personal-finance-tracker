@@ -19,7 +19,7 @@ import {
   TransactionKind,
 } from '@/types';
 import { addTransaction, todayIso } from '@/lib/db';
-import { formatMoney, pluralRu } from '@/services/analytics';
+import { formatMoney } from '@/services/analytics';
 import {
   analyzeStatementWithAI,
   readFileAsDataUrl,
@@ -27,6 +27,8 @@ import {
   resolveStatementCategoryId,
 } from '@/services/ai/receipt-parser';
 import { GeminiKeyPrompt } from './gemini-key-prompt';
+import { useT } from '@/i18n/context';
+import { accountName, categoryName } from '@/i18n/categories';
 import { Field, ModalShell, PrimaryButton, inputClass } from './ui';
 
 interface DraftRow extends ParsedStatementRow {
@@ -57,6 +59,7 @@ export function StatementImportModal({
   onClose: () => void;
   onImported: (count: number) => void;
 }) {
+  const { t, language } = useT();
   const [rows, setRows] = useState<DraftRow[] | null>(null);
   const [isBusy, setIsBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -102,7 +105,7 @@ export function StatementImportModal({
       );
     } catch (err: any) {
       if (err instanceof ReceiptScanError && err.needsApiKey) setKeyError(err.message);
-      else setError(err.message || 'Не удалось распознать список');
+      else setError(err.message || t('si.scanFailed'));
     } finally {
       setIsBusy(false);
     }
@@ -137,18 +140,18 @@ export function StatementImportModal({
       onImported(selected.length);
       onClose();
     } catch (err: any) {
-      setError(err.message || 'Не удалось импортировать операции');
+      setError(err.message || t('si.importFailed'));
       setIsBusy(false);
     }
   };
 
   return (
     <ModalShell
-      title="Импорт списка операций"
+      title={t('si.title')}
       subtitle={
         rows
-          ? `Распознано ${rows.length} ${pluralRu(rows.length, 'строка', 'строки', 'строк')} — проверьте перед импортом`
-          : 'Фото списка из банка: каждая строка станет отдельной операцией'
+          ? `${t('si.recognizedRows')}: ${rows.length} — ${t('si.checkBeforeImport')}`
+          : t('si.subtitle')
       }
       icon={<Layers className="w-5 h-5" />}
       onClose={onClose}
@@ -158,8 +161,7 @@ export function StatementImportModal({
             {error && <p className="text-[11px] font-bold text-rose-500 text-center">{error}</p>}
             <PrimaryButton onClick={handleImport} disabled={isBusy || selected.length === 0} variant="success">
               {isBusy ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
-              Внести {selected.length}{' '}
-              {pluralRu(selected.length, 'операцию', 'операции', 'операций')} ·{' '}
+              {t('si.importCount')}: {selected.length} ·{' '}
               {formatMoney(selectedTotal, baseCurrency)}
             </PrimaryButton>
           </div>
@@ -172,10 +174,10 @@ export function StatementImportModal({
             <>
               <Loader2 className="w-9 h-9 mx-auto text-sky-500 animate-spin" />
               <p className="text-xs font-black text-slate-600 dark:text-slate-300">
-                Gemini читает список…
+                {t('si.geminiReading')}
               </p>
               <p className="text-[11px] text-slate-400 font-medium px-6">
-                Каждая строка станет отдельной операцией со своей датой и суммой.
+                {t('si.eachRow')}
               </p>
             </>
           ) : (
@@ -184,7 +186,7 @@ export function StatementImportModal({
               <div className="flex gap-2">
                 <label className="flex-1 flex items-center justify-center gap-1.5 py-3 rounded-2xl bg-gradient-to-tr from-sky-500 to-cyan-400 text-white text-xs font-black cursor-pointer active:scale-95 transition-transform">
                   <ScanLine className="w-4 h-4" />
-                  Сфотографировать список
+                  {t('si.photograph')}
                   <input
                     type="file"
                     accept="image/*"
@@ -195,7 +197,7 @@ export function StatementImportModal({
                 </label>
                 <label className="flex items-center justify-center gap-1.5 px-4 py-3 rounded-2xl bg-slate-100 dark:bg-slate-800 text-slate-500 text-[11px] font-black cursor-pointer">
                   <ImagePlus className="w-3.5 h-3.5" />
-                  Файл
+                  {t('form.file')}
                   <input
                     type="file"
                     accept="image/*"
@@ -205,8 +207,7 @@ export function StatementImportModal({
                 </label>
               </div>
               <p className="text-[11px] text-slate-400 font-medium px-4">
-                Подходит экран интернет-банка со списком поступлений: снимите так, чтобы были
-                видны даты и суммы всех строк.
+                {t('si.shotHint')}
               </p>
               {error && <p className="text-[11px] font-bold text-rose-500 px-4">{error}</p>}
               {keyError && (
@@ -220,7 +221,7 @@ export function StatementImportModal({
       {rows && (
         <>
           <div className="grid grid-cols-2 gap-2">
-            <Field label="Счёт зачисления">
+            <Field label={t('obl.creditAccount')}>
               <select
                 value={accountId}
                 onChange={(e) => setAccountId(e.target.value)}
@@ -228,13 +229,13 @@ export function StatementImportModal({
               >
                 {accounts.map((account) => (
                   <option key={account.id} value={account.id}>
-                    {account.name}
+                    {accountName(account, language)}
                   </option>
                 ))}
               </select>
             </Field>
 
-            <Field label="Категория всем строкам">
+            <Field label={t('si.bulkCategory')}>
               <select
                 value={bulkCategoryId}
                 onChange={(e) => {
@@ -251,18 +252,18 @@ export function StatementImportModal({
                 }}
                 className={`${inputClass} text-xs`}
               >
-                <option value="">— не менять —</option>
-                <optgroup label="Доходы">
+                <option value="">{t('si.keepAsIs')}</option>
+                <optgroup label={t('si.incomeGroup')}>
                   {incomeCategories.map((category) => (
                     <option key={category.id} value={category.id}>
-                      {category.name}
+                      {categoryName(category, language)}
                     </option>
                   ))}
                 </optgroup>
-                <optgroup label="Расходы">
+                <optgroup label={t('si.expenseGroup')}>
                   {expenseCategories.map((category) => (
                     <option key={category.id} value={category.id}>
-                      {category.name}
+                      {categoryName(category, language)}
                     </option>
                   ))}
                 </optgroup>
@@ -332,7 +333,7 @@ export function StatementImportModal({
                           : 'bg-rose-100 text-rose-700 dark:bg-rose-950/60 dark:text-rose-400'
                       }`}
                     >
-                      {row.kind === 'INCOME' ? '+ доход' : '− расход'}
+                      {row.kind === 'INCOME' ? t('si.incomeTag') : t('si.expenseTag')}
                     </button>
 
                     <button
@@ -350,10 +351,10 @@ export function StatementImportModal({
                       onChange={(e) => update(row.id, { categoryId: e.target.value })}
                       className={`${inputClass} text-[11px] py-1.5 flex-1`}
                     >
-                      <option value="">Категория…</option>
+                      <option value="">{t('si.categoryPlaceholder')}</option>
                       {pool.map((category) => (
                         <option key={category.id} value={category.id}>
-                          {category.name}
+                          {categoryName(category, language)}
                         </option>
                       ))}
                     </select>
@@ -362,7 +363,7 @@ export function StatementImportModal({
                       type="text"
                       value={row.description || ''}
                       onChange={(e) => update(row.id, { description: e.target.value })}
-                      placeholder="Назначение"
+                      placeholder={t('si.purpose')}
                       className={`${inputClass} text-[11px] py-1.5 flex-1`}
                     />
                   </div>
@@ -371,8 +372,8 @@ export function StatementImportModal({
                     <p className="text-[10px] font-bold text-amber-600 dark:text-amber-400 flex items-start gap-1.5">
                       <AlertTriangle className="w-3 h-3 mt-px flex-shrink-0" />
                       {row.duplicate
-                        ? 'Похожая операция уже есть в базе — проверьте, чтобы не задвоить'
-                        : `ИИ не уверен: ${row.uncertainFields.join(', ')}`}
+                        ? t('si.duplicate')
+                        : `${t('si.aiUnsure')}: ${row.uncertainFields.join(', ')}`}
                     </p>
                   )}
                 </div>

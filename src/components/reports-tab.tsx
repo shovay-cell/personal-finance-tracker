@@ -134,7 +134,7 @@ export function ReportsTab({
 
   const handlePdf = () => {
     exportReportPdf({
-      title: 'Финансовый отчёт',
+      title: t('rp.reportTitle'),
       period: `${range.from} — ${range.to}`,
       baseCurrency,
       totalExpense,
@@ -236,8 +236,8 @@ export function ReportsTab({
         {activeRows.length === 0 ? (
           <EmptyState
             icon={<PieChart className="w-7 h-7" />}
-            title="Нет данных за период"
-            description="Выберите другой период или добавьте операции."
+            title={t('rp.noDataTitle')}
+            description={t('rp.noDataText')}
           />
         ) : (
           <>
@@ -245,7 +245,7 @@ export function ReportsTab({
               rows={activeRows}
               total={activeTotal}
               currency={baseCurrency}
-              centerLabel={kind === 'EXPENSE' ? 'Расходы' : 'Доходы'}
+              centerLabel={kind === 'EXPENSE' ? t('common.expenses') : t('common.incomes')}
             />
             <div className="mt-4">
               <CategoryLegend rows={activeRows} currency={baseCurrency} />
@@ -270,10 +270,10 @@ export function ReportsTab({
           <MonthlyBarChart points={dynamics} currency={baseCurrency} />
           <div className="flex items-center justify-center gap-4 mt-3">
             <span className="flex items-center gap-1.5 text-[10px] font-bold text-slate-400">
-              <span className="w-2.5 h-2.5 rounded-sm bg-rose-500" /> Расходы
+              <span className="w-2.5 h-2.5 rounded-sm bg-rose-500" /> {t('common.expenses')}
             </span>
             <span className="flex items-center gap-1.5 text-[10px] font-bold text-slate-400">
-              <span className="w-2.5 h-2.5 rounded-sm bg-emerald-500" /> Доходы
+              <span className="w-2.5 h-2.5 rounded-sm bg-emerald-500" /> {t('common.incomes')}
             </span>
           </div>
         </Card>
@@ -283,7 +283,7 @@ export function ReportsTab({
         <SectionTitle title={t('reports.planFact')} />
         {budgetRows.length === 0 ? (
           <Card className="p-4 text-[11px] font-medium text-slate-400 text-center">
-            Лимиты на этот месяц не заданы
+            {t('rp.noLimits')}
           </Card>
         ) : (
           <Card className="p-4 space-y-3">
@@ -307,12 +307,12 @@ export function ReportsTab({
 
       {obligationRows.length > 0 && (
         <div>
-          <SectionTitle title="Открытые обязательства" />
+          <SectionTitle title={t('rp.openObligations')} />
           <Card className="p-4 space-y-2">
             {obligationRows.map((row) => (
               <div key={row.obligation.id} className="flex items-center justify-between gap-2">
                 <span className="text-[11px] font-bold text-slate-600 dark:text-slate-300 truncate">
-                  {row.obligation.payeeLabel || 'Чек на предъявителя'}
+                  {row.obligation.payeeLabel || t('rp.bearerCheque')}
                 </span>
                 <span className="text-[11px] font-black text-rose-500 tabular-nums flex-shrink-0">
                   {formatMoney(row.outstandingAmount, row.obligation.currency)}
@@ -346,7 +346,7 @@ export function ReportsTab({
 
       <p className="text-[10px] text-slate-400 font-medium text-center px-4 flex items-center justify-center gap-1.5">
         <BarChart3 className="w-3 h-3" />
-        Все суммы приведены к базовой валюте ({baseCurrency}) по курсу на момент операции
+        {t('rp.baseCurrencyNote')} ({baseCurrency}) — {t('rp.atRate')}
       </p>
     </div>
   );

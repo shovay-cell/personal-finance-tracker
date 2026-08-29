@@ -49,8 +49,12 @@ import {
 } from './ui';
 import { CURRENCIES } from '@/constants/categories';
 import { useT } from '@/i18n/context';
+import type { TranslationKey } from '@/i18n/dictionary';
+import { unitNoun } from '@/i18n/plurals';
+import { translate } from '@/i18n/dictionary';
+import { getActiveLanguage } from '@/i18n/runtime';
 import { netFromGross, vatFromGross } from '@/services/vat';
-import { formatMoney, pluralRu } from '@/services/analytics';
+import { formatMoney } from '@/services/analytics';
 import { CategoryEditorModal } from './category-manager-modal';
 import { GeminiKeyPrompt } from './gemini-key-prompt';
 import { SplitEditor } from './split-editor';
@@ -199,7 +203,7 @@ export function TransactionFormModal({
       });
     } catch (err: any) {
       if (err instanceof ReceiptScanError && err.needsApiKey) setKeyError(err.message);
-      else setError(err.message || 'Не удалось распознать чек');
+      else setError(err.message || t('tf.scanFailed'));
     } finally {
       setIsScanning(false);
     }
@@ -208,15 +212,15 @@ export function TransactionFormModal({
   const handleSubmit = async () => {
     const numericAmount = parseFloat(amount.replace(',', '.'));
     if (!Number.isFinite(numericAmount) || numericAmount <= 0) {
-      setError('Укажите сумму больше нуля');
+      setError(t('tf.amountAboveZero'));
       return;
     }
     if (!categoryId) {
-      setError('Выберите категорию');
+      setError(t('tf.pickCategory'));
       return;
     }
     if (!accountId) {
-      setError('Выберите счёт');
+      setError(t('tf.pickAccount'));
       return;
     }
 
@@ -262,7 +266,7 @@ export function TransactionFormModal({
         const count = Math.max(1, parseInt(paymentsCount, 10) || 1);
         await addDebtPlan({
           kind: debtKind,
-          title: merchant.trim() || note.trim() || DEBT_KIND_META[debtKind].defaultTitle,
+          title: merchant.trim() || note.trim() || t(DEBT_KIND_META[debtKind].defaultTitle),
           merchant: merchant.trim() || undefined,
           totalAmount: numericAmount,
           currency,
@@ -286,7 +290,7 @@ export function TransactionFormModal({
       if (isRepeating) {
         const every = Math.max(1, parseInt(repeatCount, 10) || 1);
         await addPlannedPayment({
-          title: merchant.trim() || note.trim() || 'Повторяющийся расход',
+          title: merchant.trim() || note.trim() || t('tf.recurringTitle'),
           planKind: 'PAYMENT',
           kind,
           amount: numericAmount,
@@ -307,7 +311,7 @@ export function TransactionFormModal({
 
       onClose();
     } catch (err: any) {
-      setError(err.message || 'Не удалось сохранить операцию');
+      setError(err.message || t('tf.saveFailed'));
     } finally {
       setIsSaving(false);
     }
@@ -396,8 +400,8 @@ export function TransactionFormModal({
         <div className="flex items-start gap-2 p-3 rounded-2xl bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400">
           <Coins className="w-4 h-4 flex-shrink-0 mt-px" />
           <p className="text-[11px] font-bold leading-relaxed">
-            Операция в {CURRENCIES[currency].name} ({CURRENCIES[currency].symbol}) — в отчётах
-            пересчитывается в {baseCurrency} по курсу из настроек.
+            {t('tf.currencyNoteA')} {CURRENCIES[currency].name} ({CURRENCIES[currency].symbol}){' '}
+            {t('tf.currencyNoteB')} {baseCurrency} {t('tf.currencyNoteC')}
           </p>
         </div>
       )}
@@ -550,7 +554,7 @@ export function TransactionFormModal({
                           : 'bg-slate-50 dark:bg-slate-800 text-slate-500 border-slate-200 dark:border-slate-700'
                       }`}
                     >
-                      {meta.label}
+                      {t(meta.label)}
                     </button>
                   );
                 })}
@@ -652,7 +656,7 @@ export function TransactionFormModal({
                   {t('form.vatSeparate')}
                 </span>
                 <span className="block text-[10px] text-slate-500 dark:text-slate-400 font-medium mt-0.5">
-                  Ставка {settings.vatRate}% · сумма уйдёт из доступной прибыли в обязательства
+                  {t('tf.rate')} {settings.vatRate}% · {t('tf.vatRateHint')}
                 </span>
               </span>
             </span>
@@ -672,11 +676,11 @@ export function TransactionFormModal({
           {separateVat && (
             <div className="flex items-center justify-between pt-2 border-t border-amber-200/70 dark:border-amber-900/70">
               <span className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400">
-                Прибыль:{' '}
+                {t('tf.profit')}:{' '}
                 {netFromGross(parseFloat(amount.replace(',', '.')) || 0, settings.vatRate).toFixed(2)}
               </span>
               <span className="text-[11px] font-bold text-amber-600 dark:text-amber-400">
-                НДС:{' '}
+                {t('settings.vat')}:{' '}
                 {vatFromGross(parseFloat(amount.replace(',', '.')) || 0, settings.vatRate).toFixed(2)}
               </span>
             </div>
@@ -686,8 +690,8 @@ export function TransactionFormModal({
 
       {splits.length > 0 ? (
         <Field
-          label="Разделение чека"
-          hint="Одна покупка распределяется между категориями — в отчётах и бюджетах учтётся каждая часть"
+          label={t('tf.splitLabel')}
+          hint={t('tf.splitHint')}
         >
           <SplitEditor
             amount={parseFloat(amount.replace(',', '.')) || 0}
@@ -701,7 +705,7 @@ export function TransactionFormModal({
             onClick={() => setSplits([])}
             className="mt-2 w-full py-2 rounded-2xl bg-slate-100 dark:bg-slate-800 text-slate-500 text-[11px] font-black"
           >
-            Отменить разделение
+            {t('tf.cancelSplit')}
           </button>
         </Field>
       ) : (
@@ -760,7 +764,7 @@ export function TransactionFormModal({
             setMerchant(e.target.value);
             confirmField('merchant');
           }}
-          placeholder="Например, Rami Levy"
+          placeholder={t('tf.merchantPlaceholder')}
           className={fieldClass(uncertainFields, 'merchant')}
         />
       </Field>
@@ -770,7 +774,7 @@ export function TransactionFormModal({
           type="text"
           value={note}
           onChange={(e) => setNote(e.target.value)}
-          placeholder="Комментарий к операции"
+          placeholder={t('tf.notePlaceholder')}
           className={inputClass}
         />
       </Field>
@@ -791,7 +795,7 @@ export function TransactionFormModal({
         </Field>
       )}
 
-      <Field label={t('form.receipt')} hint="Фото хранится вместе с операцией для последующей сверки">
+      <Field label={t('form.receipt')} hint={t('tf.receiptHint')}>
         <div className="flex gap-2">
           <label className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-2xl bg-sky-50 dark:bg-sky-950/40 text-sky-600 dark:text-sky-400 text-[11px] font-black cursor-pointer border border-sky-100 dark:border-sky-900 active:scale-95 transition-transform">
             <Sparkles className="w-3.5 h-3.5" />
@@ -819,7 +823,7 @@ export function TransactionFormModal({
         {isScanning && (
           <div className="mt-2 flex items-center gap-2 text-[11px] font-bold text-sky-600 dark:text-sky-400">
             <Loader2 className="w-3.5 h-3.5 animate-spin" />
-            Gemini распознаёт чек…
+            {t('tf.geminiReading')}
           </div>
         )}
 
@@ -837,7 +841,7 @@ export function TransactionFormModal({
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={receiptPhoto}
-              alt="Чек"
+              alt={t('tf.receiptAlt')}
               className="w-full max-h-52 object-contain rounded-2xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800"
             />
             <button
@@ -856,7 +860,7 @@ export function TransactionFormModal({
         {receiptScan?.lineItems && receiptScan.lineItems.length > 0 && (
           <div className="mt-2 rounded-2xl bg-slate-50 dark:bg-slate-800/60 p-3 space-y-1">
             <p className="text-[10px] font-black uppercase tracking-wide text-slate-400">
-              Позиции чека ({receiptScan.lineItems.length})
+              {t('tf.receiptItems')} ({receiptScan.lineItems.length})
             </p>
             {receiptScan.lineItems.slice(0, 12).map((item, index) => (
               <div key={index} className="flex justify-between gap-2 text-[11px]">
@@ -907,25 +911,21 @@ export function TransactionFormModal({
 /** Liability types that can be created straight from the expense form. */
 const DEBT_KIND_META: Record<
   DebtKind,
-  { label: string; defaultTitle: string; defaultPayments: number }
+  { label: TranslationKey; defaultTitle: TranslationKey; defaultPayments: number }
 > = {
-  INSTALLMENT: { label: 'Рассрочка', defaultTitle: 'Покупка в рассрочку', defaultPayments: 6 },
-  CHEQUE: { label: 'Чек', defaultTitle: 'Чек к оплате', defaultPayments: 1 },
-  TAX: { label: 'Налог', defaultTitle: 'Налог', defaultPayments: 1 },
-  LOAN: { label: 'Кредит', defaultTitle: 'Кредит', defaultPayments: 1 },
+  INSTALLMENT: {
+    label: 'tf.kindInstallment',
+    defaultTitle: 'tf.kindInstallmentTitle',
+    defaultPayments: 6,
+  },
+  CHEQUE: { label: 'tf.kindCheque', defaultTitle: 'tf.kindChequeTitle', defaultPayments: 1 },
+  TAX: { label: 'tf.kindTax', defaultTitle: 'tf.kindTax', defaultPayments: 1 },
+  LOAN: { label: 'tf.kindLoan', defaultTitle: 'tf.kindLoan', defaultPayments: 1 },
 };
 
-/** Correct Russian agreement for the period next to a number. */
+/** The period noun in the form that agrees with the number beside it. */
 function pluralUnit(unit: RecurrenceUnit, rawCount: string): string {
-  const count = Math.max(1, parseInt(rawCount, 10) || 1);
-  const forms: Record<RecurrenceUnit, [string, string, string]> = {
-    DAY: ['день', 'дня', 'дней'],
-    WEEK: ['неделя', 'недели', 'недель'],
-    MONTH: ['месяц', 'месяца', 'месяцев'],
-    YEAR: ['год', 'года', 'лет'],
-  };
-  const [one, few, many] = forms[unit];
-  return pluralRu(count, one, few, many);
+  return unitNoun(unit, Math.max(1, parseInt(rawCount, 10) || 1));
 }
 
 function shiftByUnit(dateStr: string, unit: RecurrenceUnit, count: number): string {
@@ -961,6 +961,9 @@ function InstallmentPreview({
   firstPaid: boolean;
 }) {
   if (total <= 0) return null;
+  // Rendered from a plain function, not a component with the hook — the label
+  // lookup goes through the module-level active language instead.
+  const tr = (key: TranslationKey) => translate(getActiveLanguage(), key);
   const amounts = buildInstallmentAmounts(total, count);
   const first = amounts[0];
   const single = amounts.length === 1;
@@ -968,23 +971,22 @@ function InstallmentPreview({
   return (
     <div className="rounded-2xl bg-violet-50/70 dark:bg-violet-950/20 p-3 space-y-1">
       <p className="text-[10px] font-black uppercase tracking-wide text-violet-600 dark:text-violet-400">
-        График платежей
+        {tr('tf.schedule')}
       </p>
       <p className="text-[11px] font-bold text-slate-700 dark:text-slate-200">
         {single ? formatMoney(first, currency) : `${count} × ${formatMoney(amounts[1] ?? first, currency)}`}
         {!single && amounts[1] !== undefined && amounts[0] !== amounts[1]
-          ? ` (первый — ${formatMoney(first, currency)})`
+          ? ` (${tr('tf.firstIs')} ${formatMoney(first, currency)})`
           : ''}
       </p>
       <p className="text-[10.5px] text-slate-500 dark:text-slate-400 font-medium">
         {firstPaid
           ? single
-            ? `Сумма ${formatMoney(total, currency)} уйдёт в расходы сразу — долга не останется`
-            : `Сегодня в расходы уйдёт ${formatMoney(first, currency)}, в долгах останется ${formatMoney(
-                Math.round((total - first) * 100) / 100,
-                currency
-              )}`
-          : `Вся сумма ${formatMoney(total, currency)} останется обязательством до отметки «Оплачено»`}
+            ? `${tr('tf.allNowA')} ${formatMoney(total, currency)} ${tr('tf.allNowB')}`
+            : `${tr('tf.todayExpense')} ${formatMoney(first, currency)}, ${tr(
+                'tf.debtLeft'
+              )} ${formatMoney(Math.round((total - first) * 100) / 100, currency)}`
+          : `${tr('tf.wholeAmount')} ${formatMoney(total, currency)} ${tr('tf.wholeAmountDebt')}`}
       </p>
     </div>
   );

@@ -3,6 +3,7 @@
 import React from 'react';
 import { CategoryBreakdownRow, CurrencyCode, MonthlyPoint } from '@/types';
 import { formatMoney, monthLabel } from '@/services/analytics';
+import { useT } from '@/i18n/context';
 
 /**
  * Donut rendered with stroke-dasharray on a single circle per slice: no chart
@@ -76,6 +77,8 @@ export function CategoryLegend({
   currency: CurrencyCode;
   onSelect?: (categoryId: string) => void;
 }) {
+  const { t } = useT();
+
   return (
     <div className="space-y-1.5">
       {rows.map((row) => (
@@ -94,7 +97,7 @@ export function CategoryLegend({
               {row.categoryName}
             </span>
             <span className="block text-[10px] text-slate-400 font-medium">
-              {row.transactionCount} оп. · {(row.share * 100).toFixed(1)}%
+              {row.transactionCount} {t('ch.operationsShort')} · {(row.share * 100).toFixed(1)}%
             </span>
           </span>
           <span className="text-xs font-black text-slate-900 dark:text-slate-100 tabular-nums">
@@ -114,6 +117,7 @@ export function MonthlyBarChart({
   points: MonthlyPoint[];
   currency: CurrencyCode;
 }) {
+  const { t } = useT();
   const max = Math.max(1, ...points.flatMap((p) => [p.expense, p.income]));
   // Bars are sized in pixels rather than percentages: a percentage height inside a
   // flex column with no definite height collapses to nothing in every browser.
@@ -131,12 +135,12 @@ export function MonthlyBarChart({
             <div
               className="w-1/2 max-w-[16px] rounded-t-lg bg-gradient-to-t from-rose-500 to-rose-400 transition-all"
               style={{ height: barHeight(point.expense) }}
-              title={`Расход: ${formatMoney(point.expense, currency)}`}
+              title={`${t('ch.expense')}: ${formatMoney(point.expense, currency)}`}
             />
             <div
               className="w-1/2 max-w-[16px] rounded-t-lg bg-gradient-to-t from-emerald-500 to-emerald-400 transition-all"
               style={{ height: barHeight(point.income) }}
-              title={`Доход: ${formatMoney(point.income, currency)}`}
+              title={`${t('ch.income')}: ${formatMoney(point.income, currency)}`}
             />
           </div>
           <span className="text-[9px] font-bold text-slate-400 whitespace-nowrap">

@@ -5,9 +5,19 @@ import { CalendarClock } from 'lucide-react';
 import { CurrencyCode } from '@/types';
 import { CalendarDay } from '@/services/forecast';
 import { formatMoney, monthLabel } from '@/services/analytics';
+import { useT } from '@/i18n/context';
+import type { TranslationKey } from '@/i18n/dictionary';
 import { Card } from './ui';
 
-const WEEKDAYS = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
+const WEEKDAY_KEYS: TranslationKey[] = [
+  'pc.mon',
+  'pc.tue',
+  'pc.wed',
+  'pc.thu',
+  'pc.fri',
+  'pc.sat',
+  'pc.sun',
+];
 
 /**
  * Month grid of due dates: a week where three charges land together is visible
@@ -22,6 +32,7 @@ export function PaymentCalendar({
   month: string;
   currency: CurrencyCode;
 }) {
+  const { t } = useT();
   const withCharges = days.filter((day) => day.events.length > 0);
   const monthTotal = days.reduce((sum, day) => sum + day.total, 0);
   const remaining = days
@@ -33,7 +44,7 @@ export function PaymentCalendar({
       <Card className="p-4 flex items-start gap-3">
         <CalendarClock className="w-5 h-5 text-slate-400 flex-shrink-0" />
         <p className="text-[11px] text-slate-500 dark:text-slate-400 font-medium leading-relaxed">
-          В {monthLabel(month).toLowerCase()} списаний по плановым платежам и подпискам нет.
+          {t('pc.emptyA')} {monthLabel(month).toLowerCase()} {t('pc.emptyB')}
         </p>
       </Card>
     );
@@ -48,24 +59,24 @@ export function PaymentCalendar({
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="text-[10px] font-black uppercase tracking-wide text-slate-400">
-            Календарь списаний
+            {t('pc.title')}
           </p>
           <p className="text-xl font-black text-slate-900 dark:text-slate-100 tabular-nums mt-0.5">
             {formatMoney(monthTotal, currency)}
           </p>
           <p className="text-[10.5px] font-bold text-slate-400">
-            за месяц · осталось списать {formatMoney(remaining, currency)}
+            {t('pc.perMonth')} {formatMoney(remaining, currency)}
           </p>
         </div>
       </div>
 
       <div className="grid grid-cols-7 gap-1">
-        {WEEKDAYS.map((weekday) => (
+        {WEEKDAY_KEYS.map((key) => (
           <div
-            key={weekday}
+            key={key}
             className="text-center text-[9px] font-black uppercase tracking-wide text-slate-400 pb-1"
           >
-            {weekday}
+            {t(key)}
           </div>
         ))}
 

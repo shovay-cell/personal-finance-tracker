@@ -32,6 +32,7 @@ import { VatCard } from './vat-card';
 import { DebtCard } from './debt-card';
 import { ObligationsTab } from './obligations-tab';
 import { useT } from '@/i18n/context';
+import type { TranslationKey } from '@/i18n/dictionary';
 import { Card, EmptyState, SectionTitle } from './ui';
 
 type Segment = 'ALL' | 'VAT' | 'CHEQUE' | 'INSTALLMENT' | 'TAX' | 'LOAN';
@@ -225,7 +226,7 @@ export function DebtsTab({
 
           {vatSummary && vatSummary.outstanding > 0 && (
             <div>
-              <SectionTitle title="НДС к выплате" />
+              <SectionTitle title={t('dt.vatDue')} />
               <VatCard
                 summary={vatSummary}
                 payments={vatPayments}
@@ -250,8 +251,8 @@ export function DebtsTab({
         ) : (
           <EmptyState
             icon={<Percent className="w-7 h-7" />}
-            title="НДС не отделяется"
-            description="Включите отделение НДС в настройках — налог будет вычитаться из дохода и попадать сюда как обязательство."
+            title={t('dt.vatOffTitle')}
+            description={t('dt.vatOffText')}
           />
         ))}
 
@@ -260,7 +261,7 @@ export function DebtsTab({
           <DebtList kind="CHEQUE" rows={ofKind('CHEQUE')} currency={baseCurrency} />
 
           <div>
-            <SectionTitle title="Выданные чеки на предъявителя" />
+            <SectionTitle title={t('dt.issuedCheques')} />
             <ObligationsTab
               obligations={obligations}
               settlements={settlements}
@@ -289,31 +290,25 @@ function DebtList({
   rows: ReturnType<typeof describeAllDebts>;
   currency: CurrencyCode;
 }) {
+  const { t } = useT();
+
   // All of these are created from the expense form now: one place to enter money
   // going out, whether it leaves today or on a schedule.
   const meta = {
-    INSTALLMENT: {
-      empty: 'Рассрочек нет',
-      hint: 'Заводится в форме расхода: включите «Оформить как обязательство» → «Рассрочка» и укажите количество платежей.',
-    },
-    TAX: {
-      empty: 'Налоговых обязательств нет',
-      hint: 'Заводится в форме расхода: «Оформить как обязательство» → «Налог», с датой оплаты или графиком платежей.',
-    },
-    LOAN: {
-      empty: 'Кредитов нет',
-      hint: 'Заводится в форме расхода: «Оформить как обязательство» → «Кредит», с графиком выплат.',
-    },
-    CHEQUE: {
-      empty: 'Чеков к оплате нет',
-      hint: 'Заводится в форме расхода: «Оформить как обязательство» → «Чек», с датой оплаты.',
-    },
-  }[kind];
+    INSTALLMENT: { empty: 'dt.emptyInstallments', hint: 'dt.hintInstallments' },
+    TAX: { empty: 'dt.emptyTaxes', hint: 'dt.hintTaxes' },
+    LOAN: { empty: 'dt.emptyLoans', hint: 'dt.hintLoans' },
+    CHEQUE: { empty: 'dt.emptyCheques', hint: 'dt.hintCheques' },
+  }[kind] as { empty: TranslationKey; hint: TranslationKey };
 
   return (
     <div className="space-y-3">
       {rows.length === 0 ? (
-        <EmptyState icon={<CreditCard className="w-7 h-7" />} title={meta.empty} description={meta.hint} />
+        <EmptyState
+          icon={<CreditCard className="w-7 h-7" />}
+          title={t(meta.empty)}
+          description={t(meta.hint)}
+        />
       ) : (
         <div className="space-y-2">
           {rows.map((row) => (

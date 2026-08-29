@@ -66,7 +66,9 @@ export function DebtCard({
           </p>
           <p className="text-[10.5px] text-slate-400 font-medium truncate">
             {paidCount} / {totalCount} {t('debts.ofPayments')}
-            {nextInstallment ? ` · следующий ${formatDateHuman(nextInstallment.dueDate)}` : ' · закрыт'}
+            {nextInstallment
+              ? ` · ${t('dc.next')} ${formatDateHuman(nextInstallment.dueDate)}`
+              : ` · ${t('dc.closed')}`}
           </p>
         </div>
 
@@ -134,7 +136,7 @@ export function DebtCard({
                   type="button"
                   onClick={() => unpayDebtInstallment(installment.id)}
                   className="text-slate-300 hover:text-amber-500 transition-colors"
-                  title="Отменить оплату"
+                  title={t('dc.undoPayment')}
                 >
                   <RotateCcw className="w-3.5 h-3.5" />
                 </button>

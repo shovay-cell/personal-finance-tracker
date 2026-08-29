@@ -5,6 +5,8 @@ import { Eye, EyeOff, Plus, Shapes, Trash2 } from 'lucide-react';
 import { FinanceCategory, TransactionKind } from '@/types';
 import { addCategory, deleteCategory, updateCategory } from '@/lib/db';
 import { CATEGORY_COLORS, CATEGORY_ICONS, getCategoryIcon } from '@/constants/categories';
+import { useT } from '@/i18n/context';
+import { categoryName } from '@/i18n/categories';
 import {
   ColorPicker,
   Field,
@@ -21,6 +23,7 @@ export function CategoryManagerModal({
   categories: FinanceCategory[];
   onClose: () => void;
 }) {
+  const { t, language } = useT();
   const [kind, setKind] = useState<TransactionKind>('EXPENSE');
   const [editing, setEditing] = useState<FinanceCategory | 'NEW' | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -38,19 +41,19 @@ export function CategoryManagerModal({
 
   const handleDelete = async (category: FinanceCategory) => {
     const result = await deleteCategory(category.id);
-    setNotice(result.deleted ? 'Категория удалена' : result.reason || null);
+    setNotice(result.deleted ? t('cm.deleted') : result.reason || null);
   };
 
   return (
     <ModalShell
-      title="Категории"
-      subtitle="Создавайте свои, скрывайте лишние, добавляйте подкатегории"
+      title={t('cm.title')}
+      subtitle={t('cm.subtitle')}
       icon={<Shapes className="w-5 h-5" />}
       onClose={onClose}
       footer={
         <PrimaryButton onClick={() => setEditing('NEW')}>
           <Plus className="w-4 h-4" />
-          Создать категорию
+          {t('cm.create')}
         </PrimaryButton>
       }
     >
@@ -58,8 +61,8 @@ export function CategoryManagerModal({
         value={kind}
         onChange={setKind}
         options={[
-          { value: 'EXPENSE', label: 'РАСХОДЫ' },
-          { value: 'INCOME', label: 'ДОХОДЫ' },
+          { value: 'EXPENSE', label: t('cm.expensesUpper') },
+          { value: 'INCOME', label: t('cm.incomesUpper') },
         ]}
       />
 
@@ -96,11 +99,11 @@ export function CategoryManagerModal({
                   className="flex-1 min-w-0 text-left"
                 >
                   <span className="block text-xs font-black text-slate-800 dark:text-slate-100 truncate">
-                    {category.name}
+                    {categoryName(category, language)}
                   </span>
                   <span className="block text-[10px] text-slate-400 font-medium">
-                    {category.isSystem ? 'Системная' : 'Своя'}
-                    {children.length > 0 ? ` · ${children.length} подкатегорий` : ''}
+                    {category.isSystem ? t('cm.system') : t('cm.own')}
+                    {children.length > 0 ? ` · ${children.length} ${t('cm.subcategories')}` : ''}
                   </span>
                 </button>
 
@@ -108,7 +111,7 @@ export function CategoryManagerModal({
                   type="button"
                   onClick={() => updateCategory(category.id, { isHidden: !category.isHidden })}
                   className="w-8 h-8 rounded-xl bg-slate-50 dark:bg-slate-800 text-slate-400 flex items-center justify-center flex-shrink-0"
-                  title={category.isHidden ? 'Показать' : 'Скрыть'}
+                  title={category.isHidden ? t('cm.show') : t('cm.hide')}
                 >
                   {category.isHidden ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
                 </button>
@@ -134,7 +137,7 @@ export function CategoryManagerModal({
                       }`}
                     >
                       <span className="flex-1 text-[11px] font-bold text-slate-600 dark:text-slate-300 truncate">
-                        {child.name}
+                        {categoryName(child, language)}
                       </span>
                       <button
                         type="button"
@@ -191,6 +194,7 @@ export function CategoryEditorModal({
   /** Fires with the freshly created category so the caller can select it. */
   onCreated?: (category: FinanceCategory) => void;
 }) {
+  const { t, language } = useT();
   const [name, setName] = useState(category?.name || '');
   const [kind, setKind] = useState<TransactionKind>(category?.kind || defaultKind);
   const [iconName, setIconName] = useState(category?.iconName || 'ShoppingBag');
@@ -203,7 +207,7 @@ export function CategoryEditorModal({
   );
 
   const handleSave = async () => {
-    if (!name.trim()) return setError('Введите название');
+    if (!name.trim()) return setError(t('cm.enterName'));
 
     const payload = {
       name: name.trim(),
@@ -224,23 +228,23 @@ export function CategoryEditorModal({
 
   return (
     <ModalShell
-      title={category ? 'Категория' : 'Новая категория'}
+      title={category ? t('cm.category') : t('cm.newCategory')}
       icon={<Shapes className="w-5 h-5" />}
       onClose={onClose}
       maxWidthClass="max-w-md"
       footer={
         <div className="space-y-2">
           {error && <p className="text-[11px] font-bold text-rose-500 text-center">{error}</p>}
-          <PrimaryButton onClick={handleSave}>Сохранить</PrimaryButton>
+          <PrimaryButton onClick={handleSave}>{t('common.save')}</PrimaryButton>
         </div>
       }
     >
-      <Field label="Название">
+      <Field label={t('cm.name')}>
         <input
           type="text"
           value={name}
           onChange={(e) => setName(e.target.value)}
-          placeholder="Например, Домашние животные"
+          placeholder={t('cm.namePlaceholder')}
           className={inputClass}
           autoFocus
         />
@@ -254,28 +258,28 @@ export function CategoryEditorModal({
             setParentId('');
           }}
           options={[
-            { value: 'EXPENSE', label: 'РАСХОД' },
-            { value: 'INCOME', label: 'ДОХОД' },
+            { value: 'EXPENSE', label: t('pl.expenseUpper') },
+            { value: 'INCOME', label: t('pl.incomeUpper') },
           ]}
         />
       )}
 
-      <Field label="Родительская категория" hint="Оставьте пустым для основной категории">
+      <Field label={t('cm.parent')} hint={t('cm.parentHint')}>
         <select value={parentId} onChange={(e) => setParentId(e.target.value)} className={inputClass}>
-          <option value="">— Основная категория —</option>
+          <option value="">{t('cm.topLevel')}</option>
           {possibleParents.map((parent) => (
             <option key={parent.id} value={parent.id}>
-              {parent.name}
+              {categoryName(parent, language)}
             </option>
           ))}
         </select>
       </Field>
 
-      <Field label="Цвет">
+      <Field label={t('cm.colour')}>
         <ColorPicker value={colorHex} onChange={setColorHex} />
       </Field>
 
-      <Field label="Иконка">
+      <Field label={t('cm.icon')}>
         <div className="grid grid-cols-8 gap-1.5 max-h-40 overflow-y-auto">
           {Object.keys(CATEGORY_ICONS).map((key) => {
             const Icon = CATEGORY_ICONS[key];

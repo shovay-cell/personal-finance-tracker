@@ -5,6 +5,8 @@ import { Check, Percent, Receipt, Trash2 } from 'lucide-react';
 import { CurrencyCode, FinanceAccount, FinanceCategory, VatPayment, VatSummary } from '@/types';
 import { addTransaction, addVatPayment, deleteVatPayment, todayIso } from '@/lib/db';
 import { formatDateHuman, formatMoney } from '@/services/analytics';
+import { useT } from '@/i18n/context';
+import { accountName } from '@/i18n/categories';
 import { Card, Field, ModalShell, PrimaryButton, inputClass } from './ui';
 
 /**
@@ -25,6 +27,7 @@ export function VatCard({
   accounts: FinanceAccount[];
   categories: FinanceCategory[];
 }) {
+  const { t } = useT();
   const [isPaying, setIsPaying] = useState(false);
 
   return (
@@ -33,7 +36,7 @@ export function VatCard({
         <div className="flex items-start justify-between gap-3">
           <div>
             <p className="text-[10px] font-black uppercase tracking-wide text-slate-400">
-              НДС к выплате · ставка {summary.rate}%
+              {t('vat.duePlusRate')} {summary.rate}%
             </p>
             <p
               className={`text-2xl font-black tabular-nums mt-0.5 ${
@@ -53,19 +56,19 @@ export function VatCard({
 
         <div className="grid grid-cols-3 gap-2">
           <div className="rounded-2xl bg-slate-50 dark:bg-slate-800/60 p-2.5">
-            <p className="text-[9px] font-black uppercase tracking-wide text-slate-400">Отложено</p>
+            <p className="text-[9px] font-black uppercase tracking-wide text-slate-400">{t('vat.accrued')}</p>
             <p className="text-xs font-black text-slate-700 dark:text-slate-200 tabular-nums mt-0.5">
               {formatMoney(summary.accrued, currency, { compact: true })}
             </p>
           </div>
           <div className="rounded-2xl bg-slate-50 dark:bg-slate-800/60 p-2.5">
-            <p className="text-[9px] font-black uppercase tracking-wide text-slate-400">Выплачено</p>
+            <p className="text-[9px] font-black uppercase tracking-wide text-slate-400">{t('vat.paid')}</p>
             <p className="text-xs font-black text-emerald-600 dark:text-emerald-400 tabular-nums mt-0.5">
               {formatMoney(summary.paid, currency, { compact: true })}
             </p>
           </div>
           <div className="rounded-2xl bg-slate-50 dark:bg-slate-800/60 p-2.5">
-            <p className="text-[9px] font-black uppercase tracking-wide text-slate-400">Прибыль</p>
+            <p className="text-[9px] font-black uppercase tracking-wide text-slate-400">{t('vat.profit')}</p>
             <p className="text-xs font-black text-slate-700 dark:text-slate-200 tabular-nums mt-0.5">
               {formatMoney(summary.netIncome, currency, { compact: true })}
             </p>
@@ -73,9 +76,7 @@ export function VatCard({
         </div>
 
         <p className="text-[10px] text-slate-400 font-medium leading-relaxed">
-          НДС отделён от {summary.incomeCount}{' '}
-          {summary.incomeCount === 1 ? 'поступления' : 'поступлений'} и не входит в доступную
-          прибыль.
+          {t('vat.separatedFrom')}: {summary.incomeCount} — {t('vat.notInProfit')}
         </p>
 
         {payments.length > 0 && (
@@ -109,7 +110,7 @@ export function VatCard({
             className="w-full py-2.5 rounded-2xl bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 text-[11px] font-black flex items-center justify-center gap-1.5 active:scale-95 transition-transform"
           >
             <Receipt className="w-3.5 h-3.5" />
-            Отметить выплату НДС
+            {t('vat.markPayment')}
           </button>
         )}
       </Card>
@@ -140,6 +141,7 @@ function VatPaymentModal({
   categories: FinanceCategory[];
   onClose: () => void;
 }) {
+  const { t, language } = useT();
   const [amount, setAmount] = useState(String(outstanding));
   const [date, setDate] = useState(todayIso());
   const [note, setNote] = useState('');
@@ -148,7 +150,7 @@ function VatPaymentModal({
 
   const handleSave = async () => {
     const numericAmount = parseFloat(amount.replace(',', '.'));
-    if (!Number.isFinite(numericAmount) || numericAmount <= 0) return setError('Укажите сумму');
+    if (!Number.isFinite(numericAmount) || numericAmount <= 0) return setError(t('vat.enterAmount'));
 
     const category =
       categories.find((c) => c.id === 'cat-fees') ||
@@ -161,7 +163,7 @@ function VatPaymentModal({
       categoryId: category?.id || '',
       accountId: accountId || accounts[0]?.id,
       date,
-      note: note.trim() || 'Выплата НДС',
+      note: note.trim() || t('vat.paymentNote'),
       source: 'MANUAL',
     } as any);
 
@@ -178,20 +180,20 @@ function VatPaymentModal({
 
   return (
     <ModalShell
-      title="Выплата НДС"
-      subtitle={`К выплате: ${formatMoney(outstanding, currency)}`}
+      title={t('vat.paymentTitle')}
+      subtitle={`${t('vat.due')}: ${formatMoney(outstanding, currency)}`}
       icon={<Percent className="w-5 h-5" />}
       onClose={onClose}
       maxWidthClass="max-w-md"
       footer={
         <div className="space-y-2">
           {error && <p className="text-[11px] font-bold text-rose-500 text-center">{error}</p>}
-          <PrimaryButton onClick={handleSave}>Записать выплату</PrimaryButton>
+          <PrimaryButton onClick={handleSave}>{t('vat.record')}</PrimaryButton>
         </div>
       }
     >
       <div className="grid grid-cols-2 gap-3">
-        <Field label={`Сумма, ${currency}`}>
+        <Field label={`${t('common.amount')}, ${currency}`}>
           <input
             type="text"
             inputMode="decimal"
@@ -201,7 +203,7 @@ function VatPaymentModal({
             autoFocus
           />
         </Field>
-        <Field label="Дата">
+        <Field label={t('common.date')}>
           <input
             type="date"
             value={date}
@@ -211,28 +213,28 @@ function VatPaymentModal({
         </Field>
       </div>
 
-      <Field label="Счёт списания">
+      <Field label={t('vat.debitAccount')}>
         <select value={accountId} onChange={(e) => setAccountId(e.target.value)} className={inputClass}>
           {accounts.map((account) => (
             <option key={account.id} value={account.id}>
-              {account.name}
+              {accountName(account, language)}
             </option>
           ))}
         </select>
       </Field>
 
-      <Field label="Заметка" hint="Например, период отчётности">
+      <Field label={t('obl.note')} hint={t('vat.noteHint')}>
         <input
           type="text"
           value={note}
           onChange={(e) => setNote(e.target.value)}
-          placeholder="НДС за июль–август"
+          placeholder={t('vat.notePlaceholder')}
           className={inputClass}
         />
       </Field>
 
       <p className="text-[10px] text-slate-400 font-medium leading-relaxed">
-        Выплата записывается расходом по счёту и уменьшает обязательство по НДС.
+        {t('vat.footer')}
       </p>
     </ModalShell>
   );

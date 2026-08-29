@@ -107,8 +107,8 @@ export function SafeToSpendCard({
         {isNegative ? (
           <>
             <Wallet className="w-3 h-3 mt-px flex-shrink-0 text-rose-500" />
-            Плановые расходы уже превышают{' '}
-            {data.basis === 'BUDGET' ? 'бюджет' : 'доход'} месяца
+            {t('stc.overBudget')}{' '}
+            {data.basis === 'BUDGET' ? t('stc.budgetWord') : t('stc.incomeWord')} {t('stc.ofMonth')}
           </>
         ) : (
           <>

@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { AlertTriangle, LineChart, TrendingDown } from 'lucide-react';
 import { CashFlowForecast, CurrencyCode } from '@/types';
 import { formatDateHuman, formatMoney } from '@/services/analytics';
+import { useT } from '@/i18n/context';
 import { Card } from './ui';
 
 const HORIZONS = [30, 60, 90];
@@ -24,6 +25,7 @@ export function CashFlowForecastCard({
   horizon: number;
   onHorizonChange: (days: number) => void;
 }) {
+  const { t } = useT();
   const [selected, setSelected] = useState<number | null>(null);
 
   const width = 320;
@@ -48,13 +50,14 @@ export function CashFlowForecastCard({
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="text-[10px] font-black uppercase tracking-wide text-slate-400">
-            Прогноз баланса
+            {t('cf.title')}
           </p>
           <p className="text-xl font-black text-slate-900 dark:text-slate-100 tabular-nums mt-0.5">
             {formatMoney(forecast.points[forecast.points.length - 1]?.balance ?? 0, currency)}
           </p>
           <p className="text-[10.5px] font-bold text-slate-400">
-            через {horizon} дн. · сейчас {formatMoney(forecast.startBalance, currency)}
+            {t('cf.inDays')} {horizon} {t('cf.daysShort')} · {t('cf.now')}{' '}
+            {formatMoney(forecast.startBalance, currency)}
           </p>
         </div>
 
@@ -73,7 +76,7 @@ export function CashFlowForecastCard({
                   : 'bg-slate-100 dark:bg-slate-800 text-slate-500'
               }`}
             >
-              {days}д
+              {days}{t('cf.dayLetter')}
             </button>
           ))}
         </div>
@@ -148,17 +151,16 @@ export function CashFlowForecastCard({
         <div className="flex items-start gap-2 p-2.5 rounded-2xl bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-400">
           <AlertTriangle className="w-3.5 h-3.5 mt-px flex-shrink-0" />
           <p className="text-[10.5px] font-bold leading-relaxed">
-            Кассовый разрыв {formatDateHuman(forecast.shortfallDate)} — баланс уходит в минус.
-            Перенесите платёж или пополните счёт заранее.
+            {t('cf.shortfall')} {formatDateHuman(forecast.shortfallDate)} — {t('cf.shortfallText')}
           </p>
         </div>
       ) : (
         <div className="flex items-start gap-2 p-2.5 rounded-2xl bg-slate-50 dark:bg-slate-800/60 text-slate-500 dark:text-slate-400">
           <TrendingDown className="w-3.5 h-3.5 mt-px flex-shrink-0" />
           <p className="text-[10.5px] font-bold leading-relaxed">
-            Минимум {formatMoney(forecast.minimum.balance, currency)}{' '}
-            {formatDateHuman(forecast.minimum.date)} · плановые доходы{' '}
-            {formatMoney(forecast.totalIncome, currency, { compact: true })}, списания{' '}
+            {t('cf.minimum')} {formatMoney(forecast.minimum.balance, currency)}{' '}
+            {formatDateHuman(forecast.minimum.date)} · {t('cf.plannedIncome')}{' '}
+            {formatMoney(forecast.totalIncome, currency, { compact: true })}, {t('cf.plannedCharges')}{' '}
             {formatMoney(forecast.totalExpense, currency, { compact: true })}
           </p>
         </div>
@@ -168,7 +170,7 @@ export function CashFlowForecastCard({
         <div className="space-y-1 pt-1 border-t border-slate-50 dark:border-slate-800">
           <p className="text-[9px] font-black uppercase tracking-wide text-slate-400 flex items-center gap-1">
             <LineChart className="w-3 h-3" />
-            Ближайшие движения
+            {t('cf.upcomingMoves')}
           </p>
           {upcoming.map((event, index) => (
             <div key={`${event.title}-${index}`} className="flex items-center gap-2 text-[10.5px]">

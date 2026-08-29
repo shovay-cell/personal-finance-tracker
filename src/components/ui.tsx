@@ -91,6 +91,8 @@ export function Field({
   warn?: boolean;
   children: React.ReactNode;
 }) {
+  const { t } = useT();
+
   return (
     <label className="block space-y-1.5">
       <span
@@ -99,7 +101,7 @@ export function Field({
         }`}
       >
         {label}
-        {warn && ' · проверьте'}
+        {warn && ` · ${t('ui.checkIt')}`}
       </span>
       {children}
       {hint && <span className="block text-[10px] text-slate-400 font-medium">{hint}</span>}
@@ -198,7 +200,7 @@ export function CategoryGrid({
   onCreate?: () => void;
   columns?: number;
 }) {
-  const { language } = useT();
+  const { t, language } = useT();
 
   return (
     <div className={`grid gap-2`} style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}>
@@ -247,7 +249,7 @@ export function CategoryGrid({
           <span className="w-9 h-9 rounded-xl flex items-center justify-center bg-slate-100 dark:bg-slate-800">
             <Plus className="w-4 h-4" />
           </span>
-          <span className="text-[9.5px] font-bold leading-tight text-center">Создать</span>
+          <span className="text-[9.5px] font-bold leading-tight text-center">{t('ui.create')}</span>
         </button>
       )}
     </div>

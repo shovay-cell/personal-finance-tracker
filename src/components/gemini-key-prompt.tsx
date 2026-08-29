@@ -2,6 +2,7 @@
 
 import React from 'react';
 import { RefreshCw, ServerCog } from 'lucide-react';
+import { useT } from '@/i18n/context';
 
 /**
  * Shown when a scan failed for a key-related reason. Keys live in the server
@@ -15,6 +16,8 @@ export function GeminiKeyPrompt({
   message: string;
   onRetry: () => void;
 }) {
+  const { t } = useT();
+
   return (
     <div className="rounded-2xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900 p-3.5 space-y-2 text-left">
       <div className="flex items-start gap-2">
@@ -25,8 +28,7 @@ export function GeminiKeyPrompt({
       </div>
 
       <p className="text-[10px] text-amber-700/70 dark:text-amber-400/70 font-medium leading-relaxed">
-        Ключ распознавания задаётся переменной GEMINI_API_KEY на сервере. Статус виден в
-        настройках, в разделе «ИИ-сканирование чеков».
+        {t('gk.serverKeyNote')}
       </p>
 
       <button
@@ -35,7 +37,7 @@ export function GeminiKeyPrompt({
         className="w-full py-2 rounded-xl bg-amber-500 text-white text-[11px] font-black flex items-center justify-center gap-1.5"
       >
         <RefreshCw className="w-3.5 h-3.5" />
-        Повторить распознавание
+        {t('gk.retry')}
       </button>
     </div>
   );

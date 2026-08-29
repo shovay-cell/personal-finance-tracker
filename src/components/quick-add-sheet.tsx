@@ -125,11 +125,11 @@ export function QuickAddSheet({
   const handleSave = async () => {
     const numericAmount = parseFloat(amount);
     if (!Number.isFinite(numericAmount) || numericAmount <= 0) {
-      setError('Введите сумму');
+      setError(t('qa.enterAmount'));
       return;
     }
     if (!categoryId) {
-      setError('Выберите категорию');
+      setError(t('qa.pickCategory'));
       return;
     }
 
@@ -147,7 +147,7 @@ export function QuickAddSheet({
       onSaved?.();
       onClose();
     } catch (err: any) {
-      setError(err.message || 'Не удалось сохранить');
+      setError(err.message || t('qa.saveFailed'));
     } finally {
       setIsBusy(false);
     }
@@ -190,7 +190,7 @@ export function QuickAddSheet({
       onClose();
     } catch (err: any) {
       if (err instanceof ReceiptScanError && err.needsApiKey) setKeyError(err.message);
-      else setError(err.message || 'Не удалось распознать чек');
+      else setError(err.message || t('tf.scanFailed'));
       setIsBusy(false);
     }
   };
@@ -333,8 +333,7 @@ export function QuickAddSheet({
                 {t('quick.scanning')}
               </p>
               <p className="text-[11px] text-slate-400 font-medium px-6">
-                Дата, сумма, магазин и позиции подставятся в форму. Поля, в которых ИИ не уверен,
-                будут подсвечены.
+                {t('qa.scanHint')}
               </p>
             </>
           ) : (
@@ -363,8 +362,7 @@ export function QuickAddSheet({
         <div className="py-6 text-center space-y-4">
           {!isVoiceInputSupported() ? (
             <p className="text-xs font-bold text-slate-500 px-6">
-              Голосовой ввод не поддерживается этим браузером. Откройте приложение в Chrome или
-              Safari.
+              {t('qa.voiceUnsupported')}
             </p>
           ) : (
             <>
@@ -383,7 +381,7 @@ export function QuickAddSheet({
                 {isListening ? t('quick.listening') : t('quick.voicePrompt')}
               </p>
               <p className="text-[11px] text-slate-400 font-medium px-6">
-                Например: «потратил 50 на кафе». Язык распознавания — из настроек профиля.
+                {t('qa.voiceExample')}
               </p>
               {transcript && (
                 <p className="text-xs font-bold text-sky-600 dark:text-sky-400 px-6">«{transcript}»</p>
