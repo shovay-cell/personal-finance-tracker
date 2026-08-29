@@ -4,6 +4,7 @@ import React, { useMemo, useState } from 'react';
 import {
   AlertTriangle,
   Check,
+  CreditCard,
   ImagePlus,
   Layers,
   Loader2,
@@ -18,14 +19,16 @@ import {
   Transaction,
   TransactionKind,
 } from '@/types';
-import { addTransaction, todayIso } from '@/lib/db';
+import { addDebtPlan, addTransaction, todayIso } from '@/lib/db';
 import { formatMoney } from '@/services/analytics';
 import {
+  analyzeStatementTextWithAI,
   analyzeStatementWithAI,
   readFileAsDataUrl,
   ReceiptScanError,
   resolveStatementCategoryId,
 } from '@/services/ai/receipt-parser';
+import { isCsvFile, isSpreadsheetFile, readCsvAsTable, readSpreadsheetAsTable } from '@/services/ai/statement-table';
 import { GeminiKeyPrompt } from './gemini-key-prompt';
 import { useT } from '@/i18n/context';
 import { accountName, categoryName } from '@/i18n/categories';
@@ -37,6 +40,11 @@ interface DraftRow extends ParsedStatementRow {
   selected: boolean;
   /** Same date and amount already exist — importing again would double-count. */
   duplicate: boolean;
+  /** Which file this row came from, shown only when more than one was picked. */
+  sourceFile?: string;
+  /** Booked as a debt plan (future payment) instead of an immediate expense. */
+  asDebt: boolean;
+  debtPaymentsCount: string;
 }
 
 /**
@@ -62,9 +70,11 @@ export function StatementImportModal({
   const { t, language } = useT();
   const [rows, setRows] = useState<DraftRow[] | null>(null);
   const [isBusy, setIsBusy] = useState(false);
+  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
+  const [fileErrors, setFileErrors] = useState<{ name: string; message: string }[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [keyError, setKeyError] = useState<string | null>(null);
-  const [lastFile, setLastFile] = useState<File | null>(null);
+  const [lastFiles, setLastFiles] = useState<File[]>([]);
   const [accountId, setAccountId] = useState(accounts[0]?.id || '');
   const [bulkCategoryId, setBulkCategoryId] = useState('');
 
@@ -77,38 +87,74 @@ export function StatementImportModal({
     [categories]
   );
 
-  const handleFile = async (file: File | null) => {
-    if (!file) return;
+  /** Reads one file through whichever pipeline matches its format — a
+   *  spreadsheet and a CSV go through the text route, everything else
+   *  (photo, scan, PDF) through the vision route Gemini already reads. */
+  const parseOneFile = async (file: File): Promise<ParsedStatementRow[]> => {
+    if (isSpreadsheetFile(file)) {
+      const table = await readSpreadsheetAsTable(file);
+      return (await analyzeStatementTextWithAI(table)).rows;
+    }
+    if (isCsvFile(file)) {
+      const table = await readCsvAsTable(file);
+      return (await analyzeStatementTextWithAI(table)).rows;
+    }
+    const dataUrl = await readFileAsDataUrl(file);
+    return (await analyzeStatementWithAI(dataUrl, file.type || 'image/jpeg')).rows;
+  };
+
+  const handleFiles = async (fileList: FileList | File[] | null) => {
+    const files = Array.from(fileList || []);
+    if (files.length === 0) return;
+
     setIsBusy(true);
     setError(null);
     setKeyError(null);
-    setLastFile(file);
+    setFileErrors([]);
+    setLastFiles(files);
+    setProgress({ done: 0, total: files.length });
 
-    try {
-      const dataUrl = await readFileAsDataUrl(file);
-      const parsed = await analyzeStatementWithAI(dataUrl, file.type || 'image/jpeg');
+    const draftRows: DraftRow[] = [];
+    const failures: { name: string; message: string }[] = [];
+    let keyErrorMessage: string | null = null;
+    let rowIndex = 0;
 
-      setRows(
-        parsed.rows.map((row, index) => ({
-          ...row,
-          id: `row-${index}`,
-          date: row.date || todayIso(),
-          categoryId: resolveStatementCategoryId(row, categories) || '',
-          selected: true,
-          duplicate: transactions.some(
-            (t) =>
-              t.date === row.date &&
-              Math.abs(t.amount - (row.amount || 0)) < 0.01 &&
-              t.kind === row.kind
-          ),
-        }))
-      );
-    } catch (err: any) {
-      if (err instanceof ReceiptScanError && err.needsApiKey) setKeyError(err.message);
-      else setError(err.message || t('si.scanFailed'));
-    } finally {
-      setIsBusy(false);
+    for (const file of files) {
+      try {
+        const parsedRows = await parseOneFile(file);
+        for (const row of parsedRows) {
+          draftRows.push({
+            ...row,
+            id: `row-${rowIndex++}`,
+            date: row.date || todayIso(),
+            categoryId: resolveStatementCategoryId(row, categories) || '',
+            selected: true,
+            asDebt: false,
+            debtPaymentsCount: '1',
+            sourceFile: files.length > 1 ? file.name : undefined,
+            duplicate: transactions.some(
+              (t) =>
+                t.date === row.date &&
+                Math.abs(t.amount - (row.amount || 0)) < 0.01 &&
+                t.kind === row.kind
+            ),
+          });
+        }
+      } catch (err: any) {
+        if (err instanceof ReceiptScanError && err.needsApiKey) {
+          keyErrorMessage = err.message;
+        }
+        failures.push({ name: file.name, message: err.message || t('si.scanFailed') });
+      }
+      setProgress((prev) => (prev ? { ...prev, done: prev.done + 1 } : null));
     }
+
+    setFileErrors(failures);
+    if (keyErrorMessage) setKeyError(keyErrorMessage);
+    if (draftRows.length > 0) setRows(draftRows);
+    else if (failures.length > 0 && !keyErrorMessage) setError(t('si.allFilesFailed'));
+    setIsBusy(false);
+    setProgress(null);
   };
 
   const update = (id: string, patch: Partial<DraftRow>) =>
@@ -126,6 +172,29 @@ export function StatementImportModal({
 
     try {
       for (const row of selected) {
+        // A row marked «Кредит / рассрочка» is not money spent today — it
+        // becomes a debt plan with its own schedule, same as picking that
+        // option in the expense form, so it shows in Долги and Safe-to-Spend
+        // instead of landing in the ledger as an immediate expense.
+        if (row.asDebt && row.kind === 'EXPENSE') {
+          await addDebtPlan({
+            kind: 'INSTALLMENT',
+            title: row.description?.trim() || t('tf.kindInstallmentTitle'),
+            merchant: row.description,
+            totalAmount: row.amount as number,
+            currency: row.currency || baseCurrency,
+            categoryId: row.categoryId,
+            accountId: accountId || accounts[0]?.id,
+            startDate: row.date as string,
+            firstDueDate: row.date as string,
+            paymentsCount: Math.max(1, parseInt(row.debtPaymentsCount, 10) || 1),
+            intervalUnit: 'MONTH',
+            intervalCount: 1,
+            firstPaymentPaid: false,
+          });
+          continue;
+        }
+
         await addTransaction({
           kind: row.kind,
           amount: row.amount as number,
@@ -175,6 +244,9 @@ export function StatementImportModal({
               <Loader2 className="w-9 h-9 mx-auto text-sky-500 animate-spin" />
               <p className="text-xs font-black text-slate-600 dark:text-slate-300">
                 {t('si.geminiReading')}
+                {progress && progress.total > 1
+                  ? ` (${t('si.processingProgress')} ${progress.done}/${progress.total})`
+                  : ''}
               </p>
               <p className="text-[11px] text-slate-400 font-medium px-6">
                 {t('si.eachRow')}
@@ -192,26 +264,47 @@ export function StatementImportModal({
                     accept="image/*"
                     capture="environment"
                     className="hidden"
-                    onChange={(e) => handleFile(e.target.files?.[0] || null)}
+                    onChange={(e) => handleFiles(e.target.files)}
                   />
                 </label>
                 <label className="flex items-center justify-center gap-1.5 px-4 py-3 rounded-2xl bg-slate-100 dark:bg-slate-800 text-slate-500 text-[11px] font-black cursor-pointer">
                   <ImagePlus className="w-3.5 h-3.5" />
-                  {t('form.file')}
+                  {t('si.chooseFiles')}
                   <input
                     type="file"
-                    accept="image/*"
+                    accept="image/*,application/pdf,.pdf,.xlsx,.xls,.csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,text/csv"
+                    multiple
                     className="hidden"
-                    onChange={(e) => handleFile(e.target.files?.[0] || null)}
+                    onChange={(e) => handleFiles(e.target.files)}
                   />
                 </label>
               </div>
               <p className="text-[11px] text-slate-400 font-medium px-4">
                 {t('si.shotHint')}
               </p>
+              <p className="text-[10.5px] text-slate-400 font-medium px-4">{t('si.multiHint')}</p>
               {error && <p className="text-[11px] font-bold text-rose-500 px-4">{error}</p>}
+              {fileErrors.length > 0 && (
+                <div className="text-left mx-4 p-2.5 rounded-2xl bg-amber-50 dark:bg-amber-950/40 space-y-1">
+                  <p className="text-[10.5px] font-black text-amber-700 dark:text-amber-400">
+                    {t('si.someFilesFailed')}:
+                  </p>
+                  {fileErrors.map((f) => (
+                    <p key={f.name} className="text-[10px] text-amber-600 dark:text-amber-400 font-medium truncate">
+                      {f.name} — {f.message}
+                    </p>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={() => handleFiles(lastFiles)}
+                    className="text-[10.5px] font-black text-amber-700 dark:text-amber-400 underline underline-offset-2"
+                  >
+                    {t('si.retryFailed')}
+                  </button>
+                </div>
+              )}
               {keyError && (
-                <GeminiKeyPrompt message={keyError} onRetry={() => handleFile(lastFile)} />
+                <GeminiKeyPrompt message={keyError} onRetry={() => handleFiles(lastFiles)} />
               )}
             </>
           )}
@@ -220,6 +313,12 @@ export function StatementImportModal({
 
       {rows && (
         <>
+          {fileErrors.length > 0 && (
+            <p className="text-[10.5px] font-bold text-amber-600 dark:text-amber-400">
+              {t('si.someFilesFailed')}: {fileErrors.map((f) => f.name).join(', ')}
+            </p>
+          )}
+
           <div className="grid grid-cols-2 gap-2">
             <Field label={t('obl.creditAccount')}>
               <select
@@ -368,12 +467,55 @@ export function StatementImportModal({
                     />
                   </div>
 
-                  {(row.duplicate || row.uncertainFields.length > 0) && (
+                  {row.kind === 'EXPENSE' && (
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => update(row.id, { asDebt: !row.asDebt })}
+                        className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[10px] font-black flex-shrink-0 ${
+                          row.asDebt
+                            ? 'bg-violet-100 text-violet-700 dark:bg-violet-950/60 dark:text-violet-400'
+                            : 'bg-slate-100 dark:bg-slate-800 text-slate-400'
+                        }`}
+                      >
+                        <CreditCard className="w-3 h-3" />
+                        {t('si.asDebt')}
+                      </button>
+                      {row.asDebt && (
+                        <>
+                          <span className="text-[10px] text-slate-400 font-bold">
+                            {t('si.paymentsCount')}
+                          </span>
+                          <input
+                            type="number"
+                            min={1}
+                            value={row.debtPaymentsCount}
+                            onChange={(e) => update(row.id, { debtPaymentsCount: e.target.value })}
+                            className={`${inputClass} text-[11px] py-1 w-14`}
+                          />
+                        </>
+                      )}
+                    </div>
+                  )}
+                  {row.asDebt && (
+                    <p className="text-[10px] text-violet-500 dark:text-violet-400 font-medium">
+                      {t('si.asDebtHint')}
+                    </p>
+                  )}
+
+                  {(row.duplicate || row.uncertainFields.length > 0 || row.sourceFile) && (
                     <p className="text-[10px] font-bold text-amber-600 dark:text-amber-400 flex items-start gap-1.5">
                       <AlertTriangle className="w-3 h-3 mt-px flex-shrink-0" />
                       {row.duplicate
                         ? t('si.duplicate')
-                        : `${t('si.aiUnsure')}: ${row.uncertainFields.join(', ')}`}
+                        : row.uncertainFields.length > 0
+                        ? `${t('si.aiUnsure')}: ${row.uncertainFields.join(', ')}`
+                        : ''}
+                      {row.sourceFile && !row.duplicate && row.uncertainFields.length === 0 && (
+                        <span className="text-slate-400 dark:text-slate-500 font-medium">
+                          {t('si.sourceFile')}: {row.sourceFile}
+                        </span>
+                      )}
                     </p>
                   )}
                 </div>

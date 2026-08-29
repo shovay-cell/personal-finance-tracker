@@ -499,7 +499,35 @@ function normalizeStatement(raw: RawStatementResponse): ParsedStatement {
   };
 }
 
-/** Reads a photographed list of bank operations into separate rows. */
+async function callStatementRoute(
+  body: Record<string, unknown>
+): Promise<ParsedStatement> {
+  const res = await fetch('/api/analyze-statement', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  }).catch(() => null);
+
+  if (!res) {
+    throw new ReceiptScanError('OFFLINE', tr('scan.serverDown'));
+  }
+
+  const json = await res.json().catch(() => null);
+
+  if (res.ok && json?.success && json.data) {
+    const parsed = normalizeStatement(json.data as RawStatementResponse);
+    if (parsed.rows.length === 0) {
+      throw new ReceiptScanError('MODEL_ERROR', tr('scan.emptyList'));
+    }
+    return parsed;
+  }
+
+  throw classifyServerError(json?.error, json?.message);
+}
+
+/** Reads a photographed or scanned list of bank operations into separate rows.
+ *  `mimeType` also accepts `application/pdf` — Gemini reads a multi-page
+ *  statement PDF the same way it reads a photo, no separate code path needed. */
 export async function analyzeStatementWithAI(
   base64DataUrl: string,
   mimeType = 'image/jpeg',
@@ -512,37 +540,32 @@ export async function analyzeStatementWithAI(
   }
 
   // Statements are dense text: keep more pixels than a receipt scan does.
+  // A PDF is not raster data — compressing it would just corrupt the file.
   const payload = mimeType.startsWith('image/')
     ? await compressImage(base64DataUrl, 2200)
     : base64DataUrl;
 
-  const res = await fetch('/api/analyze-statement', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ base64Data: payload, mimeType: 'image/jpeg', apiKey }),
-  }).catch(() => null);
+  return callStatementRoute({ base64Data: payload, mimeType, apiKey });
+}
 
-  if (!res) {
-    throw new ReceiptScanError(
-      'OFFLINE',
-      tr('scan.serverDown')
-    );
+/**
+ * Reads a statement already in text form — a spreadsheet or CSV export parsed
+ * client-side — through Gemini's text completion instead of the vision path.
+ */
+export async function analyzeStatementTextWithAI(
+  tableText: string,
+  userKey?: string
+): Promise<ParsedStatement> {
+  const apiKey = (userKey || getStoredGeminiKey() || '').trim();
+
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+    throw new ReceiptScanError('OFFLINE', tr('scan.offlineList'));
+  }
+  if (!tableText.trim()) {
+    throw new ReceiptScanError('MODEL_ERROR', tr('scan.emptyList'));
   }
 
-  const json = await res.json().catch(() => null);
-
-  if (res.ok && json?.success && json.data) {
-    const parsed = normalizeStatement(json.data as RawStatementResponse);
-    if (parsed.rows.length === 0) {
-      throw new ReceiptScanError(
-        'MODEL_ERROR',
-        tr('scan.emptyList')
-      );
-    }
-    return parsed;
-  }
-
-  throw classifyServerError(json?.error, json?.message);
+  return callStatementRoute({ text: tableText, apiKey });
 }
 
 /** Maps a statement row onto a category id, honouring the operation direction. */

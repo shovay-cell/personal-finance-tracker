@@ -2025,6 +2025,49 @@ export const DICTIONARY = {
   },
   'sb.confirmRestoreAction': { ru: 'Да, заменить', he: 'כן, להחליף', uk: 'Так, замінити', en: 'Yes, replace' },
 
+  // ------------------------------------------------- statement import v2
+  'si.chooseFiles': { ru: 'Выбрать файлы', he: 'בחירת קבצים', uk: 'Вибрати файли', en: 'Choose files' },
+  'si.multiHint': {
+    ru: 'Можно выбрать сразу несколько: фото, PDF, Excel или CSV',
+    he: 'ניתן לבחור כמה בבת אחת: תמונה, PDF, Excel או CSV',
+    uk: 'Можна вибрати одразу декілька: фото, PDF, Excel або CSV',
+    en: 'Pick several at once: photos, PDF, Excel or CSV',
+  },
+  'si.processingProgress': {
+    ru: 'Обработан файл',
+    he: 'עובד קובץ',
+    uk: 'Опрацьовано файл',
+    en: 'Processed file',
+  },
+  'si.ofFiles': { ru: 'из', he: 'מתוך', uk: 'з', en: 'of' },
+  'si.someFilesFailed': {
+    ru: 'Не удалось разобрать',
+    he: 'לא הצלחנו לפענח',
+    uk: 'Не вдалося розібрати',
+    en: 'Could not read',
+  },
+  'si.allFilesFailed': {
+    ru: 'Ни один файл не удалось распознать',
+    he: 'לא הצלחנו לזהות אף קובץ',
+    uk: 'Жодного файлу не вдалося розпізнати',
+    en: 'None of the files could be read',
+  },
+  'si.retryFailed': { ru: 'Повторить', he: 'לנסות שוב', uk: 'Повторити', en: 'Try again' },
+  'si.sourceFile': { ru: 'Файл', he: 'קובץ', uk: 'Файл', en: 'File' },
+  'si.asDebt': { ru: 'Кредит / рассрочка', he: 'אשראי / תשלומים', uk: 'Кредит / розстрочка', en: 'Credit / instalments' },
+  'si.asDebtHint': {
+    ru: 'Попадёт в «Долги» как будущий платёж, а не сразу в расходы',
+    he: 'תיכנס ל‑«חובות» כתשלום עתידי, לא ישר להוצאות',
+    uk: 'Потрапить у «Борги» як майбутній платіж, а не одразу у витрати',
+    en: 'Goes into “Debts” as a future payment, not straight into expenses',
+  },
+  'si.paymentsCount': { ru: 'Платежей', he: 'תשלומים', uk: 'Платежів', en: 'Payments' },
+  'si.importedAsDebt': {
+    ru: 'оформлено как долг',
+    he: 'נרשם כחוב',
+    uk: 'оформлено як борг',
+    en: 'booked as a debt',
+  },
   // --------------------------------------------------------------- form
   'form.newExpense': { ru: 'Новый расход', he: 'הוצאה חדשה', uk: 'Нова витрата', en: 'New expense' },
   'form.newIncome': { ru: 'Новый доход', he: 'הכנסה חדשה', uk: 'Новий дохід', en: 'New income' },

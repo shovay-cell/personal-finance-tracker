@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import {
   analyzeImageWithGemini,
+  analyzeTextWithGemini,
   normalizeImagePayload,
   resolveApiKey,
 } from '@/services/ai/gemini-server';
@@ -48,14 +49,49 @@ const STATEMENT_PROMPT = `Ты — ИИ-бухгалтер приложения 
 
 Верни ИСКЛЮЧИТЕЛЬНО валидный JSON без markdown-обёрток и пояснений.`;
 
+const STATEMENT_TEXT_PROMPT = `Ты — ИИ-бухгалтер приложения FinTrack.
+Ниже — ТАБЛИЦА операций из банковской выписки, извлечённая из файла Excel или CSV
+(строки разделены переносом, столбцы — точкой с запятой). Первая строка может быть
+заголовком таблицы — не превращай её в операцию.
+Текст может быть на иврите (עברית), русском или английском.
+
+ЗАДАЧА: извлеки КАЖДУЮ строку таблицы как отдельную операцию. Не объединяй строки и не пропускай их.
+
+ПРАВИЛА:
+1. Извлекай ТОЛЬКО реальные строки таблицы. Не выдумывай операции, суммы и даты.
+2. Игнорируй заголовок, итоговые суммы («сума», «סה"כ», «Итого», «Баланс»), пустые строки.
+3. date — дата строки в формате YYYY-MM-DD. В Израиле формат обычно DD/MM/YYYY или DD/MM/YY.
+4. amount — сумма строки, ВСЕГДА положительное число.
+5. kind — "income" для поступлений (зачисления, положительная сумма, отдельный столбец «Зачислено»),
+   "expense" для списаний (отрицательная сумма, столбец «Списано»).
+6. description — назначение платежа так, как в таблице.
+7. category — предполагаемая категория, по тем же спискам, что и для фото чека.
+8. currency — "ILS", "USD" или "EUR".
+9. uncertainFields — поля, в которых ты не уверен из-за неоднозначного формата ячейки.
+
+Верни СТРОГО тот же формат JSON, что описан выше для фото выписки:
+{
+  "rows": [
+    { "date": "YYYY-MM-DD", "amount": 0.0, "currency": "ILS", "kind": "income" | "expense",
+      "description": "...", "category": "...", "uncertainFields": [] }
+  ],
+  "rawText": "",
+  "confidence": 0.0
+}
+
+Верни ИСКЛЮЧИТЕЛЬНО валидный JSON без markdown-обёрток и пояснений.
+
+ТАБЛИЦА:
+`;
+
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { base64Data, mimeType = 'image/jpeg', apiKey: clientApiKey } = body;
+    const { base64Data, mimeType = 'image/jpeg', text, apiKey: clientApiKey } = body;
 
-    if (!base64Data) {
+    if (!base64Data && !text) {
       return NextResponse.json(
-        { success: false, error: 'MISSING_DATA', message: 'Отсутствует изображение списка операций' },
+        { success: false, error: 'MISSING_DATA', message: 'Отсутствует список операций' },
         { status: 400 }
       );
     }
@@ -75,14 +111,24 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const { cleanBase64, cleanMimeType } = normalizeImagePayload(base64Data, mimeType);
-
-    const result = await analyzeImageWithGemini({
-      apiKey,
-      base64: cleanBase64,
-      mimeType: cleanMimeType,
-      prompt: STATEMENT_PROMPT,
-    });
+    // A spreadsheet/CSV export is already text — send it straight to the model
+    // instead of through the vision path, which is built for photographed and
+    // scanned documents.
+    let result;
+    if (text) {
+      result = await analyzeTextWithGemini({
+        apiKey,
+        prompt: `${STATEMENT_TEXT_PROMPT}${String(text).slice(0, 60000)}`,
+      });
+    } else {
+      const { cleanBase64, cleanMimeType } = normalizeImagePayload(base64Data, mimeType);
+      result = await analyzeImageWithGemini({
+        apiKey,
+        base64: cleanBase64,
+        mimeType: cleanMimeType,
+        prompt: STATEMENT_PROMPT,
+      });
+    }
 
     if (!result.ok) {
       return NextResponse.json(

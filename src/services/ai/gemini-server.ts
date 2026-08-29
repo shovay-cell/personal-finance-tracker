@@ -12,24 +12,22 @@ export interface GeminiVisionResult {
 }
 
 /**
- * One image + one prompt through Gemini, with the key sent in the
- * `x-goog-api-key` header and retried through `?key=` when the header form is
- * refused — some keys are only accepted one way.
+ * One request through Gemini — an inline document plus a prompt, or text alone
+ * — with the key sent in the `x-goog-api-key` header and retried through
+ * `?key=` when the header form is refused; some keys are only accepted one way.
  */
 async function callModel(
   model: string,
   apiKey: string,
-  mimeType: string,
-  base64: string,
-  prompt: string
+  prompt: string,
+  document?: { mimeType: string; base64: string }
 ): Promise<Response> {
   const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
+  const parts = document
+    ? [{ inline_data: { mime_type: document.mimeType, data: document.base64 } }, { text: prompt }]
+    : [{ text: prompt }];
   const body = JSON.stringify({
-    contents: [
-      {
-        parts: [{ inline_data: { mime_type: mimeType, data: base64 } }, { text: prompt }],
-      },
-    ],
+    contents: [{ parts }],
     generationConfig: { temperature: 0.1, responseMimeType: 'application/json' },
   });
 
@@ -84,12 +82,32 @@ export async function analyzeImageWithGemini(input: {
   prompt: string;
 }): Promise<GeminiVisionResult> {
   const { apiKey, base64, mimeType, prompt } = input;
+  return runModels(apiKey, prompt, { mimeType, base64 });
+}
+
+/**
+ * Text-only variant for sources that are already text — an Excel sheet or a
+ * CSV export read client-side — so they skip the vision path entirely and
+ * cost neither the upload size nor the OCR risk of a screenshot.
+ */
+export async function analyzeTextWithGemini(input: {
+  apiKey: string;
+  prompt: string;
+}): Promise<GeminiVisionResult> {
+  return runModels(input.apiKey, input.prompt);
+}
+
+async function runModels(
+  apiKey: string,
+  prompt: string,
+  document?: { mimeType: string; base64: string }
+): Promise<GeminiVisionResult> {
   let lastError = '';
   let lastStatus: number | undefined;
 
   for (const model of MODELS) {
     try {
-      const res = await callModel(model, apiKey, mimeType, base64, prompt);
+      const res = await callModel(model, apiKey, prompt, document);
 
       if (!res.ok) {
         lastStatus = res.status;
