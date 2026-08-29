@@ -489,6 +489,7 @@ export function QuickAddSheet({
 
           <CategoryGrid
             categories={visibleCategories}
+            allCategories={categories}
             selectedId={categoryId}
             onSelect={setCategoryId}
             onCreate={() => setIsCreatingCategory(true)}

@@ -1904,6 +1904,14 @@ export const DICTIONARY = {
     uk: 'Підставиться в операцію, коли платіж буде проведено',
     en: 'Carried into the operation when the payment is booked',
   },
+  'cg.search': { ru: 'Поиск категории', he: 'חיפוש קטגוריה', uk: 'Пошук категорії', en: 'Search a category' },
+  'cg.nothingFound': {
+    ru: 'Ничего не найдено',
+    he: 'לא נמצא דבר',
+    uk: 'Нічого не знайдено',
+    en: 'Nothing found',
+  },
+  'tx.allCategories': { ru: 'Все категории', he: 'כל הקטגוריות', uk: 'Усі категорії', en: 'All categories' },
   // --------------------------------------------------------------- form
   'form.newExpense': { ru: 'Новый расход', he: 'הוצאה חדשה', uk: 'Нова витрата', en: 'New expense' },
   'form.newIncome': { ru: 'Новый доход', he: 'הכנסה חדשה', uk: 'Новий дохід', en: 'New income' },

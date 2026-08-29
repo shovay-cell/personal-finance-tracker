@@ -171,6 +171,18 @@ const EXPENSE_SEEDS: CategorySeed[] = [
   { key: 'transport', name: 'Транспорт', iconName: 'Bus', colorHex: '#3B82F6' },
   { key: 'education', name: 'Образование', iconName: 'GraduationCap', colorHex: '#6366F1' },
   { key: 'fees', name: 'Платежи, комиссии', iconName: 'Receipt', colorHex: '#78716C' },
+  {
+    key: 'taxes',
+    name: 'Налоги',
+    iconName: 'Landmark',
+    colorHex: '#B45309',
+    order: 135,
+    children: [
+      { key: 'taxes_vat', name: 'НДС' },
+      { key: 'taxes_authority', name: 'Налоговая' },
+      { key: 'taxes_social', name: 'Социальное страхование' },
+    ],
+  },
   { key: 'gifts', name: 'Подарки', iconName: 'Gift', colorHex: '#F43F5E' },
   { key: 'subscriptions', name: 'Подписки', iconName: 'Repeat', colorHex: '#8B5CF6' },
   {

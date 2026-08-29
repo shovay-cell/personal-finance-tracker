@@ -410,6 +410,7 @@ export function TransactionFormModal({
       <Field label={t('common.category')} warn={uncertainFields.includes('category')}>
         <CategoryGrid
           categories={rootCategories}
+          allCategories={categories}
           selectedId={categoryId}
           onSelect={(id) => {
             setCategoryId(id);

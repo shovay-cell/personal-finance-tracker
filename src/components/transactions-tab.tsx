@@ -55,6 +55,7 @@ export function TransactionsTab({
   const [search, setSearch] = useState('');
   const [memberFilter, setMemberFilter] = useState<string>('ALL');
   const [accountFilter, setAccountFilter] = useState<string>('ALL');
+  const [categoryFilter, setCategoryFilter] = useState<string>('ALL');
   const [showFilters, setShowFilters] = useState(false);
   const { t, language } = useT();
 
@@ -73,9 +74,27 @@ export function TransactionsTab({
         search: search || undefined,
         memberId: memberFilter === 'ALL' ? undefined : memberFilter,
         accountId: accountFilter === 'ALL' ? undefined : accountFilter,
+        categoryId: categoryFilter === 'ALL' ? undefined : categoryFilter,
       }).sort((a, b) => b.date.localeCompare(a.date) || b.createdAt.localeCompare(a.createdAt)),
-    [periodTransactions, kind, search, memberFilter, accountFilter]
+    [periodTransactions, kind, search, memberFilter, accountFilter, categoryFilter]
   );
+
+  // Expense and income have separate category trees, so a filter picked on one
+  // tab would silently empty the other.
+  const filterCategories = useMemo(
+    () =>
+      categories
+        .filter((c) => c.kind === kind && !c.parentId && !c.isHidden)
+        .map((parent) => ({
+          parent,
+          children: categories.filter((c) => c.parentId === parent.id && !c.isHidden),
+        })),
+    [categories, kind]
+  );
+
+  const activeFilterCount = [memberFilter, accountFilter, categoryFilter].filter(
+    (value) => value !== 'ALL'
+  ).length;
 
   const grouped = useMemo(() => {
     const map = new Map<string, Transaction[]>();
@@ -147,7 +166,12 @@ export function TransactionsTab({
 
       <SegmentedControl<TransactionKind>
         value={kind}
-        onChange={setKind}
+        onChange={(next) => {
+          setKind(next);
+          // The category trees do not overlap, so a filter kept across the
+          // switch would show an empty list with no visible reason.
+          setCategoryFilter('ALL');
+        }}
         options={[
           {
             value: 'EXPENSE',
@@ -176,13 +200,18 @@ export function TransactionsTab({
         <button
           type="button"
           onClick={() => setShowFilters((prev) => !prev)}
-          className={`px-3.5 rounded-2xl border text-slate-500 transition-colors ${
+          className={`relative px-3.5 rounded-2xl border text-slate-500 transition-colors ${
             showFilters
               ? 'bg-sky-500 text-white border-transparent'
               : 'bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700'
           }`}
         >
           <Filter className="w-4 h-4" />
+          {activeFilterCount > 0 && (
+            <span className="absolute -top-1 -end-1 min-w-4 h-4 px-1 rounded-full bg-rose-500 text-white text-[9px] font-black flex items-center justify-center">
+              {activeFilterCount}
+            </span>
+          )}
         </button>
       </div>
 
@@ -208,9 +237,32 @@ export function TransactionsTab({
             <option value="ALL">{t('tx.allAccounts')}</option>
             {accounts.map((account) => (
               <option key={account.id} value={account.id}>
-                {account.name}
+                {accountName(account, language)}
               </option>
             ))}
+          </select>
+          <select
+            value={categoryFilter}
+            onChange={(e) => setCategoryFilter(e.target.value)}
+            className={`${inputClass} text-xs col-span-2`}
+          >
+            <option value="ALL">{t('tx.allCategories')}</option>
+            {filterCategories.map(({ parent, children }) =>
+              children.length > 0 ? (
+                <optgroup key={parent.id} label={categoryName(parent, language)}>
+                  <option value={parent.id}>{categoryName(parent, language)}</option>
+                  {children.map((child) => (
+                    <option key={child.id} value={child.id}>
+                      {categoryName(child, language)}
+                    </option>
+                  ))}
+                </optgroup>
+              ) : (
+                <option key={parent.id} value={parent.id}>
+                  {categoryName(parent, language)}
+                </option>
+              )
+            )}
           </select>
         </Card>
       )}
