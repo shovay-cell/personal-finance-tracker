@@ -14,10 +14,10 @@ import {
   BearerCheque,
   Budget,
   BudgetProgress,
-  DebtInstallment,
   FinanceCategory,
   FinanceSettings,
-  PlannedPayment,
+  Plan,
+  PlanOccurrence,
   ProfileMember,
   Transaction,
 } from '@/types';
@@ -53,8 +53,8 @@ interface BudgetsTabProps {
   transactions: Transaction[];
   categories: FinanceCategory[];
   members: ProfileMember[];
-  plannedPayments: PlannedPayment[];
-  installments: DebtInstallment[];
+  plans: Plan[];
+  occurrences: PlanOccurrence[];
   bearerCheques: BearerCheque[];
   settings: FinanceSettings;
   month: string;
@@ -67,8 +67,8 @@ export function BudgetsTab({
   transactions,
   categories,
   members,
-  plannedPayments,
-  installments,
+  plans,
+  occurrences,
   bearerCheques,
   settings,
   month,
@@ -90,12 +90,12 @@ export function BudgetsTab({
         month,
         transactions,
         budgets,
-        plannedPayments,
-        installments,
+        plans,
+        occurrences,
         bearerCheques,
         toBase: (amount, currency) => convertToBase(amount, currency, settings).baseAmount,
       }),
-    [month, transactions, budgets, plannedPayments, installments, bearerCheques, settings]
+    [month, transactions, budgets, plans, occurrences, bearerCheques, settings]
   );
 
   const pacing = useMemo(() => pacingComparison(transactions, month), [transactions, month]);

@@ -1,8 +1,8 @@
 import {
   BearerCheque,
   Budget,
-  DebtInstallment,
-  PlannedPayment,
+  Plan,
+  PlanOccurrence,
   SafeToSpend,
   PacingComparison,
   PacingPoint,
@@ -28,7 +28,7 @@ import {
 } from '@/i18n/runtime';
 import { categoryName as localizedCategoryName, genericLabel } from '@/i18n/categories';
 import { computeObligationStatus, todayIso } from '@/lib/db';
-import { monthlyEquivalent, planKindOf } from './planned';
+import { monthlyEquivalent } from './planned';
 
 export type PeriodPreset = 'WEEK' | 'MONTH' | 'QUARTER' | 'YEAR' | 'CUSTOM';
 
@@ -381,15 +381,15 @@ export function safeToSpend(input: {
   today?: string;
   transactions: Transaction[];
   budgets: Budget[];
-  plannedPayments: PlannedPayment[];
-  /** Unpaid instalment payments falling inside the month. */
-  installments?: DebtInstallment[];
+  plans: Plan[];
+  /** Unpaid fixed-schedule occurrences falling inside the month. */
+  occurrences?: PlanOccurrence[];
   /** Uncleared bearer cheques due inside the month — reserved, not yet spent. */
   bearerCheques?: BearerCheque[];
   toBase: (amount: number, currency: CurrencyCode) => number;
 }): SafeToSpend {
-  const { month, transactions, budgets, plannedPayments, toBase } = input;
-  const installments = input.installments || [];
+  const { month, transactions, budgets, plans, toBase } = input;
+  const occurrences = input.occurrences || [];
   const bearerCheques = input.bearerCheques || [];
   const today = input.today || todayIso();
   const range = monthRange(month);
@@ -407,19 +407,21 @@ export function safeToSpend(input: {
 
   // Recurring commitments whose due date still lies ahead inside this month, and
   // which have not been booked yet — those already paid are inside `spent`.
-  const upcomingCommitted = plannedPayments.reduce((sum, payment) => {
-    if (!payment.isActive || payment.kind !== 'EXPENSE') return sum;
-    if (payment.nextDueDate < today || payment.nextDueDate > range.to) return sum;
+  const upcomingCommitted = plans.reduce((sum, plan) => {
+    if (plan.scheduleType !== 'RECURRING' || plan.status !== 'ACTIVE' || plan.kind !== 'EXPENSE') {
+      return sum;
+    }
+    if (!plan.nextDueDate || plan.nextDueDate < today || plan.nextDueDate > range.to) return sum;
     const alreadyBooked = inMonth.some(
-      (t) => t.plannedPaymentId === payment.id && t.date === payment.nextDueDate
+      (t) => t.planId === plan.id && t.date === plan.nextDueDate
     );
-    return alreadyBooked ? sum : sum + toBase(payment.amount, payment.currency);
+    return alreadyBooked ? sum : sum + toBase(plan.amount, plan.currency);
   }, 0);
 
-  const upcomingInstallments = installments.reduce((sum, installment) => {
-    if (installment.isPaid) return sum;
-    if (installment.dueDate < today || installment.dueDate > range.to) return sum;
-    return sum + toBase(installment.amount, installment.currency);
+  const upcomingOccurrences = occurrences.reduce((sum, occurrence) => {
+    if (occurrence.isPaid) return sum;
+    if (occurrence.dueDate < today || occurrence.dueDate > range.to) return sum;
+    return sum + toBase(occurrence.amount, occurrence.currency);
   }, 0);
 
   const upcomingCheques = bearerCheques.reduce((sum, cheque) => {
@@ -433,7 +435,7 @@ export function safeToSpend(input: {
   // The current day still counts: money can be spent today.
   const daysLeft = Math.max(1, total - currentDay + 1);
 
-  const committed = upcomingCommitted + upcomingInstallments + upcomingCheques;
+  const committed = upcomingCommitted + upcomingOccurrences + upcomingCheques;
   const available = Math.round((planned - spent - committed) * 100) / 100;
 
   return {
@@ -510,16 +512,16 @@ export function pacingComparison(
 
 /** Total recurring monthly commitment across payments, subscriptions and investments. */
 export function monthlyCommitments(
-  plannedPayments: PlannedPayment[],
+  plans: Plan[],
   toBase: (amount: number, currency: CurrencyCode) => number
 ): number {
-  const total = plannedPayments
-    .filter((p) => p.isActive && p.kind === 'EXPENSE' && p.recurrence !== 'ONCE')
+  const total = plans
+    .filter(
+      (p) => p.scheduleType === 'RECURRING' && p.status === 'ACTIVE' && p.kind === 'EXPENSE' && p.recurrence !== 'ONCE'
+    )
     .reduce((sum, p) => sum + toBase(monthlyEquivalent(p), p.currency), 0);
   return Math.round(total * 100) / 100;
 }
-
-export { planKindOf };
 
 
 /** Russian plural agreement: 1 операция, 2 операции, 5 операций. */

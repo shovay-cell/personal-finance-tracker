@@ -16,21 +16,20 @@ import {
 import {
   BearerCheque,
   CurrencyCode,
-  DebtInstallment,
-  DebtKind,
-  DebtPlan,
   FinanceAccount,
   FinanceCategory,
   FinanceSettings,
   Obligation,
   ObligationSettlement,
-  PlannedPayment,
+  Plan,
+  PlanOccurrence,
+  PlanType,
   VatPayment,
   VatSummary,
 } from '@/types';
 import { cancelBearerCheque, clearBearerCheque, convertToBase, todayIso } from '@/lib/db';
 import { formatDateHuman, formatMoney, monthLabel } from '@/services/analytics';
-import { debtsOverview, describeAllDebts, upcomingByMonth } from '@/services/debts';
+import { debtsOverview, describeAllFixedSchedulePlans, upcomingByMonth } from '@/services/debts';
 import { VatCard } from './vat-card';
 import { DebtCard } from './debt-card';
 import { ObligationsTab } from './obligations-tab';
@@ -46,10 +45,9 @@ interface DebtsTabProps {
   accounts: FinanceAccount[];
   obligations: Obligation[];
   settlements: ObligationSettlement[];
-  debts: DebtPlan[];
-  installments: DebtInstallment[];
+  plans: Plan[];
+  occurrences: PlanOccurrence[];
   bearerCheques: BearerCheque[];
-  plannedPayments: PlannedPayment[];
   vatSummary?: VatSummary;
   vatPayments: VatPayment[];
 }
@@ -64,10 +62,9 @@ export function DebtsTab({
   accounts,
   obligations,
   settlements,
-  debts,
-  installments,
+  plans,
+  occurrences,
   bearerCheques,
-  plannedPayments,
   vatSummary,
   vatPayments,
 }: DebtsTabProps) {
@@ -80,29 +77,31 @@ export function DebtsTab({
 
   const overview = useMemo(
     () =>
-      debtsOverview({ vatSummary, obligations, settlements, debts, installments, bearerCheques, toBase }),
+      debtsOverview({ vatSummary, obligations, settlements, plans, occurrences, bearerCheques, toBase }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [vatSummary, obligations, settlements, debts, installments, bearerCheques, settings]
+    [vatSummary, obligations, settlements, plans, occurrences, bearerCheques, settings]
   );
 
   const upcoming = useMemo(
     () =>
       upcomingByMonth({
-        debts,
-        installments,
+        plans,
+        occurrences,
         obligations,
         settlements,
         bearerCheques,
-        plannedPayments,
         months: 3,
         toBase,
       }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [debts, installments, obligations, settlements, bearerCheques, plannedPayments, settings]
+    [plans, occurrences, obligations, settlements, bearerCheques, settings]
   );
 
-  const described = useMemo(() => describeAllDebts(debts, installments), [debts, installments]);
-  const ofKind = (kind: DebtKind) => described.filter((row) => row.debt.kind === kind);
+  const described = useMemo(
+    () => describeAllFixedSchedulePlans(plans, occurrences),
+    [plans, occurrences]
+  );
+  const ofKind = (planType: PlanType) => described.filter((row) => row.plan.planType === planType);
 
   const tiles: { id: Segment; label: string; amount: number; icon: React.ReactNode; color: string }[] = [
     { id: 'VAT', label: t('debts.vat'), amount: overview.vat, icon: <Percent className="w-3.5 h-3.5" />, color: '#F59E0B' },
@@ -298,8 +297,8 @@ function DebtList({
   rows,
   currency,
 }: {
-  kind: DebtKind;
-  rows: ReturnType<typeof describeAllDebts>;
+  kind: 'INSTALLMENT' | 'TAX' | 'LOAN' | 'CHEQUE';
+  rows: ReturnType<typeof describeAllFixedSchedulePlans>;
   currency: CurrencyCode;
 }) {
   const { t } = useT();
@@ -324,7 +323,7 @@ function DebtList({
       ) : (
         <div className="space-y-2">
           {rows.map((row) => (
-            <DebtCard key={row.debt.id} row={row} currency={currency} />
+            <DebtCard key={row.plan.id} row={row} currency={currency} />
           ))}
         </div>
       )}

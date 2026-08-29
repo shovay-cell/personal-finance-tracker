@@ -96,8 +96,8 @@ export interface Transaction {
   receiptScan?: ReceiptScanMeta;
   /** member id of whoever entered it — shown in lists and reports */
   authorId: string;
-  /** set when the transaction was materialised from a planned payment */
-  plannedPaymentId?: string;
+  /** set when the transaction was materialised from a plan (recurring fire or a paid occurrence) */
+  planId?: string;
   /** set when the transaction settles a bearer cheque obligation */
   obligationId?: string;
   /** VAT separated from this income and owed to the tax authority */
@@ -119,15 +119,15 @@ export type RecurrenceKind =
   | 'CUSTOM_DAYS';
 
 /**
- * What a scheduled entry represents. All three share the same recurrence engine
- * and book the same kind of transaction; the split only drives grouping and the
- * "постоянные траты" totals.
+ * @deprecated Superseded by `Plan` (scheduleType: RECURRING). Kept only so the
+ * one-time migration and Drive backups taken before it can still be read.
  */
 export type PlanKind = 'PAYMENT' | 'SUBSCRIPTION' | 'INVESTMENT';
 
 /** Simple "every N days/weeks/months/years" rule set from the expense form. */
 export type RecurrenceUnit = 'DAY' | 'WEEK' | 'MONTH' | 'YEAR';
 
+/** @deprecated Superseded by `Plan` (scheduleType: RECURRING). See the note there. */
 export interface PlannedPayment {
   id: string;
   title: string;
@@ -159,26 +159,28 @@ export interface PlannedPayment {
   createdAt: string;
 }
 
-/** One recurring entry with its cost normalised to a month and a year. */
+/** @deprecated Superseded by `PlanCostRow`. */
 export interface RecurringCostRow {
   payment: PlannedPayment;
   monthlyBase: number;
   yearlyBase: number;
 }
 
+/** @deprecated Superseded by `PlanTotals`. */
 export interface RecurringTotals {
   monthly: number;
   yearly: number;
   rows: RecurringCostRow[];
 }
 
-/** What kind of liability a debt plan represents. */
+/**
+ * @deprecated Superseded by `Plan.planType` (scheduleType: FIXED_SCHEDULE).
+ * Kept only so the one-time migration and old Drive backups can still be read.
+ */
 export type DebtKind = 'INSTALLMENT' | 'TAX' | 'LOAN' | 'CHEQUE';
 
 /**
- * A liability paid off on a schedule: an instalment purchase, a tax assessment
- * or a loan. The purchase itself is not an expense on day one — each payment
- * becomes a real expense when it is paid.
+ * @deprecated Superseded by `Plan` (scheduleType: FIXED_SCHEDULE). See the note there.
  */
 export interface DebtPlan {
   id: string;
@@ -197,6 +199,7 @@ export interface DebtPlan {
   updatedAt: string;
 }
 
+/** @deprecated Superseded by `PlanOccurrence`. */
 export interface DebtInstallment {
   id: string;
   debtId: string;
@@ -211,15 +214,133 @@ export interface DebtInstallment {
   transactionId?: string;
 }
 
-export interface DebtWithSchedule {
-  debt: DebtPlan;
-  installments: DebtInstallment[];
+// ------------------------------------------------------------------ plans
+//
+// A `Plan` is every "known future expense/income" in one place: a
+// subscription that repeats forever, or a purchase/tax/loan paid off in a
+// fixed number of instalments. "Планы", "Долги", "Подписки", "Кредиты",
+// "Рассрочки", "Налоги" in the UI are filters over `planType`+`scheduleType`
+// on this one table, not separate entities.
+//
+// `scheduleType` picks which half of the fields on `Plan` apply:
+//  - RECURRING drives `nextDueDate` forward virtually on each fire — no
+//    stored occurrence rows, same as the old PlannedPayment.
+//  - FIXED_SCHEDULE is backed by real `PlanOccurrence` rows, one per
+//    payment, because each needs its own due date/amount/paid state/
+//    transaction link that can't be derived from a rule.
+//
+// `Obligation` (bearer notes issued to someone else, settled whenever they
+// are presented, partial settlements allowed) and `BearerCheque` (the
+// user's own postdated cheques, issued→cleared/cancelled) stay separate
+// entities on purpose — different real-world settlement mechanics, not a
+// schedule variant of this one.
+
+export type PlanScheduleType = 'RECURRING' | 'FIXED_SCHEDULE';
+
+export type PlanType =
+  | 'SUBSCRIPTION'
+  | 'PAYMENT'
+  | 'INVESTMENT'
+  | 'INSTALLMENT'
+  | 'TAX'
+  | 'LOAN'
+  | 'CHEQUE';
+
+export type PlanStatus = 'ACTIVE' | 'COMPLETED' | 'CANCELLED';
+
+export interface Plan {
+  id: string;
+  planType: PlanType;
+  scheduleType: PlanScheduleType;
+  status: PlanStatus;
+  title: string;
+  /** Service or broker name, shown instead of a bare category for subscriptions. */
+  provider?: string;
+  merchant?: string;
+  kind: TransactionKind;
+  /** RECURRING: amount per occurrence. FIXED_SCHEDULE: total amount financed. */
+  amount: number;
+  currency: CurrencyCode;
+  categoryId: string;
+  accountId: string;
+  /** Purchase/assessment date for FIXED_SCHEDULE; first-due seed for RECURRING. */
+  startDate: string;
+
+  // --- RECURRING only ---
+  recurrence?: RecurrenceKind;
+  /** interval in days when recurrence is CUSTOM_DAYS */
+  intervalDays?: number;
+  /** «Повторять каждый N <unit>» — takes precedence over `recurrence` when set */
+  intervalUnit?: RecurrenceUnit;
+  intervalCount?: number;
+  /** next date the payment is due, YYYY-MM-DD — virtual, no stored occurrence */
+  nextDueDate?: string;
+  /** stop generating occurrences after this date */
+  endDate?: string;
+  remindDaysBefore?: number;
+  /** true → create the transaction silently, false → ask the user to confirm */
+  autoCreate?: boolean;
+  lastRunDate?: string;
+
+  // --- FIXED_SCHEDULE only, denormalised for cheap list rendering ---
+  /** Total number of scheduled payments. */
+  occurrencesCount?: number;
+  /** How many of those are already paid. */
+  occurrencesPaid?: number;
+  /** Sum of unpaid occurrences, in the plan's own currency. */
+  outstandingAmount?: number;
+
+  note?: string;
+  authorId: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** One scheduled payment of a FIXED_SCHEDULE plan. */
+export interface PlanOccurrence {
+  id: string;
+  planId: string;
+  /** 1-based position in the schedule. */
+  index: number;
+  dueDate: string;
+  amount: number;
+  currency: CurrencyCode;
+  isPaid: boolean;
+  paidDate?: string;
+  /** Expense created when the payment was marked paid. */
+  transactionId?: string;
+}
+
+export interface PlanWithSchedule {
+  plan: Plan;
+  occurrences: PlanOccurrence[];
   paidAmount: number;
   outstandingAmount: number;
   paidCount: number;
   totalCount: number;
-  nextInstallment?: DebtInstallment;
+  nextOccurrence?: PlanOccurrence;
   isOverdue: boolean;
+}
+
+export interface PlanState {
+  plan: Plan;
+  daysUntilDue: number; // negative when overdue
+  isOverdue: boolean;
+  isDueToday: boolean;
+  isWithinReminderWindow: boolean;
+}
+
+/** One recurring plan with its cost normalised to a month and a year. */
+export interface PlanCostRow {
+  plan: Plan;
+  monthlyBase: number;
+  yearlyBase: number;
+}
+
+export interface PlanTotals {
+  monthly: number;
+  yearly: number;
+  rows: PlanCostRow[];
 }
 
 /** One month of the upcoming-liabilities timeline. */
@@ -576,14 +697,19 @@ export interface FinanceBackupPayload {
   accounts: FinanceAccount[];
   categories: FinanceCategory[];
   transactions: Transaction[];
-  plannedPayments: PlannedPayment[];
+  plans: Plan[];
+  planOccurrences: PlanOccurrence[];
+  /** @deprecated Pre-migration shape — only present in a backup taken before the Plan merge. */
+  plannedPayments?: PlannedPayment[];
+  /** @deprecated Pre-migration shape — only present in a backup taken before the Plan merge. */
+  debts?: DebtPlan[];
+  /** @deprecated Pre-migration shape — only present in a backup taken before the Plan merge. */
+  debtInstallments?: DebtInstallment[];
   obligations: Obligation[];
   obligationSettlements: ObligationSettlement[];
   budgets: Budget[];
   members: ProfileMember[];
   vatPayments?: VatPayment[];
-  debts?: DebtPlan[];
-  debtInstallments?: DebtInstallment[];
   bearerCheques?: BearerCheque[];
   settings: FinanceSettings | null;
 }

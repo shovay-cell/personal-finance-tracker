@@ -2,17 +2,16 @@ import { tr } from '@/i18n/t';
 import {
   BearerCheque,
   CurrencyCode,
-  DebtInstallment,
-  DebtPlan,
-  DebtWithSchedule,
   Obligation,
   ObligationSettlement,
-  PlannedPayment,
+  Plan,
+  PlanOccurrence,
+  PlanWithSchedule,
   UpcomingItem,
   UpcomingMonth,
   VatSummary,
 } from '@/types';
-import { describeDebt, todayIso } from '@/lib/db';
+import { describePlan, todayIso } from '@/lib/db';
 import { obligationsWithBalance } from './analytics';
 import { occurrencesBetween } from './forecast';
 
@@ -30,12 +29,13 @@ export function debtsOverview(input: {
   vatSummary?: VatSummary;
   obligations: Obligation[];
   settlements: ObligationSettlement[];
-  debts: DebtPlan[];
-  installments: DebtInstallment[];
+  plans: Plan[];
+  occurrences: PlanOccurrence[];
   bearerCheques?: BearerCheque[];
   toBase: (amount: number, currency: CurrencyCode) => number;
 }): DebtsOverview {
-  const { vatSummary, obligations, settlements, debts, installments, bearerCheques = [], toBase } = input;
+  const { vatSummary, obligations, settlements, plans, occurrences, bearerCheques = [], toBase } =
+    input;
 
   const issuedCheques = obligationsWithBalance(obligations, settlements)
     .filter((row) => row.status !== 'SETTLED')
@@ -45,12 +45,12 @@ export function debtsOverview(input: {
     .filter((cheque) => cheque.status === 'ISSUED')
     .reduce((sum, cheque) => sum + toBase(cheque.amount, cheque.currency), 0);
 
-  const byKind = (kind: DebtPlan['kind']) =>
-    debts
-      .filter((debt) => debt.kind === kind)
-      .reduce((sum, debt) => {
-        const described = describeDebt(debt, installments);
-        return sum + toBase(described.outstandingAmount, debt.currency);
+  const byType = (planType: Plan['planType']) =>
+    plans
+      .filter((plan) => plan.scheduleType === 'FIXED_SCHEDULE' && plan.planType === planType)
+      .reduce((sum, plan) => {
+        const described = describePlan(plan, occurrences);
+        return sum + toBase(described.outstandingAmount, plan.currency);
       }, 0);
 
   const round = (value: number) => Math.round(value * 100) / 100;
@@ -58,10 +58,10 @@ export function debtsOverview(input: {
   const overview: DebtsOverview = {
     vat: round(vatSummary?.outstanding || 0),
     // Cheques the user has to pay, cheques they issued, plus their own bearer cheques.
-    cheques: round(issuedCheques + byKind('CHEQUE') + pendingCheques),
-    installments: round(byKind('INSTALLMENT')),
-    taxes: round(byKind('TAX')),
-    loans: round(byKind('LOAN')),
+    cheques: round(issuedCheques + byType('CHEQUE') + pendingCheques),
+    installments: round(byType('INSTALLMENT')),
+    taxes: round(byType('TAX')),
+    loans: round(byType('LOAN')),
     total: 0,
   };
 
@@ -71,34 +71,34 @@ export function debtsOverview(input: {
   return overview;
 }
 
-export function describeAllDebts(
-  debts: DebtPlan[],
-  installments: DebtInstallment[],
+export function describeAllFixedSchedulePlans(
+  plans: Plan[],
+  occurrences: PlanOccurrence[],
   today = todayIso()
-): DebtWithSchedule[] {
-  return debts
-    .map((debt) => describeDebt(debt, installments, today))
+): PlanWithSchedule[] {
+  return plans
+    .filter((plan) => plan.scheduleType === 'FIXED_SCHEDULE')
+    .map((plan) => describePlan(plan, occurrences, today))
     .sort((a, b) => {
       // Overdue first, then by the nearest payment date.
       if (a.isOverdue !== b.isOverdue) return a.isOverdue ? -1 : 1;
-      const aDate = a.nextInstallment?.dueDate || '9999-12-31';
-      const bDate = b.nextInstallment?.dueDate || '9999-12-31';
+      const aDate = a.nextOccurrence?.dueDate || '9999-12-31';
+      const bDate = b.nextOccurrence?.dueDate || '9999-12-31';
       return aDate.localeCompare(bDate);
     });
 }
 
 /**
- * Upcoming payments grouped by calendar month: instalments, cheques with a due
- * date and recurring plans, so «что списывается дальше» is one list rather than
- * four screens.
+ * Upcoming payments grouped by calendar month: fixed-schedule occurrences,
+ * cheques with a due date and recurring plans, so «что списывается дальше» is
+ * one list rather than four screens.
  */
 export function upcomingByMonth(input: {
-  debts: DebtPlan[];
-  installments: DebtInstallment[];
+  plans: Plan[];
+  occurrences: PlanOccurrence[];
   obligations: Obligation[];
   settlements: ObligationSettlement[];
   bearerCheques?: BearerCheque[];
-  plannedPayments: PlannedPayment[];
   months: number;
   today?: string;
   toBase: (amount: number, currency: CurrencyCode) => number;
@@ -110,21 +110,21 @@ export function upcomingByMonth(input: {
 
   const items: UpcomingItem[] = [];
 
-  const debtById = new Map(input.debts.map((debt) => [debt.id, debt]));
-  for (const installment of input.installments) {
-    if (installment.isPaid || installment.dueDate > horizon) continue;
-    const debt = debtById.get(installment.debtId);
-    if (!debt) continue;
+  const planById = new Map(input.plans.map((plan) => [plan.id, plan]));
+  for (const occurrence of input.occurrences) {
+    if (occurrence.isPaid || occurrence.dueDate > horizon) continue;
+    const plan = planById.get(occurrence.planId);
+    if (!plan) continue;
 
     items.push({
-      id: installment.id,
-      date: installment.dueDate,
-      title: `${debt.title} · ${installment.index}/${
-        input.installments.filter((i) => i.debtId === debt.id).length
+      id: occurrence.id,
+      date: occurrence.dueDate,
+      title: `${plan.title} · ${occurrence.index}/${
+        input.occurrences.filter((o) => o.planId === plan.id).length
       }`,
-      amount: input.toBase(installment.amount, installment.currency),
-      source: debt.kind,
-      isOverdue: installment.dueDate < today,
+      amount: input.toBase(occurrence.amount, occurrence.currency),
+      source: plan.planType as UpcomingItem['source'],
+      isOverdue: occurrence.dueDate < today,
     });
   }
 
@@ -155,14 +155,16 @@ export function upcomingByMonth(input: {
     });
   }
 
-  for (const payment of input.plannedPayments) {
-    if (!payment.isActive || payment.kind !== 'EXPENSE') continue;
-    for (const date of occurrencesBetween(payment, today, horizon)) {
+  for (const plan of input.plans) {
+    if (plan.scheduleType !== 'RECURRING' || plan.status !== 'ACTIVE' || plan.kind !== 'EXPENSE') {
+      continue;
+    }
+    for (const date of occurrencesBetween(plan, today, horizon)) {
       items.push({
-        id: `${payment.id}-${date}`,
+        id: `${plan.id}-${date}`,
         date,
-        title: payment.title,
-        amount: input.toBase(payment.amount, payment.currency),
+        title: plan.title,
+        amount: input.toBase(plan.amount, plan.currency),
         source: 'PLANNED',
         isOverdue: date < today,
       });
@@ -184,16 +186,16 @@ export function upcomingByMonth(input: {
     .sort((a, b) => a.month.localeCompare(b.month));
 }
 
-/** Unpaid instalments still due inside the given month, in base currency. */
-export function installmentsDueInMonth(
-  installments: DebtInstallment[],
+/** Unpaid fixed-schedule occurrences still due inside the given month, in base currency. */
+export function occurrencesDueInMonth(
+  occurrences: PlanOccurrence[],
   month: string,
   toBase: (amount: number, currency: CurrencyCode) => number,
   today = todayIso()
 ): number {
-  const total = installments
-    .filter((i) => !i.isPaid && i.dueDate.slice(0, 7) === month && i.dueDate >= today)
-    .reduce((sum, i) => sum + toBase(i.amount, i.currency), 0);
+  const total = occurrences
+    .filter((o) => !o.isPaid && o.dueDate.slice(0, 7) === month && o.dueDate >= today)
+    .reduce((sum, o) => sum + toBase(o.amount, o.currency), 0);
   return Math.round(total * 100) / 100;
 }
 

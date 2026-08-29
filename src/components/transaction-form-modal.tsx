@@ -31,8 +31,8 @@ import {
 } from '@/types';
 import {
   addBearerCheque,
-  addDebtPlan,
-  addPlannedPayment,
+  addFixedSchedulePlan,
+  addRecurringPlan,
   addTransaction,
   buildInstallmentAmounts,
   deleteTransaction,
@@ -296,8 +296,8 @@ export function TransactionFormModal({
       // and only the payments actually marked paid turn into expenses.
       if (kind === 'EXPENSE' && isDebt) {
         const count = Math.max(1, parseInt(paymentsCount, 10) || 1);
-        await addDebtPlan({
-          kind: debtKind,
+        await addFixedSchedulePlan({
+          planType: debtKind,
           title: merchant.trim() || note.trim() || t(DEBT_KIND_META[debtKind].defaultTitle),
           merchant: merchant.trim() || undefined,
           totalAmount: numericAmount,
@@ -321,9 +321,9 @@ export function TransactionFormModal({
 
       if (isRepeating) {
         const every = Math.max(1, parseInt(repeatCount, 10) || 1);
-        await addPlannedPayment({
+        await addRecurringPlan({
+          planType: 'PAYMENT',
           title: merchant.trim() || note.trim() || t('tf.recurringTitle'),
-          planKind: 'PAYMENT',
           kind,
           amount: numericAmount,
           currency,
@@ -336,7 +336,6 @@ export function TransactionFormModal({
           nextDueDate: shiftByUnit(date, repeatUnit, every),
           remindDaysBefore: 1,
           autoCreate: false,
-          isActive: true,
           note: note.trim() || undefined,
         });
       }

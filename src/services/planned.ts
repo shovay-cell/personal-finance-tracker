@@ -1,25 +1,6 @@
-import {
-  PlanKind,
-  PlannedPayment,
-  RecurringCostRow,
-  RecurringTotals,
-  Transaction,
-} from '@/types';
-import {
-  addTransaction,
-  financeDb,
-  todayIso,
-  updatePlannedPayment,
-} from '@/lib/db';
+import { Plan, PlanCostRow, PlanState, PlanTotals, PlanType, Transaction } from '@/types';
+import { addTransaction, financeDb, todayIso, updatePlan } from '@/lib/db';
 import { getActiveLanguage } from '@/i18n/runtime';
-
-export interface PlannedPaymentState {
-  payment: PlannedPayment;
-  daysUntilDue: number; // negative when overdue
-  isOverdue: boolean;
-  isDueToday: boolean;
-  isWithinReminderWindow: boolean;
-}
 
 function parseIso(dateStr: string): Date {
   const [y, m, d] = dateStr.split('-').map(Number);
@@ -41,16 +22,16 @@ export function daysBetween(fromIso: string, toIsoStr: string): number {
  * Next occurrence after `from`. MONTHLY keeps the day-of-month and clamps to the
  * last day of shorter months, so a payment due on the 31st still lands in February.
  */
-export function nextOccurrence(payment: PlannedPayment, from: string): string | null {
+export function nextOccurrence(plan: Plan, from: string): string | null {
   const date = parseIso(from);
 
   // «Повторять каждый N день/неделя/месяц/год» from the expense form wins over
   // the preset kinds — it is the rule the user actually typed.
-  if (payment.intervalUnit && payment.intervalCount) {
-    const count = Math.max(1, payment.intervalCount);
-    if (payment.intervalUnit === 'DAY') date.setDate(date.getDate() + count);
-    else if (payment.intervalUnit === 'WEEK') date.setDate(date.getDate() + count * 7);
-    else if (payment.intervalUnit === 'YEAR') date.setFullYear(date.getFullYear() + count);
+  if (plan.intervalUnit && plan.intervalCount) {
+    const count = Math.max(1, plan.intervalCount);
+    if (plan.intervalUnit === 'DAY') date.setDate(date.getDate() + count);
+    else if (plan.intervalUnit === 'WEEK') date.setDate(date.getDate() + count * 7);
+    else if (plan.intervalUnit === 'YEAR') date.setFullYear(date.getFullYear() + count);
     else {
       const day = date.getDate();
       date.setDate(1);
@@ -60,11 +41,11 @@ export function nextOccurrence(payment: PlannedPayment, from: string): string | 
     }
 
     const next = toIso(date);
-    if (payment.endDate && next > payment.endDate) return null;
+    if (plan.endDate && next > plan.endDate) return null;
     return next;
   }
 
-  switch (payment.recurrence) {
+  switch (plan.recurrence) {
     case 'ONCE':
       return null;
     case 'WEEKLY':
@@ -73,7 +54,7 @@ export function nextOccurrence(payment: PlannedPayment, from: string): string | 
     case 'MONTHLY':
     case 'QUARTERLY':
     case 'SEMIANNUAL': {
-      const monthStep = payment.recurrence === 'MONTHLY' ? 1 : payment.recurrence === 'QUARTERLY' ? 3 : 6;
+      const monthStep = plan.recurrence === 'MONTHLY' ? 1 : plan.recurrence === 'QUARTERLY' ? 3 : 6;
       const day = date.getDate();
       date.setDate(1);
       date.setMonth(date.getMonth() + monthStep);
@@ -85,12 +66,12 @@ export function nextOccurrence(payment: PlannedPayment, from: string): string | 
       date.setFullYear(date.getFullYear() + 1);
       break;
     case 'CUSTOM_DAYS':
-      date.setDate(date.getDate() + Math.max(1, payment.intervalDays || 30));
+      date.setDate(date.getDate() + Math.max(1, plan.intervalDays || 30));
       break;
   }
 
   const next = toIso(date);
-  if (payment.endDate && next > payment.endDate) return null;
+  if (plan.endDate && next > plan.endDate) return null;
   return next;
 }
 
@@ -179,13 +160,13 @@ function pluralForm(count: number, forms: string[], language: string): string {
   return count === 1 ? forms[0] : forms[1];
 }
 
-export function describeRecurrence(payment: PlannedPayment): string {
+export function describeRecurrence(plan: Plan): string {
   const language = getActiveLanguage();
   const labels = RECURRENCE_LABELS[language] || RECURRENCE_LABELS.ru;
 
-  if (payment.intervalUnit && payment.intervalCount) {
-    const count = payment.intervalCount;
-    const forms = (INTERVAL_FORMS[language] || INTERVAL_FORMS.ru)[payment.intervalUnit];
+  if (plan.intervalUnit && plan.intervalCount) {
+    const count = plan.intervalCount;
+    const forms = (INTERVAL_FORMS[language] || INTERVAL_FORMS.ru)[plan.intervalUnit];
     const word = pluralForm(count, forms, language);
     if (count === 1) {
       // Russian and Ukrainian inflect the article-like word with the noun; the
@@ -197,7 +178,7 @@ export function describeRecurrence(payment: PlannedPayment): string {
     return `${labels.EVERY} ${count} ${word}`;
   }
 
-  switch (payment.recurrence) {
+  switch (plan.recurrence) {
     case 'ONCE':
       return labels.ONCE;
     case 'WEEKLY':
@@ -211,102 +192,99 @@ export function describeRecurrence(payment: PlannedPayment): string {
     case 'YEARLY':
       return labels.YEARLY;
     case 'CUSTOM_DAYS':
-      return `${labels.EVERY} ${payment.intervalDays || 30} ${labels.DAYS_SHORT}`;
+      return `${labels.EVERY} ${plan.intervalDays || 30} ${labels.DAYS_SHORT}`;
     default:
       return '';
   }
 }
 
-export function plannedPaymentState(payment: PlannedPayment, today = todayIso()): PlannedPaymentState {
-  const daysUntilDue = daysBetween(today, payment.nextDueDate);
+export function planState(plan: Plan, today = todayIso()): PlanState {
+  const daysUntilDue = daysBetween(today, plan.nextDueDate || today);
   return {
-    payment,
+    plan,
     daysUntilDue,
     isOverdue: daysUntilDue < 0,
     isDueToday: daysUntilDue === 0,
-    isWithinReminderWindow: daysUntilDue >= 0 && daysUntilDue <= payment.remindDaysBefore,
+    isWithinReminderWindow: daysUntilDue >= 0 && daysUntilDue <= (plan.remindDaysBefore ?? 0),
   };
 }
 
 /**
- * Books the planned payment as a real transaction and moves the schedule to the
- * next occurrence (deactivating one-off payments once they fire).
+ * Books the recurring plan as a real transaction and moves the schedule to the
+ * next occurrence (cancelling one-off plans once they fire).
  */
-export async function materializePlannedPayment(
-  payment: PlannedPayment,
+export async function materializeRecurringPlan(
+  plan: Plan,
   overrides: Partial<Transaction> = {}
 ): Promise<Transaction> {
+  const dueDate = plan.nextDueDate || todayIso();
   const transaction = await addTransaction({
-    kind: payment.kind,
-    amount: payment.amount,
-    currency: payment.currency,
-    categoryId: payment.categoryId,
-    accountId: payment.accountId,
-    date: payment.nextDueDate,
-    note: payment.note || payment.title,
-    plannedPaymentId: payment.id,
+    kind: plan.kind,
+    amount: plan.amount,
+    currency: plan.currency,
+    categoryId: plan.categoryId,
+    accountId: plan.accountId,
+    date: dueDate,
+    note: plan.note || plan.title,
+    planId: plan.id,
     source: 'PLANNED',
     ...overrides,
   } as any);
 
-  const next = nextOccurrence(payment, payment.nextDueDate);
-  await updatePlannedPayment(payment.id, {
-    lastRunDate: payment.nextDueDate,
-    nextDueDate: next || payment.nextDueDate,
-    isActive: next !== null,
+  const next = nextOccurrence(plan, dueDate);
+  await updatePlan(plan.id, {
+    lastRunDate: dueDate,
+    nextDueDate: next || dueDate,
+    status: next !== null ? 'ACTIVE' : 'COMPLETED',
   });
 
   return transaction;
 }
 
 /**
- * Runs on app start: fires every due auto-create payment that has not been
- * booked yet. Payments requiring confirmation are returned for the UI to prompt.
+ * Runs on app start: fires every due auto-create plan that has not been
+ * booked yet. Plans requiring confirmation are returned for the UI to prompt.
  */
-export async function processDuePlannedPayments(
+export async function processDueRecurringPlans(
   autoCreateDefault: boolean
-): Promise<{ created: Transaction[]; awaitingConfirmation: PlannedPayment[] }> {
+): Promise<{ created: Transaction[]; awaitingConfirmation: Plan[] }> {
   const today = todayIso();
-  const payments = await financeDb.plannedPayments.toArray();
+  const plans = await financeDb.plans.where('scheduleType').equals('RECURRING').toArray();
   const created: Transaction[] = [];
-  const awaitingConfirmation: PlannedPayment[] = [];
+  const awaitingConfirmation: Plan[] = [];
 
-  for (const payment of payments) {
-    if (!payment.isActive) continue;
-    if (payment.nextDueDate > today) continue;
+  for (const plan of plans) {
+    if (plan.status !== 'ACTIVE') continue;
+    if (!plan.nextDueDate || plan.nextDueDate > today) continue;
 
     // Guard against a double-booking when the app is opened twice the same day.
-    const already = await financeDb.transactions
-      .where('plannedPaymentId')
-      .equals(payment.id)
-      .toArray();
-    if (already.some((t) => t.date === payment.nextDueDate)) continue;
+    const already = await financeDb.transactions.where('planId').equals(plan.id).toArray();
+    if (already.some((t) => t.date === plan.nextDueDate)) continue;
 
-    if (payment.autoCreate || autoCreateDefault) {
-      created.push(await materializePlannedPayment(payment));
+    if (plan.autoCreate || autoCreateDefault) {
+      created.push(await materializeRecurringPlan(plan));
     } else {
-      awaitingConfirmation.push(payment);
+      awaitingConfirmation.push(plan);
     }
   }
 
   return { created, awaitingConfirmation };
 }
 
-
 /** Average days per month, used to normalise week- and day-based intervals. */
 const DAYS_PER_MONTH = 365.25 / 12;
 
 /**
- * How much a recurring entry costs per month on average. A yearly subscription
+ * How much a recurring plan costs per month on average. A yearly subscription
  * is a twelfth of its price each month, a quarterly one a third — that is what
  * makes plans on different billing periods comparable in one total.
  */
-export function monthlyEquivalent(payment: PlannedPayment): number {
-  const amount = payment.amount;
+export function monthlyEquivalent(plan: Plan): number {
+  const amount = plan.amount;
 
-  if (payment.intervalUnit && payment.intervalCount) {
-    const count = Math.max(1, payment.intervalCount);
-    switch (payment.intervalUnit) {
+  if (plan.intervalUnit && plan.intervalCount) {
+    const count = Math.max(1, plan.intervalCount);
+    switch (plan.intervalUnit) {
       case 'DAY':
         return (amount * DAYS_PER_MONTH) / count;
       case 'WEEK':
@@ -318,7 +296,7 @@ export function monthlyEquivalent(payment: PlannedPayment): number {
     }
   }
 
-  switch (payment.recurrence) {
+  switch (plan.recurrence) {
     case 'WEEKLY':
       return (amount * 52) / 12;
     case 'MONTHLY':
@@ -330,7 +308,7 @@ export function monthlyEquivalent(payment: PlannedPayment): number {
     case 'YEARLY':
       return amount / 12;
     case 'CUSTOM_DAYS':
-      return (amount * DAYS_PER_MONTH) / Math.max(1, payment.intervalDays || 30);
+      return (amount * DAYS_PER_MONTH) / Math.max(1, plan.intervalDays || 30);
     case 'ONCE':
     default:
       // A one-off has no recurring cost — it must not inflate the monthly total.
@@ -338,25 +316,28 @@ export function monthlyEquivalent(payment: PlannedPayment): number {
   }
 }
 
-export function planKindOf(payment: PlannedPayment): PlanKind {
-  return payment.planKind || 'PAYMENT';
-}
-
 /**
- * Rolls active entries of one kind into monthly and yearly commitments,
- * converted to the profile's base currency via the rate stored on the plan.
+ * Rolls active recurring plans of one type into monthly and yearly
+ * commitments, converted to the profile's base currency via the rate stored
+ * on the plan.
  */
 export function recurringTotals(
-  payments: PlannedPayment[],
-  planKind: PlanKind,
-  toBase: (amount: number, currency: PlannedPayment['currency']) => number
-): RecurringTotals {
-  const rows: RecurringCostRow[] = payments
-    .filter((p) => planKindOf(p) === planKind && p.isActive && p.recurrence !== 'ONCE')
-    .map((payment) => {
-      const monthlyBase = toBase(monthlyEquivalent(payment), payment.currency);
+  plans: Plan[],
+  planType: PlanType,
+  toBase: (amount: number, currency: Plan['currency']) => number
+): PlanTotals {
+  const rows: PlanCostRow[] = plans
+    .filter(
+      (p) =>
+        p.scheduleType === 'RECURRING' &&
+        p.planType === planType &&
+        p.status === 'ACTIVE' &&
+        p.recurrence !== 'ONCE'
+    )
+    .map((plan) => {
+      const monthlyBase = toBase(monthlyEquivalent(plan), plan.currency);
       return {
-        payment,
+        plan,
         monthlyBase: Math.round(monthlyBase * 100) / 100,
         yearlyBase: Math.round(monthlyBase * 12 * 100) / 100,
       };

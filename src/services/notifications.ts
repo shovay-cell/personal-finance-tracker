@@ -1,8 +1,8 @@
 'use client';
 
-import { BudgetProgress, PlannedPayment, ProfileMember, Transaction } from '@/types';
+import { BudgetProgress, Plan, ProfileMember, Transaction } from '@/types';
 import { formatMoney } from './analytics';
-import { describeRecurrence, plannedPaymentState } from './planned';
+import { describeRecurrence, planState } from './planned';
 import { tr } from '@/i18n/t';
 
 const NOTIFIED_KEY = 'fintrack_notified_keys';
@@ -89,18 +89,18 @@ export function checkBudgetAlerts(
   }
 }
 
-export function checkPlannedPaymentReminders(payments: PlannedPayment[]): void {
-  for (const payment of payments) {
-    if (!payment.isActive) continue;
-    const state = plannedPaymentState(payment);
+export function checkPlannedPaymentReminders(plans: Plan[]): void {
+  for (const plan of plans) {
+    if (plan.scheduleType !== 'RECURRING' || plan.status !== 'ACTIVE' || !plan.nextDueDate) continue;
+    const state = planState(plan);
 
     if (state.isOverdue) {
       notify(
         tr('svc.overduePayment'),
-        `${payment.title} — ${formatMoney(payment.amount, payment.currency)}, ${tr(
+        `${plan.title} — ${formatMoney(plan.amount, plan.currency)}, ${tr(
           'svc.dueWas'
-        )} ${payment.nextDueDate}`,
-        `planned-overdue-${payment.id}-${payment.nextDueDate}`
+        )} ${plan.nextDueDate}`,
+        `planned-overdue-${plan.id}-${plan.nextDueDate}`
       );
       continue;
     }
@@ -108,10 +108,10 @@ export function checkPlannedPaymentReminders(payments: PlannedPayment[]): void {
     if (state.isWithinReminderWindow) {
       notify(
         tr('svc.paymentSoon'),
-        `${payment.title} — ${formatMoney(payment.amount, payment.currency)} ${tr('svc.inDays')} ${
+        `${plan.title} — ${formatMoney(plan.amount, plan.currency)} ${tr('svc.inDays')} ${
           state.daysUntilDue
-        } ${tr('svc.daysShort')} (${describeRecurrence(payment)})`,
-        `planned-soon-${payment.id}-${payment.nextDueDate}`
+        } ${tr('svc.daysShort')} (${describeRecurrence(plan)})`,
+        `planned-soon-${plan.id}-${plan.nextDueDate}`
       );
     }
   }

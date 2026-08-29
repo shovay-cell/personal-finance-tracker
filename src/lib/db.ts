@@ -21,8 +21,12 @@ import {
   VatSummary,
   DebtPlan,
   DebtInstallment,
-  DebtKind,
-  DebtWithSchedule,
+  Plan,
+  PlanOccurrence,
+  PlanScheduleType,
+  PlanStatus,
+  PlanType,
+  PlanWithSchedule,
   RecurrenceUnit,
 } from '@/types';
 import {
@@ -33,19 +37,36 @@ import {
 
 const CURRENT_MEMBER_KEY = 'fintrack_current_member_id';
 
+/** Immutable pre-migration copy, written once so the v5 merge can be audited
+ *  or replayed even though the legacy tables it was built from are (and stay)
+ *  fully intact. See `migratePlannedPaymentsAndDebtsToPlans` below. */
+interface PlanMigrationSnapshot {
+  id: string;
+  createdAt: string;
+  plannedPayments: PlannedPayment[];
+  debts: DebtPlan[];
+  debtInstallments: DebtInstallment[];
+}
+
 export class FinanceDatabase extends Dexie {
   accounts!: Table<FinanceAccount, string>;
   categories!: Table<FinanceCategory, string>;
   transactions!: Table<Transaction, string>;
+  /** @deprecated frozen at the v5 migration — read-only, kept only as a recovery source. */
   plannedPayments!: Table<PlannedPayment, string>;
   obligations!: Table<Obligation, string>;
   obligationSettlements!: Table<ObligationSettlement, string>;
   budgets!: Table<Budget, string>;
   members!: Table<ProfileMember, string>;
   vatPayments!: Table<VatPayment, string>;
+  /** @deprecated frozen at the v5 migration — read-only, kept only as a recovery source. */
   debts!: Table<DebtPlan, string>;
+  /** @deprecated frozen at the v5 migration — read-only, kept only as a recovery source. */
   debtInstallments!: Table<DebtInstallment, string>;
   bearerCheques!: Table<BearerCheque, string>;
+  plans!: Table<Plan, string>;
+  planOccurrences!: Table<PlanOccurrence, string>;
+  planMigrationSnapshots!: Table<PlanMigrationSnapshot, string>;
   settings!: Table<FinanceSettings, string>;
 
   constructor() {
@@ -78,10 +99,203 @@ export class FinanceDatabase extends Dexie {
     this.version(4).stores({
       bearerCheques: 'id, status, dueDate, accountId',
     });
+
+    // v5 unifies plannedPayments (recurring) and debts+debtInstallments (fixed
+    // schedule) into one `plans`/`planOccurrences` pair — see the comment on
+    // `Plan` in @/types for why. `transactions.plannedPaymentId` is renamed to
+    // `planId` here too (same values — plans keep the ids of the rows they
+    // came from). The legacy tables are intentionally left out of this
+    // `stores()` call: Dexie keeps a table's data untouched when a later
+    // version doesn't mention it, so plannedPayments/debts/debtInstallments
+    // stay exactly as they were — frozen, read-only, never cleared — as a
+    // recovery source alongside the explicit snapshot this upgrade writes.
+    this.version(5)
+      .stores({
+        transactions:
+          'id, kind, date, categoryId, subcategoryId, accountId, authorId, obligationId, planId',
+        plans: 'id, planType, scheduleType, status, nextDueDate, categoryId, accountId',
+        planOccurrences: 'id, planId, dueDate, isPaid',
+        planMigrationSnapshots: 'id, createdAt',
+      })
+      .upgrade(async (tx) => {
+        await tx.table('transactions').toCollection().modify((t: any) => {
+          if (t.plannedPaymentId !== undefined) {
+            t.planId = t.plannedPaymentId;
+            delete t.plannedPaymentId;
+          }
+        });
+        await migratePlannedPaymentsAndDebtsToPlans(tx);
+      });
   }
 }
 
 export const financeDb = new FinanceDatabase();
+
+// --------------------------------------------------- plan migration (v5)
+//
+// Pure transforms shared by the one-time Dexie upgrade above and by
+// `importFinanceDatabaseJson`/`mergeFinanceDatabaseJson`, which still need to
+// accept a Drive backup taken before this migration existed.
+
+/** RECURRING Plan from a pre-v5 PlannedPayment row (same id, so any
+ *  Transaction.planId pointing at it keeps resolving). */
+export function planFromLegacyPlannedPayment(p: PlannedPayment): Plan {
+  return {
+    id: p.id,
+    planType: p.planKind || 'PAYMENT',
+    scheduleType: 'RECURRING',
+    status: p.isActive ? 'ACTIVE' : 'CANCELLED',
+    title: p.title,
+    provider: p.provider,
+    kind: p.kind,
+    amount: p.amount,
+    currency: p.currency,
+    categoryId: p.categoryId,
+    accountId: p.accountId,
+    // No separate "created on" date existed on the old row — nextDueDate is
+    // the closest anchor, and startDate is cosmetic for RECURRING plans.
+    startDate: p.nextDueDate,
+    recurrence: p.recurrence,
+    intervalDays: p.intervalDays,
+    intervalUnit: p.intervalUnit,
+    intervalCount: p.intervalCount,
+    nextDueDate: p.nextDueDate,
+    endDate: p.endDate,
+    remindDaysBefore: p.remindDaysBefore,
+    autoCreate: p.autoCreate,
+    lastRunDate: p.lastRunDate,
+    note: p.note,
+    authorId: getCurrentMemberId(),
+    createdAt: p.createdAt,
+    updatedAt: p.createdAt,
+  };
+}
+
+/** FIXED_SCHEDULE Plan + its PlanOccurrences from a pre-v5 DebtPlan row (same ids throughout). */
+export function planFromLegacyDebt(
+  debt: DebtPlan,
+  allInstallments: DebtInstallment[]
+): { plan: Plan; occurrences: PlanOccurrence[] } {
+  const own = allInstallments
+    .filter((i) => i.debtId === debt.id)
+    .sort((a, b) => a.index - b.index);
+  const paid = own.filter((i) => i.isPaid);
+  const paidAmount = Math.round(paid.reduce((sum, i) => sum + i.amount, 0) * 100) / 100;
+
+  const plan: Plan = {
+    id: debt.id,
+    planType: debt.kind,
+    scheduleType: 'FIXED_SCHEDULE',
+    status: own.length > 0 && paid.length === own.length ? 'COMPLETED' : 'ACTIVE',
+    title: debt.title,
+    merchant: debt.merchant,
+    kind: 'EXPENSE',
+    amount: debt.totalAmount,
+    currency: debt.currency,
+    categoryId: debt.categoryId,
+    accountId: debt.accountId,
+    startDate: debt.startDate,
+    occurrencesCount: own.length,
+    occurrencesPaid: paid.length,
+    outstandingAmount: Math.round((debt.totalAmount - paidAmount) * 100) / 100,
+    note: debt.note,
+    authorId: debt.authorId,
+    createdAt: debt.createdAt,
+    updatedAt: debt.updatedAt,
+  };
+
+  const occurrences: PlanOccurrence[] = own.map((i) => ({
+    id: i.id,
+    planId: debt.id,
+    index: i.index,
+    dueDate: i.dueDate,
+    amount: i.amount,
+    currency: i.currency,
+    isPaid: i.isPaid,
+    paidDate: i.paidDate,
+    transactionId: i.transactionId,
+  }));
+
+  return { plan, occurrences };
+}
+
+/**
+ * Runs once, inside the v5 upgrade transaction: writes an auditable snapshot
+ * of the legacy rows (the legacy tables themselves are never touched, so this
+ * is belt-and-braces), transforms them into plans/planOccurrences, and
+ * verifies the row counts before writing. A mismatch throws, which aborts the
+ * whole IndexedDB version-change transaction atomically — nothing gets
+ * written and the database stays on the previous version rather than
+ * shipping a half-migrated state.
+ */
+async function migratePlannedPaymentsAndDebtsToPlans(tx: any): Promise<void> {
+  const [plannedPayments, debts, debtInstallments] = await Promise.all([
+    tx.table('plannedPayments').toArray() as Promise<PlannedPayment[]>,
+    tx.table('debts').toArray() as Promise<DebtPlan[]>,
+    tx.table('debtInstallments').toArray() as Promise<DebtInstallment[]>,
+  ]);
+
+  if (plannedPayments.length === 0 && debts.length === 0) return;
+
+  const snapshot: PlanMigrationSnapshot = {
+    id: 'v5-migration',
+    createdAt: new Date().toISOString(),
+    plannedPayments,
+    debts,
+    debtInstallments,
+  };
+
+  const recurringPlans = plannedPayments.map(planFromLegacyPlannedPayment);
+  const fixedSchedule = debts.map((debt) => planFromLegacyDebt(debt, debtInstallments));
+  const plans = [...recurringPlans, ...fixedSchedule.map((f) => f.plan)];
+  const occurrences = fixedSchedule.flatMap((f) => f.occurrences);
+
+  if (plans.length !== plannedPayments.length + debts.length) {
+    throw new Error(
+      `Plan migration checksum failed: built ${plans.length} plans from ${
+        plannedPayments.length + debts.length
+      } legacy rows`
+    );
+  }
+  if (occurrences.length !== debtInstallments.length) {
+    throw new Error(
+      `Plan migration checksum failed: built ${occurrences.length} occurrences from ${debtInstallments.length} legacy instalments`
+    );
+  }
+
+  await tx.table('planMigrationSnapshots').put(snapshot);
+  if (plans.length > 0) await tx.table('plans').bulkPut(plans);
+  if (occurrences.length > 0) await tx.table('planOccurrences').bulkPut(occurrences);
+}
+
+/**
+ * Recovery path, callable any time: rebuilds `plans`/`planOccurrences` from
+ * scratch out of the still-intact legacy tables (the v5 migration never
+ * clears plannedPayments/debts/debtInstallments). Only overwrites rows whose
+ * id matches a legacy row — plans created after the migration are untouched.
+ */
+export async function rebuildPlansFromLegacyTables(): Promise<{
+  plans: number;
+  occurrences: number;
+}> {
+  const [plannedPayments, debts, debtInstallments] = await Promise.all([
+    financeDb.plannedPayments.toArray(),
+    financeDb.debts.toArray(),
+    financeDb.debtInstallments.toArray(),
+  ]);
+
+  const recurringPlans = plannedPayments.map(planFromLegacyPlannedPayment);
+  const fixedSchedule = debts.map((debt) => planFromLegacyDebt(debt, debtInstallments));
+  const plans = [...recurringPlans, ...fixedSchedule.map((f) => f.plan)];
+  const occurrences = fixedSchedule.flatMap((f) => f.occurrences);
+
+  await financeDb.transaction('rw', [financeDb.plans, financeDb.planOccurrences], async () => {
+    if (plans.length > 0) await financeDb.plans.bulkPut(plans);
+    if (occurrences.length > 0) await financeDb.planOccurrences.bulkPut(occurrences);
+  });
+
+  return { plans: plans.length, occurrences: occurrences.length };
+}
 
 function newId(prefix: string): string {
   return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
@@ -434,29 +648,233 @@ export async function deleteCategory(id: string): Promise<{ deleted: boolean; re
   return { deleted: true };
 }
 
-// --------------------------------------------------------- planned payments
+// ------------------------------------------------------------------ plans
+//
+// One entry point for every "known future expense/income": a subscription
+// that repeats forever (`addRecurringPlan`), or a purchase/tax/loan/cheque
+// paid off in a fixed number of instalments (`addFixedSchedulePlan`). See the
+// comment on `Plan` in @/types for the full picture — "Планы", "Долги",
+// "Подписки", "Кредиты", "Рассрочки", "Налоги" are filters over this one
+// table, not separate entities.
 
-export async function addPlannedPayment(
-  input: Omit<PlannedPayment, 'id' | 'createdAt'>
-): Promise<PlannedPayment> {
-  const planned: PlannedPayment = {
+export interface NewRecurringPlanInput {
+  planType: PlanType;
+  title: string;
+  provider?: string;
+  kind: Transaction['kind'];
+  amount: number;
+  currency: CurrencyCode;
+  categoryId: string;
+  accountId: string;
+  recurrence: PlannedPayment['recurrence'];
+  intervalDays?: number;
+  intervalUnit?: RecurrenceUnit;
+  intervalCount?: number;
+  nextDueDate: string;
+  endDate?: string;
+  remindDaysBefore: number;
+  autoCreate: boolean;
+  note?: string;
+}
+
+export async function addRecurringPlan(input: NewRecurringPlanInput): Promise<Plan> {
+  const now = new Date().toISOString();
+  const plan: Plan = {
     ...input,
     id: newId('plan'),
-    createdAt: new Date().toISOString(),
+    scheduleType: 'RECURRING',
+    status: 'ACTIVE',
+    startDate: input.nextDueDate,
+    authorId: getCurrentMemberId(),
+    createdAt: now,
+    updatedAt: now,
   };
-  await financeDb.plannedPayments.put(planned);
-  return planned;
+  await financeDb.plans.put(plan);
+  return plan;
 }
 
-export async function updatePlannedPayment(
-  id: string,
-  updates: Partial<PlannedPayment>
+export async function updatePlan(id: string, updates: Partial<Plan>): Promise<void> {
+  await financeDb.plans.update(id, { ...updates, updatedAt: new Date().toISOString() });
+}
+
+export async function cancelPlan(id: string): Promise<void> {
+  await financeDb.plans.update(id, { status: 'CANCELLED', updatedAt: new Date().toISOString() });
+}
+
+export async function deletePlan(id: string): Promise<void> {
+  const occurrences = await financeDb.planOccurrences.where('planId').equals(id).toArray();
+  for (const occurrence of occurrences) {
+    // Payments already booked stay in history: deleting the plan must not
+    // rewrite money that actually left the account.
+    await financeDb.planOccurrences.delete(occurrence.id);
+  }
+  await financeDb.plans.delete(id);
+}
+
+// -------------------------------------------------- fixed-schedule plans
+
+export interface NewFixedSchedulePlanInput {
+  planType: PlanType;
+  title: string;
+  merchant?: string;
+  totalAmount: number;
+  currency: CurrencyCode;
+  categoryId: string;
+  accountId: string;
+  startDate: string;
+  /** First payment date; defaults to the purchase date. */
+  firstDueDate?: string;
+  note?: string;
+  paymentsCount: number;
+  intervalUnit: RecurrenceUnit;
+  intervalCount: number;
+  /** Book the first payment as an expense today and mark it paid. */
+  firstPaymentPaid: boolean;
+}
+
+export async function addFixedSchedulePlan(input: NewFixedSchedulePlanInput): Promise<Plan> {
+  const now = new Date().toISOString();
+  const plan: Plan = {
+    id: newId('debt'),
+    planType: input.planType,
+    scheduleType: 'FIXED_SCHEDULE',
+    status: 'ACTIVE',
+    title: input.title,
+    merchant: input.merchant,
+    kind: 'EXPENSE',
+    amount: input.totalAmount,
+    currency: input.currency,
+    categoryId: input.categoryId,
+    accountId: input.accountId,
+    startDate: input.startDate,
+    occurrencesCount: input.paymentsCount,
+    occurrencesPaid: 0,
+    outstandingAmount: input.totalAmount,
+    note: input.note,
+    authorId: getCurrentMemberId(),
+    createdAt: now,
+    updatedAt: now,
+  };
+  await financeDb.plans.put(plan);
+
+  const amounts = buildInstallmentAmounts(input.totalAmount, input.paymentsCount);
+  const firstDue = input.firstDueDate || input.startDate;
+  const occurrences: PlanOccurrence[] = amounts.map((amount, index) => ({
+    id: newId('occ'),
+    planId: plan.id,
+    index: index + 1,
+    // A tax or a cheque is usually one payment on a date of its own; an
+    // instalment plan walks forward from that same first date.
+    dueDate:
+      index === 0 ? firstDue : addInterval(firstDue, input.intervalUnit, input.intervalCount * index),
+    amount,
+    currency: input.currency,
+    isPaid: false,
+  }));
+  await financeDb.planOccurrences.bulkPut(occurrences);
+
+  if (input.firstPaymentPaid && occurrences.length > 0) {
+    await payPlanOccurrence(occurrences[0].id);
+  }
+
+  return plan;
+}
+
+/** Turns one scheduled payment into a real expense, marks it paid, and keeps
+ *  the parent plan's cached paid-count/outstanding/status in sync. */
+export async function payPlanOccurrence(
+  occurrenceId: string,
+  paidDate?: string
 ): Promise<void> {
-  await financeDb.plannedPayments.update(id, updates);
+  const occurrence = await financeDb.planOccurrences.get(occurrenceId);
+  if (!occurrence || occurrence.isPaid) return;
+
+  const plan = await financeDb.plans.get(occurrence.planId);
+  if (!plan) return;
+
+  const date = paidDate || todayIso();
+  const totalCount = await financeDb.planOccurrences.where('planId').equals(plan.id).count();
+  const transaction = await addTransaction({
+    kind: 'EXPENSE',
+    amount: occurrence.amount,
+    currency: occurrence.currency,
+    categoryId: plan.categoryId,
+    accountId: plan.accountId,
+    date,
+    note: `${plan.title} · ${tr('dbx.payment')} ${occurrence.index}/${totalCount}`,
+    merchant: plan.merchant,
+    planId: plan.id,
+    source: 'MANUAL',
+  } as any);
+
+  await financeDb.planOccurrences.update(occurrenceId, {
+    isPaid: true,
+    paidDate: date,
+    transactionId: transaction.id,
+  });
+  await syncFixedSchedulePlanCache(plan.id);
 }
 
-export async function deletePlannedPayment(id: string): Promise<void> {
-  await financeDb.plannedPayments.delete(id);
+export async function unpayPlanOccurrence(occurrenceId: string): Promise<void> {
+  const occurrence = await financeDb.planOccurrences.get(occurrenceId);
+  if (!occurrence) return;
+
+  if (occurrence.transactionId) {
+    await financeDb.transactions.delete(occurrence.transactionId);
+  }
+  await financeDb.planOccurrences.update(occurrenceId, {
+    isPaid: false,
+    paidDate: undefined,
+    transactionId: undefined,
+  });
+  await syncFixedSchedulePlanCache(occurrence.planId);
+}
+
+/** Recomputes a FIXED_SCHEDULE plan's cached occurrencesPaid/outstandingAmount/
+ *  status from its occurrences. Called after any occurrence changes paid state
+ *  so list views can show a total without re-reading every occurrence. */
+async function syncFixedSchedulePlanCache(planId: string): Promise<void> {
+  const plan = await financeDb.plans.get(planId);
+  if (!plan) return;
+  const occurrences = await financeDb.planOccurrences.where('planId').equals(planId).toArray();
+  const paid = occurrences.filter((o) => o.isPaid);
+  const paidAmount = Math.round(paid.reduce((sum, o) => sum + o.amount, 0) * 100) / 100;
+  await financeDb.plans.update(planId, {
+    occurrencesPaid: paid.length,
+    outstandingAmount: Math.round((plan.amount - paidAmount) * 100) / 100,
+    status: occurrences.length > 0 && paid.length === occurrences.length ? 'COMPLETED' : 'ACTIVE',
+    updatedAt: new Date().toISOString(),
+  });
+}
+
+/**
+ * Live view of a FIXED_SCHEDULE plan's schedule — recomputed from its
+ * occurrences rather than trusting the cached fields on `Plan`, so a screen
+ * showing one plan's detail always reflects the true current state.
+ */
+export function describePlan(
+  plan: Plan,
+  allOccurrences: PlanOccurrence[],
+  today = todayIso()
+): PlanWithSchedule {
+  const own = allOccurrences
+    .filter((o) => o.planId === plan.id)
+    .sort((a, b) => a.index - b.index);
+
+  const paid = own.filter((o) => o.isPaid);
+  const paidAmount = Math.round(paid.reduce((sum, o) => sum + o.amount, 0) * 100) / 100;
+  const unpaid = own.filter((o) => !o.isPaid);
+
+  return {
+    plan,
+    occurrences: own,
+    paidAmount,
+    outstandingAmount: Math.round((plan.amount - paidAmount) * 100) / 100,
+    paidCount: paid.length,
+    totalCount: own.length,
+    nextOccurrence: unpaid[0],
+    isOverdue: unpaid.some((o) => o.dueDate < today),
+  };
 }
 
 // ------------------------------------------------------------- obligations
@@ -619,53 +1037,75 @@ export async function exportFinanceDatabaseJson(): Promise<string> {
     accounts,
     categories,
     transactions,
-    plannedPayments,
+    plans,
+    planOccurrences,
     obligations,
     obligationSettlements,
     budgets,
     members,
     vatPayments,
-    debts,
-    debtInstallments,
     bearerCheques,
     settings,
   ] = await Promise.all([
     financeDb.accounts.toArray(),
     financeDb.categories.toArray(),
     financeDb.transactions.toArray(),
-    financeDb.plannedPayments.toArray(),
+    financeDb.plans.toArray(),
+    financeDb.planOccurrences.toArray(),
     financeDb.obligations.toArray(),
     financeDb.obligationSettlements.toArray(),
     financeDb.budgets.toArray(),
     financeDb.members.toArray(),
     financeDb.vatPayments.toArray(),
-    financeDb.debts.toArray(),
-    financeDb.debtInstallments.toArray(),
     financeDb.bearerCheques.toArray(),
     financeDb.settings.get('default'),
   ]);
 
   const payload: FinanceBackupPayload = {
-    version: 1,
+    // v2: plannedPayments/debts/debtInstallments are superseded by
+    // plans/planOccurrences (see the Plan migration in this file). Old
+    // backups (v1) are still readable — importFinanceDatabaseJson/
+    // mergeFinanceDatabaseJson transform them on the way in.
+    version: 2,
     appName: 'FinTrack',
     exportedAt: new Date().toISOString(),
     deviceName: getDeviceName(),
     accounts,
     categories,
     transactions,
-    plannedPayments,
+    plans,
+    planOccurrences,
     obligations,
     obligationSettlements,
     budgets,
     members,
     vatPayments,
-    debts,
-    debtInstallments,
     bearerCheques,
     settings: settings || null,
   };
 
   return JSON.stringify(payload, null, 2);
+}
+
+/** Reads plans/planOccurrences from a backup, transforming a pre-v5 (v1)
+ *  payload's plannedPayments/debts/debtInstallments the same way the live
+ *  Dexie migration does, so restoring an old backup still works. */
+function plansFromBackup(data: FinanceBackupPayload): {
+  plans: Plan[];
+  planOccurrences: PlanOccurrence[];
+} {
+  if (data.plans || data.planOccurrences) {
+    return { plans: data.plans || [], planOccurrences: data.planOccurrences || [] };
+  }
+  const legacyInstallments = data.debtInstallments || [];
+  const recurringPlans = (data.plannedPayments || []).map(planFromLegacyPlannedPayment);
+  const fixedSchedule = (data.debts || []).map((debt) =>
+    planFromLegacyDebt(debt, legacyInstallments)
+  );
+  return {
+    plans: [...recurringPlans, ...fixedSchedule.map((f) => f.plan)],
+    planOccurrences: fixedSchedule.flatMap((f) => f.occurrences),
+  };
 }
 
 export async function importFinanceDatabaseJson(
@@ -677,20 +1117,21 @@ export async function importFinanceDatabaseJson(
       return { success: false, error: tr('dbx.notABackup') };
     }
 
+    const { plans, planOccurrences } = plansFromBackup(data);
+
     await financeDb.transaction(
       'rw',
       [
         financeDb.accounts,
         financeDb.categories,
         financeDb.transactions,
-        financeDb.plannedPayments,
+        financeDb.plans,
+        financeDb.planOccurrences,
         financeDb.obligations,
         financeDb.obligationSettlements,
         financeDb.budgets,
         financeDb.members,
         financeDb.vatPayments,
-        financeDb.debts,
-        financeDb.debtInstallments,
         financeDb.bearerCheques,
         financeDb.settings,
       ],
@@ -699,14 +1140,13 @@ export async function importFinanceDatabaseJson(
           [financeDb.accounts, data.accounts],
           [financeDb.categories, data.categories],
           [financeDb.transactions, data.transactions],
-          [financeDb.plannedPayments, data.plannedPayments],
+          [financeDb.plans, plans],
+          [financeDb.planOccurrences, planOccurrences],
           [financeDb.obligations, data.obligations],
           [financeDb.obligationSettlements, data.obligationSettlements],
           [financeDb.budgets, data.budgets],
           [financeDb.members, data.members],
           [financeDb.vatPayments, data.vatPayments],
-          [financeDb.debts, data.debts],
-          [financeDb.debtInstallments, data.debtInstallments],
           [financeDb.bearerCheques, data.bearerCheques],
         ];
 
@@ -756,17 +1196,18 @@ export async function mergeFinanceDatabaseJson(
       merged += incoming.length;
     }
 
+    const { plans, planOccurrences } = plansFromBackup(data);
+
     for (const [table, rows] of [
       [financeDb.accounts, data.accounts],
       [financeDb.categories, data.categories],
-      [financeDb.plannedPayments, data.plannedPayments],
+      [financeDb.plans, plans],
+      [financeDb.planOccurrences, planOccurrences],
       [financeDb.obligations, data.obligations],
       [financeDb.obligationSettlements, data.obligationSettlements],
       [financeDb.budgets, data.budgets],
       [financeDb.members, data.members],
       [financeDb.vatPayments, data.vatPayments],
-      [financeDb.debts, data.debts],
-      [financeDb.debtInstallments, data.debtInstallments],
       [financeDb.bearerCheques, data.bearerCheques],
     ] as [Table<any, string>, any[] | undefined][]) {
       if (!Array.isArray(rows) || rows.length === 0) continue;
@@ -783,7 +1224,14 @@ export async function mergeFinanceDatabaseJson(
 export async function clearAllFinanceData(): Promise<void> {
   await Promise.all([
     financeDb.transactions.clear(),
+    financeDb.plans.clear(),
+    financeDb.planOccurrences.clear(),
+    // A full wipe clears the frozen legacy tables too — "delete everything"
+    // means everything, not just the tables the app still reads from.
     financeDb.plannedPayments.clear(),
+    financeDb.debts.clear(),
+    financeDb.debtInstallments.clear(),
+    financeDb.planMigrationSnapshots.clear(),
     financeDb.obligations.clear(),
     financeDb.obligationSettlements.clear(),
     financeDb.budgets.clear(),
@@ -791,8 +1239,6 @@ export async function clearAllFinanceData(): Promise<void> {
     financeDb.accounts.clear(),
     financeDb.members.clear(),
     financeDb.vatPayments.clear(),
-    financeDb.debts.clear(),
-    financeDb.debtInstallments.clear(),
     financeDb.bearerCheques.clear(),
     financeDb.settings.clear(),
   ]);
@@ -984,126 +1430,6 @@ export function buildInstallmentAmounts(total: number, count: number): number[] 
   return amounts;
 }
 
-export interface NewDebtInput {
-  kind: DebtKind;
-  title: string;
-  merchant?: string;
-  totalAmount: number;
-  currency: CurrencyCode;
-  categoryId: string;
-  accountId: string;
-  startDate: string;
-  /** First payment date; defaults to the purchase date. */
-  firstDueDate?: string;
-  note?: string;
-  paymentsCount: number;
-  intervalUnit: RecurrenceUnit;
-  intervalCount: number;
-  /** Book the first payment as an expense today and mark it paid. */
-  firstPaymentPaid: boolean;
-}
-
-export async function addDebtPlan(input: NewDebtInput): Promise<DebtPlan> {
-  const now = new Date().toISOString();
-  const debt: DebtPlan = {
-    id: newId('debt'),
-    kind: input.kind,
-    title: input.title,
-    merchant: input.merchant,
-    totalAmount: input.totalAmount,
-    currency: input.currency,
-    categoryId: input.categoryId,
-    accountId: input.accountId,
-    startDate: input.startDate,
-    note: input.note,
-    authorId: getCurrentMemberId(),
-    createdAt: now,
-    updatedAt: now,
-  };
-  await financeDb.debts.put(debt);
-
-  const amounts = buildInstallmentAmounts(input.totalAmount, input.paymentsCount);
-  const firstDue = input.firstDueDate || input.startDate;
-  const installments: DebtInstallment[] = amounts.map((amount, index) => ({
-    id: newId('inst'),
-    debtId: debt.id,
-    index: index + 1,
-    // A tax or a cheque is usually one payment on a date of its own; an
-    // instalment plan walks forward from that same first date.
-    dueDate:
-      index === 0 ? firstDue : addInterval(firstDue, input.intervalUnit, input.intervalCount * index),
-    amount,
-    currency: input.currency,
-    isPaid: false,
-  }));
-  await financeDb.debtInstallments.bulkPut(installments);
-
-  if (input.firstPaymentPaid && installments.length > 0) {
-    await payDebtInstallment(installments[0].id);
-  }
-
-  return debt;
-}
-
-/** Turns one scheduled payment into a real expense and marks it paid. */
-export async function payDebtInstallment(
-  installmentId: string,
-  paidDate?: string
-): Promise<void> {
-  const installment = await financeDb.debtInstallments.get(installmentId);
-  if (!installment || installment.isPaid) return;
-
-  const debt = await financeDb.debts.get(installment.debtId);
-  if (!debt) return;
-
-  const date = paidDate || todayIso();
-  const transaction = await addTransaction({
-    kind: 'EXPENSE',
-    amount: installment.amount,
-    currency: installment.currency,
-    categoryId: debt.categoryId,
-    accountId: debt.accountId,
-    date,
-    note: `${debt.title} · ${tr('dbx.payment')} ${installment.index}/${await financeDb.debtInstallments
-      .where('debtId')
-      .equals(debt.id)
-      .count()}`,
-    merchant: debt.merchant,
-    source: 'MANUAL',
-  } as any);
-
-  await financeDb.debtInstallments.update(installmentId, {
-    isPaid: true,
-    paidDate: date,
-    transactionId: transaction.id,
-  });
-  await financeDb.debts.update(debt.id, { updatedAt: new Date().toISOString() });
-}
-
-export async function unpayDebtInstallment(installmentId: string): Promise<void> {
-  const installment = await financeDb.debtInstallments.get(installmentId);
-  if (!installment) return;
-
-  if (installment.transactionId) {
-    await financeDb.transactions.delete(installment.transactionId);
-  }
-  await financeDb.debtInstallments.update(installmentId, {
-    isPaid: false,
-    paidDate: undefined,
-    transactionId: undefined,
-  });
-}
-
-export async function deleteDebtPlan(id: string): Promise<void> {
-  const installments = await financeDb.debtInstallments.where('debtId').equals(id).toArray();
-  for (const installment of installments) {
-    // Payments already booked stay in history: deleting the plan must not
-    // rewrite money that actually left the account.
-    await financeDb.debtInstallments.delete(installment.id);
-  }
-  await financeDb.debts.delete(id);
-}
-
 // ------------------------------------------------------ bearer cheques
 // A postdated cheque drawn on the user's own account. Picking the «Чеки на
 // предъявителя» category books one of these instead of an ordinary expense —
@@ -1208,27 +1534,3 @@ export async function deleteBearerCheque(id: string): Promise<void> {
   await financeDb.bearerCheques.delete(id);
 }
 
-export function describeDebt(
-  debt: DebtPlan,
-  installments: DebtInstallment[],
-  today = todayIso()
-): DebtWithSchedule {
-  const own = installments
-    .filter((i) => i.debtId === debt.id)
-    .sort((a, b) => a.index - b.index);
-
-  const paid = own.filter((i) => i.isPaid);
-  const paidAmount = Math.round(paid.reduce((sum, i) => sum + i.amount, 0) * 100) / 100;
-  const unpaid = own.filter((i) => !i.isPaid);
-
-  return {
-    debt,
-    installments: own,
-    paidAmount,
-    outstandingAmount: Math.round((debt.totalAmount - paidAmount) * 100) / 100,
-    paidCount: paid.length,
-    totalCount: own.length,
-    nextInstallment: unpaid[0],
-    isOverdue: unpaid.some((i) => i.dueDate < today),
-  };
-}

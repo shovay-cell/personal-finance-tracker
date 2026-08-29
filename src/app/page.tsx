@@ -15,7 +15,7 @@ import {
   summarizeVat,
   DEFAULT_SETTINGS,
 } from '@/lib/db';
-import { AuthSession, PlannedPayment, Transaction } from '@/types';
+import { AuthSession, Plan, Transaction } from '@/types';
 import {
   DateRange,
   PeriodPreset,
@@ -26,8 +26,8 @@ import {
   formatMoney,
 } from '@/services/analytics';
 import {
-  materializePlannedPayment,
-  processDuePlannedPayments,
+  materializeRecurringPlan,
+  processDueRecurringPlans,
 } from '@/services/planned';
 import {
   checkBudgetAlerts,
@@ -75,7 +75,7 @@ function FinanceApp() {
   const [isImportingStatement, setIsImportingStatement] = useState(false);
   const [formPrefill, setFormPrefill] = useState<TransactionPrefill | null>(null);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
-  const [pendingPlanned, setPendingPlanned] = useState<PlannedPayment[]>([]);
+  const [pendingPlanned, setPendingPlanned] = useState<Plan[]>([]);
   const [toast, setToast] = useState<string | null>(null);
   // Unlocking lives in a module store: it survives re-renders and setting a PIN
   // from inside the app, but not a reload — which is when the lock should return.
@@ -89,12 +89,11 @@ function FinanceApp() {
   const accounts = useLiveQuery(() => financeDb.accounts.toArray(), [], []);
   const members = useLiveQuery(() => financeDb.members.toArray(), [], []);
   const budgets = useLiveQuery(() => financeDb.budgets.toArray(), [], []);
-  const plannedPayments = useLiveQuery(() => financeDb.plannedPayments.toArray(), [], []);
+  const plans = useLiveQuery(() => financeDb.plans.toArray(), [], []);
+  const occurrences = useLiveQuery(() => financeDb.planOccurrences.toArray(), [], []);
   const obligations = useLiveQuery(() => financeDb.obligations.toArray(), [], []);
   const settlements = useLiveQuery(() => financeDb.obligationSettlements.toArray(), [], []);
   const vatPayments = useLiveQuery(() => financeDb.vatPayments.toArray(), [], []);
-  const debts = useLiveQuery(() => financeDb.debts.toArray(), [], []);
-  const installments = useLiveQuery(() => financeDb.debtInstallments.toArray(), [], []);
   const bearerCheques = useLiveQuery(() => financeDb.bearerCheques.toArray(), [], []);
   const settingsRow = useLiveQuery(() => financeDb.settings.get('default'), []);
 
@@ -114,7 +113,7 @@ function FinanceApp() {
       setMounted(true);
 
       const stored = await financeDb.settings.get('default');
-      const { created, awaitingConfirmation } = await processDuePlannedPayments(
+      const { created, awaitingConfirmation } = await processDueRecurringPlans(
         stored?.plannedPaymentAutoCreate ?? false
       );
       if (cancelled) return;
@@ -164,9 +163,9 @@ function FinanceApp() {
   }, [mounted, monthBudgetProgress, settings.notifyAtPercent]);
 
   useEffect(() => {
-    if (!mounted || plannedPayments.length === 0) return;
-    checkPlannedPaymentReminders(plannedPayments);
-  }, [mounted, plannedPayments]);
+    if (!mounted || plans.length === 0) return;
+    checkPlannedPaymentReminders(plans);
+  }, [mounted, plans]);
 
   const handleTransactionSaved = useCallback(
     (transaction: Transaction) => {
@@ -264,24 +263,24 @@ function FinanceApp() {
               </div>
             </div>
 
-            {pendingPlanned.map((payment) => (
+            {pendingPlanned.map((plan) => (
               <div
-                key={payment.id}
+                key={plan.id}
                 className="flex items-center gap-2 p-2.5 rounded-2xl bg-white/70 dark:bg-slate-900/60"
               >
                 <span className="flex-1 min-w-0">
                   <span className="block text-[11px] font-black text-slate-800 dark:text-slate-100 truncate">
-                    {payment.title}
+                    {plan.title}
                   </span>
                   <span className="block text-[10px] text-slate-400 font-medium">
-                    {payment.nextDueDate} · {formatMoney(payment.amount, payment.currency)}
+                    {plan.nextDueDate} · {formatMoney(plan.amount, plan.currency)}
                   </span>
                 </span>
                 <button
                   type="button"
                   onClick={async () => {
-                    await materializePlannedPayment(payment);
-                    setPendingPlanned((prev) => prev.filter((p) => p.id !== payment.id));
+                    await materializeRecurringPlan(plan);
+                    setPendingPlanned((prev) => prev.filter((p) => p.id !== plan.id));
                     setToast(t('app.planCreated'));
                   }}
                   className="px-3 py-1.5 rounded-xl bg-emerald-500 text-white text-[10px] font-black flex items-center gap-1"
@@ -292,7 +291,7 @@ function FinanceApp() {
                 <button
                   type="button"
                   onClick={() =>
-                    setPendingPlanned((prev) => prev.filter((p) => p.id !== payment.id))
+                    setPendingPlanned((prev) => prev.filter((p) => p.id !== plan.id))
                   }
                   className="w-7 h-7 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-400 flex items-center justify-center"
                 >
@@ -321,8 +320,8 @@ function FinanceApp() {
             transactions={transactions}
             categories={categories}
             members={members}
-            plannedPayments={plannedPayments}
-            installments={installments}
+            plans={plans}
+            occurrences={occurrences}
             bearerCheques={bearerCheques}
             settings={settings}
             month={month}
@@ -333,7 +332,7 @@ function FinanceApp() {
 
         {activeTab === 'planned' && (
           <PlannedTab
-            plannedPayments={plannedPayments}
+            plans={plans}
             categories={categories}
             accounts={accounts}
             settings={settings}
@@ -348,10 +347,9 @@ function FinanceApp() {
             accounts={accounts}
             obligations={obligations}
             settlements={settlements}
-            debts={debts}
-            installments={installments}
+            plans={plans}
+            occurrences={occurrences}
             bearerCheques={bearerCheques}
-            plannedPayments={plannedPayments}
             vatSummary={vatSummary}
             vatPayments={vatPayments}
           />
@@ -360,9 +358,8 @@ function FinanceApp() {
         {activeTab === 'reports' && (
           <ReportsTab
             transactions={transactions}
-            plannedPayments={plannedPayments}
-            debts={debts}
-            installments={installments}
+            plans={plans}
+            occurrences={occurrences}
             settings={settings}
             categories={categories}
             accounts={accounts}

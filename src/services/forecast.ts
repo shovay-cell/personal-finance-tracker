@@ -2,16 +2,16 @@ import { tr } from '@/i18n/t';
 import {
   CashFlowForecast,
   CurrencyCode,
-  DebtInstallment,
-  DebtPlan,
   FinanceAccount,
   ForecastEvent,
   ForecastPoint,
-  PlannedPayment,
+  Plan,
+  PlanKind,
+  PlanOccurrence,
   Transaction,
 } from '@/types';
 import { computeAccountBalance } from '@/lib/db';
-import { nextOccurrence, planKindOf } from './planned';
+import { nextOccurrence } from './planned';
 
 function addDays(dateStr: string, days: number): string {
   const [y, m, d] = dateStr.split('-').map(Number);
@@ -26,20 +26,17 @@ function addDays(dateStr: string, days: number): string {
  * single date; recurring plans are walked forward through the same engine the
  * scheduler uses, so the forecast can never disagree with what will be booked.
  */
-export function occurrencesBetween(
-  payment: PlannedPayment,
-  from: string,
-  to: string
-): string[] {
+export function occurrencesBetween(plan: Plan, from: string, to: string): string[] {
   const dates: string[] = [];
-  let cursor = payment.nextDueDate;
+  let cursor = plan.nextDueDate;
+  if (!cursor) return dates;
   // A generous ceiling: weekly plans over a 90-day horizon need ~13 steps.
   let guard = 0;
 
   while (cursor <= to && guard < 400) {
     if (cursor >= from) dates.push(cursor);
-    if (payment.recurrence === 'ONCE') break;
-    const next = nextOccurrence(payment, cursor);
+    if (plan.recurrence === 'ONCE') break;
+    const next = nextOccurrence(plan, cursor);
     if (!next || next <= cursor) break;
     cursor = next;
     guard += 1;
@@ -56,17 +53,15 @@ export function occurrencesBetween(
 export function forecastCashFlow(input: {
   accounts: FinanceAccount[];
   transactions: Transaction[];
-  plannedPayments: PlannedPayment[];
-  /** Scheduled instalment payments that have not been paid yet. */
-  debts?: DebtPlan[];
-  installments?: DebtInstallment[];
+  plans: Plan[];
+  /** Scheduled fixed-schedule occurrences that have not been paid yet. */
+  occurrences?: PlanOccurrence[];
   days: number;
   today: string;
   toBase: (amount: number, currency: CurrencyCode) => number;
 }): CashFlowForecast {
-  const { accounts, transactions, plannedPayments, days, today, toBase } = input;
-  const debts = input.debts || [];
-  const installments = input.installments || [];
+  const { accounts, transactions, plans, days, today, toBase } = input;
+  const occurrences = input.occurrences || [];
   const horizon = addDays(today, days);
 
   const startBalance = accounts
@@ -80,12 +75,12 @@ export function forecastCashFlow(input: {
   let totalIncome = 0;
   let totalExpense = 0;
 
-  for (const payment of plannedPayments) {
-    if (!payment.isActive) continue;
+  for (const plan of plans) {
+    if (plan.scheduleType !== 'RECURRING' || plan.status !== 'ACTIVE') continue;
 
-    for (const date of occurrencesBetween(payment, addDays(today, 1), horizon)) {
-      const base = toBase(payment.amount, payment.currency);
-      const signed = payment.kind === 'INCOME' ? base : -base;
+    for (const date of occurrencesBetween(plan, addDays(today, 1), horizon)) {
+      const base = toBase(plan.amount, plan.currency);
+      const signed = plan.kind === 'INCOME' ? base : -base;
 
       if (signed >= 0) totalIncome += signed;
       else totalExpense += -signed;
@@ -93,10 +88,10 @@ export function forecastCashFlow(input: {
       const list = eventsByDate.get(date) || [];
       list.push({
         date,
-        title: payment.title,
+        title: plan.title,
         amount: Math.round(signed * 100) / 100,
-        planKind: planKindOf(payment),
-        categoryId: payment.categoryId,
+        planKind: plan.planType as PlanKind,
+        categoryId: plan.categoryId,
       });
       eventsByDate.set(date, list);
     }
@@ -105,24 +100,24 @@ export function forecastCashFlow(input: {
   // An instalment purchase is not an expense on the day it is made, but every
   // scheduled payment still drains the balance ahead — that is the whole point
   // of showing it in a forecast.
-  const debtById = new Map(debts.map((debt) => [debt.id, debt]));
-  for (const installment of installments) {
-    if (installment.isPaid) continue;
-    if (installment.dueDate <= today || installment.dueDate > horizon) continue;
+  const planById = new Map(plans.map((plan) => [plan.id, plan]));
+  for (const occurrence of occurrences) {
+    if (occurrence.isPaid) continue;
+    if (occurrence.dueDate <= today || occurrence.dueDate > horizon) continue;
 
-    const debt = debtById.get(installment.debtId);
-    const base = toBase(installment.amount, installment.currency);
+    const plan = planById.get(occurrence.planId);
+    const base = toBase(occurrence.amount, occurrence.currency);
     totalExpense += base;
 
-    const list = eventsByDate.get(installment.dueDate) || [];
+    const list = eventsByDate.get(occurrence.dueDate) || [];
     list.push({
-      date: installment.dueDate,
-      title: debt ? `${debt.title} · ${installment.index}` : tr('fc.installmentPayment'),
+      date: occurrence.dueDate,
+      title: plan ? `${plan.title} · ${occurrence.index}` : tr('fc.installmentPayment'),
       amount: -Math.round(base * 100) / 100,
       planKind: 'PAYMENT',
-      categoryId: debt?.categoryId || '',
+      categoryId: plan?.categoryId || '',
     });
-    eventsByDate.set(installment.dueDate, list);
+    eventsByDate.set(occurrence.dueDate, list);
   }
 
   const points: ForecastPoint[] = [];
@@ -167,12 +162,12 @@ export interface CalendarDay {
  */
 export function paymentCalendar(input: {
   month: string;
-  plannedPayments: PlannedPayment[];
+  plans: Plan[];
   transactions: Transaction[];
   today: string;
   toBase: (amount: number, currency: CurrencyCode) => number;
 }): CalendarDay[] {
-  const { month, plannedPayments, today, toBase } = input;
+  const { month, plans, today, toBase } = input;
   const [year, mon] = month.split('-').map(Number);
   const total = new Date(year, mon, 0).getDate();
   const from = `${month}-01`;
@@ -180,17 +175,19 @@ export function paymentCalendar(input: {
 
   const byDate = new Map<string, ForecastEvent[]>();
 
-  for (const payment of plannedPayments) {
-    if (!payment.isActive || payment.kind !== 'EXPENSE') continue;
+  for (const plan of plans) {
+    if (plan.scheduleType !== 'RECURRING' || plan.status !== 'ACTIVE' || plan.kind !== 'EXPENSE') {
+      continue;
+    }
 
-    for (const date of occurrencesBetween(payment, from, to)) {
+    for (const date of occurrencesBetween(plan, from, to)) {
       const list = byDate.get(date) || [];
       list.push({
         date,
-        title: payment.title,
-        amount: -toBase(payment.amount, payment.currency),
-        planKind: planKindOf(payment),
-        categoryId: payment.categoryId,
+        title: plan.title,
+        amount: -toBase(plan.amount, plan.currency),
+        planKind: plan.planType as PlanKind,
+        categoryId: plan.categoryId,
       });
       byDate.set(date, list);
     }

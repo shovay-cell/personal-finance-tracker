@@ -19,7 +19,7 @@ import {
   Transaction,
   TransactionKind,
 } from '@/types';
-import { addDebtPlan, addTransaction, todayIso } from '@/lib/db';
+import { addFixedSchedulePlan, addTransaction, todayIso } from '@/lib/db';
 import { formatMoney } from '@/services/analytics';
 import {
   analyzeStatementTextWithAI,
@@ -177,8 +177,8 @@ export function StatementImportModal({
         // option in the expense form, so it shows in Долги and Safe-to-Spend
         // instead of landing in the ledger as an immediate expense.
         if (row.asDebt && row.kind === 'EXPENSE') {
-          await addDebtPlan({
-            kind: 'INSTALLMENT',
+          await addFixedSchedulePlan({
+            planType: 'INSTALLMENT',
             title: row.description?.trim() || t('tf.kindInstallmentTitle'),
             merchant: row.description,
             totalAmount: row.amount as number,

@@ -7,10 +7,9 @@ import {
   CurrencyCode,
   FinanceAccount,
   FinanceCategory,
-  DebtInstallment,
-  DebtPlan,
   FinanceSettings,
-  PlannedPayment,
+  Plan,
+  PlanOccurrence,
   Obligation,
   ObligationSettlement,
   ProfileMember,
@@ -40,9 +39,8 @@ import { ProgressBar } from './charts';
 
 interface ReportsTabProps {
   transactions: Transaction[];
-  plannedPayments: PlannedPayment[];
-  debts: DebtPlan[];
-  installments: DebtInstallment[];
+  plans: Plan[];
+  occurrences: PlanOccurrence[];
   settings: FinanceSettings;
   categories: FinanceCategory[];
   accounts: FinanceAccount[];
@@ -66,9 +64,8 @@ const PRESET_KEYS: { value: PeriodPreset; key: 'reports.week' | 'reports.month' 
 
 export function ReportsTab({
   transactions,
-  plannedPayments,
-  debts,
-  installments,
+  plans,
+  occurrences,
   settings,
   categories,
   accounts,
@@ -92,14 +89,13 @@ export function ReportsTab({
       forecastCashFlow({
         accounts,
         transactions,
-        plannedPayments,
-        debts,
-        installments,
+        plans,
+        occurrences,
         days: forecastDays,
         today: todayIso(),
         toBase: (amount, currency) => convertToBase(amount, currency, settings).baseAmount,
       }),
-    [accounts, transactions, plannedPayments, debts, installments, forecastDays, settings]
+    [accounts, transactions, plans, occurrences, forecastDays, settings]
   );
 
   const periodTransactions = useMemo(
