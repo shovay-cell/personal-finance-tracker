@@ -379,6 +379,11 @@ function PendingChequesList({
                   {isOverdue ? t('bc.statusOverdue') : t('bc.dueOn')} · {formatDateHuman(cheque.dueDate)}
                   {cheque.chequeNumber ? ` · №${cheque.chequeNumber}` : ''}
                 </p>
+                {cheque.note && (
+                  <p className="text-[10px] text-slate-400 font-medium truncate mt-0.5">
+                    {cheque.note}
+                  </p>
+                )}
               </div>
               <span className="text-xs font-black text-slate-900 dark:text-slate-100 tabular-nums flex-shrink-0">
                 {formatMoney(cheque.amount, cheque.currency)}

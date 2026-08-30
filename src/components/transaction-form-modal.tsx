@@ -156,6 +156,10 @@ export function TransactionFormModal({
   const [chequePayee, setChequePayee] = useState('');
   const [chequeNumber, setChequeNumber] = useState('');
   const [chequeDueDate, setChequeDueDate] = useState(todayIso());
+  const [chequeCount, setChequeCount] = useState('1');
+  const [chequeIntervalUnit, setChequeIntervalUnit] = useState<RecurrenceUnit>('MONTH');
+  const [chequeIntervalCount, setChequeIntervalCount] = useState('1');
+  const [chequeLastDueDate, setChequeLastDueDate] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [keyError, setKeyError] = useState<string | null>(null);
   const { t, language } = useT();
@@ -275,19 +279,38 @@ export function TransactionFormModal({
       }
 
       // A cheque is not an expense today either — it clears (or doesn't) on
-      // its own date, tracked separately until then.
+      // its own date, tracked separately until then. A series (postdated
+      // cheques covering one purchase) splits the total the same way an
+      // instalment plan does, just realised as N cheques instead of N
+      // scheduled card payments.
       if (!existing && isBearerCheque) {
-        await addBearerCheque({
-          payee: chequePayee.trim(),
-          chequeNumber: chequeNumber.trim() || undefined,
-          amount: numericAmount,
-          currency,
-          categoryId,
-          accountId,
-          issueDate: date,
-          dueDate: chequeDueDate,
-          note: note.trim() || undefined,
-        });
+        const count = Math.max(1, parseInt(chequeCount, 10) || 1);
+        const amounts = buildInstallmentAmounts(numericAmount, count);
+        const dueDates = buildChequeDueDates(
+          chequeDueDate,
+          count,
+          chequeIntervalUnit,
+          Math.max(1, parseInt(chequeIntervalCount, 10) || 1),
+          chequeLastDueDate || undefined
+        );
+        const baseNote = note.trim();
+
+        for (let i = 0; i < count; i++) {
+          await addBearerCheque({
+            payee: chequePayee.trim(),
+            chequeNumber: chequeNumberForIndex(chequeNumber.trim(), i, count),
+            amount: amounts[i],
+            currency,
+            categoryId,
+            accountId,
+            issueDate: date,
+            dueDate: dueDates[i],
+            note:
+              count > 1
+                ? [baseNote, `${t('bc.chequeNoun')} ${i + 1}/${count}`].filter(Boolean).join(' · ')
+                : baseNote || undefined,
+          });
+        }
         onClose();
         return;
       }
@@ -490,7 +513,27 @@ export function TransactionFormModal({
             />
           </Field>
 
+          <Field label={t('bc.chequeNumber')} hint={t('bc.chequeNumberOptional')}>
+            <input
+              type="text"
+              value={chequeNumber}
+              onChange={(e) => setChequeNumber(e.target.value)}
+              className={inputClass}
+            />
+          </Field>
+
           <div className="grid grid-cols-2 gap-3">
+            <Field label={t('bc.issueDate')}>
+              <input
+                type="date"
+                value={date}
+                onChange={(e) => {
+                  setDate(e.target.value);
+                  confirmField('date');
+                }}
+                className={inputClass}
+              />
+            </Field>
             <Field label={t('bc.dueDate')}>
               <input
                 type="date"
@@ -499,15 +542,66 @@ export function TransactionFormModal({
                 className={inputClass}
               />
             </Field>
-            <Field label={t('bc.chequeNumber')} hint={t('bc.chequeNumberOptional')}>
-              <input
-                type="text"
-                value={chequeNumber}
-                onChange={(e) => setChequeNumber(e.target.value)}
-                className={inputClass}
-              />
-            </Field>
           </div>
+
+          <Field label={t('bc.count')} hint={t('bc.countHint')}>
+            <input
+              type="number"
+              min={1}
+              value={chequeCount}
+              onChange={(e) => setChequeCount(e.target.value)}
+              className={`${inputClass} text-center font-black`}
+            />
+          </Field>
+
+          {parseInt(chequeCount, 10) > 1 && (
+            <div className="grid grid-cols-2 gap-3">
+              <Field label={t('bc.every')}>
+                <div className="flex gap-1.5">
+                  <input
+                    type="number"
+                    min={1}
+                    value={chequeIntervalCount}
+                    onChange={(e) => setChequeIntervalCount(e.target.value)}
+                    className={`${inputClass} w-16 text-center`}
+                  />
+                  <select
+                    value={chequeIntervalUnit}
+                    onChange={(e) => setChequeIntervalUnit(e.target.value as RecurrenceUnit)}
+                    className={`${inputClass} flex-1`}
+                  >
+                    <option value="WEEK">{pluralUnit('WEEK', chequeIntervalCount)}</option>
+                    <option value="MONTH">{pluralUnit('MONTH', chequeIntervalCount)}</option>
+                    <option value="YEAR">{pluralUnit('YEAR', chequeIntervalCount)}</option>
+                  </select>
+                </div>
+              </Field>
+              <Field label={t('bc.lastDueDate')} hint={t('bc.lastDueDateHint')}>
+                <input
+                  type="date"
+                  value={chequeLastDueDate}
+                  onChange={(e) => setChequeLastDueDate(e.target.value)}
+                  className={inputClass}
+                />
+              </Field>
+            </div>
+          )}
+
+          <Field label={t('bc.debitAccount')}>
+            <select
+              value={accountId}
+              onChange={(e) => setAccountId(e.target.value)}
+              className={inputClass}
+            >
+              {accounts
+                .filter((a) => !a.isArchived || a.id === accountId)
+                .map((account) => (
+                  <option key={account.id} value={account.id}>
+                    {account.name}
+                  </option>
+                ))}
+            </select>
+          </Field>
         </div>
       )}
 
@@ -797,35 +891,37 @@ export function TransactionFormModal({
         </button>
       )}
 
-      <div className="grid grid-cols-2 gap-3">
-        <Field label={t('common.date')} warn={uncertainFields.includes('date')}>
-          <input
-            type="date"
-            value={date}
-            onChange={(e) => {
-              setDate(e.target.value);
-              confirmField('date');
-            }}
-            className={fieldClass(uncertainFields, 'date')}
-          />
-        </Field>
+      {!isBearerCheque && (
+        <div className="grid grid-cols-2 gap-3">
+          <Field label={t('common.date')} warn={uncertainFields.includes('date')}>
+            <input
+              type="date"
+              value={date}
+              onChange={(e) => {
+                setDate(e.target.value);
+                confirmField('date');
+              }}
+              className={fieldClass(uncertainFields, 'date')}
+            />
+          </Field>
 
-        <Field label={t('common.account')}>
-          <select
-            value={accountId}
-            onChange={(e) => setAccountId(e.target.value)}
-            className={inputClass}
-          >
-            {accounts
-              .filter((a) => !a.isArchived || a.id === accountId)
-              .map((account) => (
-                <option key={account.id} value={account.id}>
-                  {account.name}
-                </option>
-              ))}
-          </select>
-        </Field>
-      </div>
+          <Field label={t('common.account')}>
+            <select
+              value={accountId}
+              onChange={(e) => setAccountId(e.target.value)}
+              className={inputClass}
+            >
+              {accounts
+                .filter((a) => !a.isArchived || a.id === accountId)
+                .map((account) => (
+                  <option key={account.id} value={account.id}>
+                    {account.name}
+                  </option>
+                ))}
+            </select>
+          </Field>
+        </div>
+      )}
 
       {!isBearerCheque && (
         <Field label={t('form.merchant')} warn={uncertainFields.includes('merchant')}>
@@ -1019,6 +1115,50 @@ function shiftByUnit(dateStr: string, unit: RecurrenceUnit, count: number): stri
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(
     date.getDate()
   ).padStart(2, '0')}`;
+}
+
+/**
+ * Due dates for a series of cheques: walks forward from `firstDue` every
+ * `intervalUnit`×`intervalCount`, unless `lastDue` is given — then the dates
+ * are spread evenly between `firstDue` and `lastDue` instead, for whoever
+ * finds it easier to say "the last one clears on the 20th" than to count
+ * intervals.
+ */
+function buildChequeDueDates(
+  firstDue: string,
+  count: number,
+  intervalUnit: RecurrenceUnit,
+  intervalCount: number,
+  lastDue?: string
+): string[] {
+  if (count <= 1) return [firstDue];
+
+  if (lastDue) {
+    const [fy, fm, fd] = firstDue.split('-').map(Number);
+    const [ly, lm, ld] = lastDue.split('-').map(Number);
+    const firstMs = new Date(fy, fm - 1, fd).getTime();
+    const lastMs = new Date(ly, lm - 1, ld).getTime();
+    const step = (lastMs - firstMs) / (count - 1);
+    return Array.from({ length: count }, (_, i) => {
+      const date = new Date(firstMs + step * i);
+      return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(
+        date.getDate()
+      ).padStart(2, '0')}`;
+    });
+  }
+
+  return Array.from({ length: count }, (_, i) =>
+    i === 0 ? firstDue : shiftByUnit(firstDue, intervalUnit, intervalCount * i)
+  );
+}
+
+/** Cheque numbers only auto-increment when the base is a plain number — a
+ *  free-text number ("A-104") can't be safely incremented, so every cheque
+ *  in the series keeps it as typed. */
+function chequeNumberForIndex(base: string, index: number, count: number): string | undefined {
+  if (!base) return undefined;
+  if (count <= 1 || !/^\d+$/.test(base)) return base;
+  return String(parseInt(base, 10) + index);
 }
 
 /** Shows the schedule the way it will be booked, before anything is saved. */

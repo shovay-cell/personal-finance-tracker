@@ -2112,6 +2112,16 @@ export const DICTIONARY = {
   'bc.undoClear': { ru: 'Отменить списание', he: 'לבטל את הפירעון', uk: 'Скасувати списання', en: 'Undo clearance' },
   'bc.cancelCheque': { ru: 'Отменить чек', he: 'לבטל צ׳ק', uk: 'Скасувати чек', en: 'Cancel cheque' },
   'bc.dueOn': { ru: 'списание', he: 'פירעון', uk: 'списання', en: 'due' },
+  'bc.count': { ru: 'Количество чеков', he: 'מספר הצ׳קים', uk: 'Кількість чеків', en: 'Number of cheques' },
+  'bc.countHint': { ru: 'Один чек — укажите 1', he: 'צ׳ק אחד — הזינו 1', uk: 'Один чек — вкажіть 1', en: 'One cheque — enter 1' },
+  'bc.every': { ru: 'Чеки каждые', he: 'צ׳קים כל', uk: 'Чеки кожні', en: 'Cheques every' },
+  'bc.lastDueDate': { ru: 'Дата последнего чека', he: 'תאריך הצ׳ק האחרון', uk: 'Дата останнього чека', en: 'Last cheque date' },
+  'bc.lastDueDateHint': {
+    ru: 'Необязательно — если удобнее задать дату, а не интервал',
+    he: 'לא חובה — אם נוח יותר לקבוע תאריך במקום מרווח',
+    uk: 'Необов’язково — якщо зручніше задати дату, а не інтервал',
+    en: 'Optional — set an end date instead of an interval',
+  },
   // --------------------------------------------------------------- form
   'form.newExpense': { ru: 'Новый расход', he: 'הוצאה חדשה', uk: 'Нова витрата', en: 'New expense' },
   'form.newIncome': { ru: 'Новый доход', he: 'הכנסה חדשה', uk: 'Новий дохід', en: 'New income' },
