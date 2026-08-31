@@ -370,6 +370,30 @@ export function StatementImportModal({
             </Field>
           </div>
 
+          {rows.some((row) => row.kind === 'EXPENSE') && (
+            <button
+              type="button"
+              onClick={() => {
+                const allOn = rows.every((row) => row.kind !== 'EXPENSE' || row.asDebt);
+                setRows(
+                  (prev) =>
+                    prev?.map((row) => (row.kind === 'EXPENSE' ? { ...row, asDebt: !allOn } : row)) ||
+                    null
+                );
+              }}
+              className={`w-full flex items-center justify-center gap-1.5 py-2 rounded-xl text-[11px] font-black transition-colors ${
+                rows.every((row) => row.kind !== 'EXPENSE' || row.asDebt)
+                  ? 'bg-violet-100 text-violet-700 dark:bg-violet-950/60 dark:text-violet-400'
+                  : 'bg-slate-100 dark:bg-slate-800 text-slate-500'
+              }`}
+            >
+              <CreditCard className="w-3.5 h-3.5" />
+              {rows.every((row) => row.kind !== 'EXPENSE' || row.asDebt)
+                ? t('si.bulkAsDebtOff')
+                : t('si.bulkAsDebt')}
+            </button>
+          )}
+
           <div className="space-y-2">
             {rows.map((row) => {
               const pool = row.kind === 'INCOME' ? incomeCategories : expenseCategories;

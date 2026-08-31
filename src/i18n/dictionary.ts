@@ -1103,6 +1103,7 @@ export const DICTIONARY = {
     en: 'carried over from last month',
   },
   'bg.noTotal': { ru: 'Общий бюджет не задан', he: 'לא הוגדר תקציב כולל', uk: 'Загальний бюджет не задано', en: 'No overall budget yet' },
+  'bg.jumpToMonth': { ru: 'Перейти к месяцу', he: 'מעבר לחודש', uk: 'Перейти до місяця', en: 'Jump to month' },
   'bg.noTotalHint': {
     ru: 'Задайте лимит на весь месяц, чтобы видеть остаток',
     he: 'הגדירו מגבלה לחודש כולו כדי לראות את היתרה',
@@ -1218,6 +1219,18 @@ export const DICTIONARY = {
     he: 'קטגוריה לכל השורות',
     uk: 'Категорія всім рядкам',
     en: 'Category for every row',
+  },
+  'si.bulkAsDebt': {
+    ru: 'Кредит/рассрочка всем строкам',
+    he: 'אשראי/תשלומים לכל השורות',
+    uk: 'Кредит/розстрочка всім рядкам',
+    en: 'Credit/instalments for every row',
+  },
+  'si.bulkAsDebtOff': {
+    ru: 'Снять со всех',
+    he: 'להסיר מכולם',
+    uk: 'Зняти з усіх',
+    en: 'Clear from all',
   },
   'si.keepAsIs': { ru: '— не менять —', he: '— לא לשנות —', uk: '— не змінювати —', en: '— leave as is —' },
   'si.incomeGroup': { ru: 'Доходы', he: 'הכנסות', uk: 'Доходи', en: 'Income' },

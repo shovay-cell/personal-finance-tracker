@@ -137,9 +137,18 @@ export function BudgetsTab({
         >
           <ChevronLeft className="w-4 h-4" />
         </button>
-        <span className="text-sm font-black text-slate-800 dark:text-slate-100">
-          {monthLabel(month)}
-        </span>
+        <label className="relative cursor-pointer">
+          <span className="text-sm font-black text-slate-800 dark:text-slate-100 border-b border-dashed border-slate-300 dark:border-slate-600 pointer-events-none">
+            {monthLabel(month)}
+          </span>
+          <input
+            type="month"
+            value={month}
+            onChange={(e) => e.target.value && onMonthChange(e.target.value)}
+            aria-label={t('bg.jumpToMonth')}
+            className="absolute inset-0 opacity-0 cursor-pointer"
+          />
+        </label>
         <button
           type="button"
           onClick={() => onMonthChange(shiftMonth(month, 1))}
