@@ -269,7 +269,13 @@ export function DebtsTab({
             <PendingChequesList cheques={bearerCheques} currency={baseCurrency} />
           </div>
 
-          <DebtList kind="CHEQUE" rows={ofKind('CHEQUE')} currency={baseCurrency} />
+          <DebtList
+            kind="CHEQUE"
+            rows={ofKind('CHEQUE')}
+            currency={baseCurrency}
+            categories={categories}
+            accounts={accounts}
+          />
 
           <div>
             <SectionTitle title={t('dt.issuedCheques')} />
@@ -286,7 +292,13 @@ export function DebtsTab({
       )}
 
       {(segment === 'INSTALLMENT' || segment === 'TAX' || segment === 'LOAN') && (
-        <DebtList kind={segment} rows={ofKind(segment)} currency={baseCurrency} />
+        <DebtList
+          kind={segment}
+          rows={ofKind(segment)}
+          currency={baseCurrency}
+          categories={categories}
+          accounts={accounts}
+        />
       )}
     </div>
   );
@@ -296,10 +308,14 @@ function DebtList({
   kind,
   rows,
   currency,
+  categories,
+  accounts,
 }: {
   kind: 'INSTALLMENT' | 'TAX' | 'LOAN' | 'CHEQUE';
   rows: ReturnType<typeof describeAllFixedSchedulePlans>;
   currency: CurrencyCode;
+  categories: FinanceCategory[];
+  accounts: FinanceAccount[];
 }) {
   const { t } = useT();
 
@@ -323,7 +339,13 @@ function DebtList({
       ) : (
         <div className="space-y-2">
           {rows.map((row) => (
-            <DebtCard key={row.plan.id} row={row} currency={currency} />
+            <DebtCard
+              key={row.plan.id}
+              row={row}
+              currency={currency}
+              categories={categories}
+              accounts={accounts}
+            />
           ))}
         </div>
       )}

@@ -2215,6 +2215,14 @@ export const DICTIONARY = {
   'debts.overdue': { ru: 'просрочен платёж', he: 'תשלום באיחור', uk: 'прострочений платіж', en: 'payment overdue' },
   'debts.ofPayments': { ru: 'платежей', he: 'תשלומים', uk: 'платежів', en: 'payments' },
   'debts.deleteDebt': { ru: 'Удалить обязательство', he: 'מחיקת ההתחייבות', uk: 'Видалити зобов’язання', en: 'Delete liability' },
+  'dc.edit': { ru: 'Изменить', he: 'עריכה', uk: 'Змінити', en: 'Edit' },
+  'dc.editTitle': { ru: 'Изменить обязательство', he: 'עריכת ההתחייבות', uk: 'Змінити зобов’язання', en: 'Edit liability' },
+  'dc.editHint': {
+    ru: 'Применится ко всем оставшимся платежам. Уже списанные операции правьте отдельно во «Операциях»',
+    he: 'יחול על כל התשלומים הנותרים. פעולות שכבר נגבו יש לתקן בנפרד ב"תנועות"',
+    uk: 'Застосується до всіх платежів, що залишились. Уже списані операції правте окремо в «Операціях»',
+    en: 'Applies to every payment still ahead. Already-booked operations need fixing separately in Transactions',
+  },
 
   // -------------------------------------------------------------- budget
   'budget.monthly': { ru: 'Общий бюджет месяца', he: 'תקציב חודשי כולל', uk: 'Загальний бюджет місяця', en: 'Monthly budget' },

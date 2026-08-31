@@ -6,15 +6,17 @@ import {
   CreditCard,
   FileSignature,
   Landmark,
+  Pencil,
   RotateCcw,
   Trash2,
   Wallet,
 } from 'lucide-react';
-import { CurrencyCode, PlanType, PlanWithSchedule } from '@/types';
-import { deletePlan, payPlanOccurrence, unpayPlanOccurrence } from '@/lib/db';
+import { CurrencyCode, FinanceAccount, FinanceCategory, Plan, PlanType, PlanWithSchedule } from '@/types';
+import { deletePlan, payPlanOccurrence, unpayPlanOccurrence, updatePlan } from '@/lib/db';
 import { formatDateHuman, formatMoney } from '@/services/analytics';
 import { useT } from '@/i18n/context';
-import { Card } from './ui';
+import { accountName, categoryName } from '@/i18n/categories';
+import { Card, Field, ModalShell, PrimaryButton, inputClass } from './ui';
 
 const KIND_ICON: Record<PlanType, typeof CreditCard> = {
   SUBSCRIPTION: CreditCard,
@@ -44,11 +46,16 @@ const KIND_COLOR: Record<PlanType, string> = {
 export function DebtCard({
   row,
   currency,
+  categories,
+  accounts,
 }: {
   row: PlanWithSchedule;
   currency: CurrencyCode;
+  categories: FinanceCategory[];
+  accounts: FinanceAccount[];
 }) {
   const [isExpanded, setIsExpanded] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
   const { t } = useT();
   const { plan, paidAmount, outstandingAmount, paidCount, totalCount, nextOccurrence } = row;
 
@@ -163,16 +170,149 @@ export function DebtCard({
             </div>
           ))}
 
-          <button
-            type="button"
-            onClick={() => deletePlan(plan.id)}
-            className="w-full mt-1 py-2 rounded-xl text-[10px] font-black text-rose-500 bg-rose-50 dark:bg-rose-950/40 flex items-center justify-center gap-1.5"
-          >
-            <Trash2 className="w-3 h-3" />
-            {t('debts.deleteDebt')}
-          </button>
+          <div className="flex gap-2 mt-1">
+            <button
+              type="button"
+              onClick={() => setIsEditing(true)}
+              className="flex-1 py-2 rounded-xl text-[10px] font-black text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 flex items-center justify-center gap-1.5"
+            >
+              <Pencil className="w-3 h-3" />
+              {t('dc.edit')}
+            </button>
+            <button
+              type="button"
+              onClick={() => deletePlan(plan.id)}
+              className="flex-1 py-2 rounded-xl text-[10px] font-black text-rose-500 bg-rose-50 dark:bg-rose-950/40 flex items-center justify-center gap-1.5"
+            >
+              <Trash2 className="w-3 h-3" />
+              {t('debts.deleteDebt')}
+            </button>
+          </div>
         </div>
       )}
+
+      {isEditing && (
+        <PlanEditModal
+          plan={plan}
+          categories={categories}
+          accounts={accounts}
+          onClose={() => setIsEditing(false)}
+        />
+      )}
     </Card>
+  );
+}
+
+/**
+ * Title/merchant/category/account/note only — the schedule and amounts stay
+ * fixed once occurrences exist. Changing the category here only steers
+ * occurrences not yet paid; a payment already booked is a real transaction
+ * with its own category, corrected separately in the ledger.
+ */
+function PlanEditModal({
+  plan,
+  categories,
+  accounts,
+  onClose,
+}: {
+  plan: Plan;
+  categories: FinanceCategory[];
+  accounts: FinanceAccount[];
+  onClose: () => void;
+}) {
+  const { t, language } = useT();
+  const [title, setTitle] = useState(plan.title);
+  const [merchant, setMerchant] = useState(plan.merchant || '');
+  const [categoryId, setCategoryId] = useState(plan.categoryId);
+  const [accountId, setAccountId] = useState(plan.accountId);
+  const [note, setNote] = useState(plan.note || '');
+  const [error, setError] = useState<string | null>(null);
+
+  const relevantCategories = categories.filter(
+    (c) => c.kind === plan.kind && !c.parentId && !c.isHidden
+  );
+
+  const handleSave = async () => {
+    if (!title.trim()) return setError(t('pl.enterTitle'));
+    if (!categoryId) return setError(t('pl.pickCategory'));
+
+    await updatePlan(plan.id, {
+      title: title.trim(),
+      merchant: merchant.trim() || undefined,
+      categoryId,
+      accountId,
+      note: note.trim() || undefined,
+    });
+    onClose();
+  };
+
+  return (
+    <ModalShell
+      title={t('dc.editTitle')}
+      subtitle={t('dc.editHint')}
+      icon={<Pencil className="w-5 h-5" />}
+      onClose={onClose}
+      footer={
+        <div className="space-y-2">
+          {error && <p className="text-[11px] font-bold text-rose-500 text-center">{error}</p>}
+          <PrimaryButton onClick={handleSave}>{t('common.save')}</PrimaryButton>
+        </div>
+      }
+    >
+      <Field label={t('pl.title')}>
+        <input
+          type="text"
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          className={inputClass}
+          autoFocus
+        />
+      </Field>
+
+      <Field label={t('form.merchant')} hint={t('pl.optional')}>
+        <input
+          type="text"
+          value={merchant}
+          onChange={(e) => setMerchant(e.target.value)}
+          placeholder={t('tf.merchantPlaceholder')}
+          className={inputClass}
+        />
+      </Field>
+
+      <Field label={t('common.category')}>
+        <select
+          value={categoryId}
+          onChange={(e) => setCategoryId(e.target.value)}
+          className={inputClass}
+        >
+          {relevantCategories.map((category) => (
+            <option key={category.id} value={category.id}>
+              {categoryName(category, language)}
+            </option>
+          ))}
+        </select>
+      </Field>
+
+      <Field label={t('common.account')}>
+        <select value={accountId} onChange={(e) => setAccountId(e.target.value)} className={inputClass}>
+          {accounts
+            .filter((a) => !a.isArchived || a.id === accountId)
+            .map((account) => (
+              <option key={account.id} value={account.id}>
+                {accountName(account, language)}
+              </option>
+            ))}
+        </select>
+      </Field>
+
+      <Field label={t('common.note')}>
+        <input
+          type="text"
+          value={note}
+          onChange={(e) => setNote(e.target.value)}
+          className={inputClass}
+        />
+      </Field>
+    </ModalShell>
   );
 }
