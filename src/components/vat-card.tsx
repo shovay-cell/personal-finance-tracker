@@ -54,7 +54,9 @@ export function VatCard({
           </span>
         </div>
 
-        <div className="grid grid-cols-3 gap-2">
+        {/* Only the VAT itself — accrued vs. already paid. Profit/net income
+            is not a debt, so it belongs in Доход/Отчёты, not in Долги. */}
+        <div className="grid grid-cols-2 gap-2">
           <div className="rounded-2xl bg-slate-50 dark:bg-slate-800/60 p-2.5">
             <p className="text-[9px] font-black uppercase tracking-wide text-slate-400">{t('vat.accrued')}</p>
             <p className="text-xs font-black text-slate-700 dark:text-slate-200 tabular-nums mt-0.5">
@@ -65,12 +67,6 @@ export function VatCard({
             <p className="text-[9px] font-black uppercase tracking-wide text-slate-400">{t('vat.paid')}</p>
             <p className="text-xs font-black text-emerald-600 dark:text-emerald-400 tabular-nums mt-0.5">
               {formatMoney(summary.paid, currency, { compact: true })}
-            </p>
-          </div>
-          <div className="rounded-2xl bg-slate-50 dark:bg-slate-800/60 p-2.5">
-            <p className="text-[9px] font-black uppercase tracking-wide text-slate-400">{t('vat.profit')}</p>
-            <p className="text-xs font-black text-slate-700 dark:text-slate-200 tabular-nums mt-0.5">
-              {formatMoney(summary.netIncome, currency, { compact: true })}
             </p>
           </div>
         </div>

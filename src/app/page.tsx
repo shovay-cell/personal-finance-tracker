@@ -143,6 +143,35 @@ function FinanceApp() {
     else if (quick === 'expense' || quick === 'add') setQuickAddMode('MANUAL');
   }, [searchParams, mounted]);
 
+  // `range` for a rolling preset (Неделя/Месяц/Квартал/Год) is resolved once
+  // against "now" and then held in state — left open across a day boundary
+  // (a bookmarked PWA left open overnight is the common case), its `to` stays
+  // stuck on the day it was computed, and a transaction entered "today" silently
+  // falls outside it. Re-resolve whenever the tab regains focus so the period
+  // catches up with the real date; a CUSTOM range the user picked is untouched.
+  useEffect(() => {
+    const refreshIfStale = () => {
+      setPreset((currentPreset) => {
+        if (currentPreset !== 'CUSTOM') {
+          const fresh = rangeForPreset(currentPreset);
+          setRange((prev) =>
+            prev.from === fresh.from && prev.to === fresh.to ? prev : fresh
+          );
+        }
+        return currentPreset;
+      });
+    };
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') refreshIfStale();
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+    window.addEventListener('focus', refreshIfStale);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibility);
+      window.removeEventListener('focus', refreshIfStale);
+    };
+  }, []);
+
   const vatSummary = useMemo(
     () =>
       settings.vatEnabled
