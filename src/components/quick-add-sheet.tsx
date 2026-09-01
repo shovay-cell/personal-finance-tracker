@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useRef, useState } from 'react';
-import { Delete, Layers, Loader2, Mic, MicOff, ScanLine, Sparkles, Wallet } from 'lucide-react';
+import { Delete, Layers, Loader2, Mic, MicOff, Scale, ScanLine, Sparkles, Wallet } from 'lucide-react';
 import {
   CurrencyCode,
   FinanceAccount,
@@ -36,7 +36,7 @@ import {
   VoiceSession,
 } from '@/services/voice/voice-input';
 
-type QuickMode = 'MANUAL' | 'SCAN' | 'VOICE' | 'STATEMENT';
+type QuickMode = 'MANUAL' | 'SCAN' | 'VOICE' | 'STATEMENT' | 'OBLIGATION';
 
 interface QuickAddSheetProps {
   categories: FinanceCategory[];
@@ -49,6 +49,8 @@ interface QuickAddSheetProps {
   onOpenFullForm: (prefill: TransactionPrefill) => void;
   /** Opens the batch importer for a photographed list of bank operations. */
   onOpenStatementImport: () => void;
+  /** Opens the dedicated "credit / instalment / tax / other" entry flow. */
+  onOpenObligation: () => void;
   onSaved?: () => void;
 }
 
@@ -67,6 +69,7 @@ export function QuickAddSheet({
   onClose,
   onOpenFullForm,
   onOpenStatementImport,
+  onOpenObligation,
   onSaved,
 }: QuickAddSheetProps) {
   const [mode, setMode] = useState<QuickMode>(initialMode);
@@ -99,6 +102,10 @@ export function QuickAddSheet({
     }
     if (initialMode === 'STATEMENT') {
       onOpenStatementImport();
+      onClose();
+    }
+    if (initialMode === 'OBLIGATION') {
+      onOpenObligation();
       onClose();
     }
     return () => voiceSession.current?.stop();
@@ -351,6 +358,7 @@ export function QuickAddSheet({
             { value: 'SCAN' as QuickMode, label: t('quick.receipt'), icon: ScanLine },
             { value: 'STATEMENT' as QuickMode, label: t('quick.list'), icon: Layers },
             { value: 'VOICE' as QuickMode, label: t('quick.voice'), icon: Mic },
+            { value: 'OBLIGATION' as QuickMode, label: t('quick.obligation'), icon: Scale },
           ]
         ).map((option) => {
           const Icon = option.icon;
@@ -361,10 +369,15 @@ export function QuickAddSheet({
               type="button"
               onClick={() => {
                 setError(null);
-                // The statement importer owns its own review flow — hand over
-                // instead of stacking it inside the quick-entry sheet.
+                // The statement importer and the obligation flow each own their
+                // own review flow — hand over instead of stacking inside this sheet.
                 if (option.value === 'STATEMENT') {
                   onOpenStatementImport();
+                  onClose();
+                  return;
+                }
+                if (option.value === 'OBLIGATION') {
+                  onOpenObligation();
                   onClose();
                   return;
                 }

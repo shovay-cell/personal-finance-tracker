@@ -7,7 +7,6 @@ import {
   ImagePlus,
   Percent,
   Repeat,
-  Scale,
   Scissors,
   Loader2,
   Save,
@@ -31,7 +30,6 @@ import {
 } from '@/types';
 import {
   addBearerCheque,
-  addFixedSchedulePlan,
   addRecurringPlan,
   addTransaction,
   buildInstallmentAmounts,
@@ -147,13 +145,6 @@ export function TransactionFormModal({
   const [isRepeating, setIsRepeating] = useState(false);
   const [repeatCount, setRepeatCount] = useState('1');
   const [repeatUnit, setRepeatUnit] = useState<RecurrenceUnit>('MONTH');
-  const [isDebt, setIsDebt] = useState(false);
-  const [debtKind, setDebtKind] = useState<CreatableDebtKind>('INSTALLMENT');
-  const [paymentsCount, setPaymentsCount] = useState('6');
-  const [installmentUnit, setInstallmentUnit] = useState<RecurrenceUnit>('MONTH');
-  const [installmentInterval, setInstallmentInterval] = useState('1');
-  const [firstDueDate, setFirstDueDate] = useState(todayIso());
-  const [firstPaymentPaid, setFirstPaymentPaid] = useState(true);
   const [chequePayee, setChequePayee] = useState('');
   const [chequeNumber, setChequeNumber] = useState('');
   const [chequeDueDate, setChequeDueDate] = useState(todayIso());
@@ -320,30 +311,6 @@ export function TransactionFormModal({
                 : baseNote || undefined,
           });
         }
-        onClose();
-        return;
-      }
-
-      // A liability is not an expense today: it becomes a debt with a schedule,
-      // and only the payments actually marked paid turn into expenses.
-      if (kind === 'EXPENSE' && isDebt) {
-        const count = Math.max(1, parseInt(paymentsCount, 10) || 1);
-        await addFixedSchedulePlan({
-          planType: debtKind,
-          title: merchant.trim() || note.trim() || t(DEBT_KIND_META[debtKind].defaultTitle),
-          merchant: merchant.trim() || undefined,
-          totalAmount: numericAmount,
-          currency,
-          categoryId,
-          accountId,
-          startDate: date,
-          firstDueDate,
-          note: note.trim() || undefined,
-          paymentsCount: count,
-          intervalUnit: installmentUnit,
-          intervalCount: Math.max(1, parseInt(installmentInterval, 10) || 1),
-          firstPaymentPaid,
-        });
         onClose();
         return;
       }
@@ -618,10 +585,7 @@ export function TransactionFormModal({
         <div className="rounded-2xl border border-slate-200 dark:border-slate-700 p-3 space-y-2.5">
           <button
             type="button"
-            onClick={() => {
-              setIsRepeating((prev) => !prev);
-              if (!isRepeating) setIsDebt(false);
-            }}
+            onClick={() => setIsRepeating((prev) => !prev)}
             className="w-full flex items-center justify-between gap-3 text-left"
           >
             <span className="flex items-start gap-2">
@@ -676,143 +640,6 @@ export function TransactionFormModal({
             </div>
           )}
 
-          <button
-            type="button"
-            onClick={() => {
-              setIsDebt((prev) => !prev);
-              if (!isDebt) setIsRepeating(false);
-            }}
-            className="w-full flex items-center justify-between gap-3 text-left pt-2 border-t border-slate-100 dark:border-slate-800"
-          >
-            <span className="flex items-start gap-2">
-              <Scale className="w-4 h-4 text-slate-400 mt-px flex-shrink-0" />
-              <span>
-                <span className="block text-xs font-black text-slate-800 dark:text-slate-100">
-                  {t('form.asDebt')}
-                </span>
-                <span className="block text-[10px] text-slate-400 font-medium mt-0.5">
-                  {t('form.asDebtHint')}
-                </span>
-              </span>
-            </span>
-            <span
-              className={`w-11 h-6 rounded-full flex items-center px-0.5 transition-colors flex-shrink-0 ${
-                isDebt ? 'bg-violet-500' : 'bg-slate-300 dark:bg-slate-700'
-              }`}
-            >
-              <span
-                className={`w-5 h-5 rounded-full bg-white shadow transition-transform ${
-                  isDebt ? 'translate-x-5' : ''
-                }`}
-              />
-            </span>
-          </button>
-
-          {isDebt && (
-            <div className="space-y-2.5 pt-1">
-              <div className="grid grid-cols-4 gap-1.5">
-                {(Object.keys(DEBT_KIND_META) as CreatableDebtKind[]).map((option) => {
-                  const meta = DEBT_KIND_META[option];
-                  const isActive = debtKind === option;
-                  return (
-                    <button
-                      key={option}
-                      type="button"
-                      onClick={() => {
-                        setDebtKind(option);
-                        setPaymentsCount(String(meta.defaultPayments));
-                      }}
-                      className={`py-2 rounded-xl text-[10px] font-black border transition-all ${
-                        isActive
-                          ? 'bg-violet-500 text-white border-transparent'
-                          : 'bg-slate-50 dark:bg-slate-800 text-slate-500 border-slate-200 dark:border-slate-700'
-                      }`}
-                    >
-                      {t(meta.label)}
-                    </button>
-                  );
-                })}
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <Field label={t('form.paymentsCount')}>
-                  <input
-                    type="number"
-                    min={1}
-                    value={paymentsCount}
-                    onChange={(e) => setPaymentsCount(e.target.value)}
-                    className={`${inputClass} text-center font-black`}
-                  />
-                </Field>
-                <Field label={paymentsCount === '1' ? t('form.paymentDate') : t('form.firstPayment')}>
-                  <input
-                    type="date"
-                    value={firstDueDate}
-                    onChange={(e) => setFirstDueDate(e.target.value)}
-                    className={inputClass}
-                  />
-                </Field>
-              </div>
-
-              {parseInt(paymentsCount, 10) > 1 && (
-                <Field label={t('form.paymentsEvery')}>
-                  <div className="flex gap-1.5">
-                    <input
-                      type="number"
-                      min={1}
-                      value={installmentInterval}
-                      onChange={(e) => setInstallmentInterval(e.target.value)}
-                      className={`${inputClass} w-16 text-center`}
-                    />
-                    <select
-                      value={installmentUnit}
-                      onChange={(e) => setInstallmentUnit(e.target.value as RecurrenceUnit)}
-                      className={`${inputClass} flex-1`}
-                    >
-                      <option value="WEEK">{pluralUnit('WEEK', installmentInterval)}</option>
-                      <option value="MONTH">{pluralUnit('MONTH', installmentInterval)}</option>
-                      <option value="YEAR">{pluralUnit('YEAR', installmentInterval)}</option>
-                    </select>
-                  </div>
-                </Field>
-              )}
-
-              <button
-                type="button"
-                onClick={() => setFirstPaymentPaid((prev) => !prev)}
-                className="w-full flex items-center justify-between gap-3 p-2.5 rounded-2xl bg-slate-50 dark:bg-slate-800/70 text-left"
-              >
-                <span>
-                  <span className="block text-[11px] font-black text-slate-700 dark:text-slate-200">
-                    {parseInt(paymentsCount, 10) > 1
-                      ? t('form.firstPaid')
-                      : t('form.alreadyPaid')}
-                  </span>
-                  <span className="block text-[10px] text-slate-400 font-medium">
-                    {t('form.paidHint')}
-                  </span>
-                </span>
-                <span
-                  className={`w-11 h-6 rounded-full flex items-center px-0.5 transition-colors flex-shrink-0 ${
-                    firstPaymentPaid ? 'bg-emerald-500' : 'bg-slate-300 dark:bg-slate-700'
-                  }`}
-                >
-                  <span
-                    className={`w-5 h-5 rounded-full bg-white shadow transition-transform ${
-                      firstPaymentPaid ? 'translate-x-5' : ''
-                    }`}
-                  />
-                </span>
-              </button>
-
-              <InstallmentPreview
-                total={parseFloat(amount.replace(',', '.')) || 0}
-                count={Math.max(1, parseInt(paymentsCount, 10) || 1)}
-                currency={currency}
-                firstPaid={firstPaymentPaid}
-              />
-            </div>
-          )}
         </div>
       )}
 
@@ -1171,7 +998,7 @@ function chequeNumberForIndex(base: string, index: number, count: number): strin
 }
 
 /** Shows the schedule the way it will be booked, before anything is saved. */
-function InstallmentPreview({
+export function InstallmentPreview({
   total,
   count,
   currency,

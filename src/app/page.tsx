@@ -44,6 +44,7 @@ import { ReportsTab } from '@/components/reports-tab';
 import { SettingsTab } from '@/components/settings-tab';
 import { QuickAddSheet } from '@/components/quick-add-sheet';
 import { StatementImportModal } from '@/components/statement-import-modal';
+import { ObligationQuickAddModal } from '@/components/obligation-quick-add-modal';
 import { LanguageProvider, useT } from '@/i18n/context';
 import { seededName } from '@/i18n/categories';
 import { tr } from '@/i18n/t';
@@ -73,6 +74,7 @@ function FinanceApp() {
     'MANUAL' | 'SCAN' | 'VOICE' | 'STATEMENT' | null
   >(null);
   const [isImportingStatement, setIsImportingStatement] = useState(false);
+  const [isCreatingObligation, setIsCreatingObligation] = useState(false);
   const [formPrefill, setFormPrefill] = useState<TransactionPrefill | null>(null);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
   const [pendingPlanned, setPendingPlanned] = useState<Plan[]>([]);
@@ -140,6 +142,7 @@ function FinanceApp() {
     if (quick === 'scan') setQuickAddMode('SCAN');
     else if (quick === 'voice') setQuickAddMode('VOICE');
     else if (quick === 'list' || quick === 'statement') setIsImportingStatement(true);
+    else if (quick === 'obligation') setIsCreatingObligation(true);
     else if (quick === 'expense' || quick === 'add') setQuickAddMode('MANUAL');
   }, [searchParams, mounted]);
 
@@ -449,6 +452,7 @@ function FinanceApp() {
           onClose={() => setQuickAddMode(null)}
           onOpenFullForm={(prefill) => setFormPrefill(prefill)}
           onOpenStatementImport={() => setIsImportingStatement(true)}
+          onOpenObligation={() => setIsCreatingObligation(true)}
           onSaved={() => setToast(t('app.operationSaved'))}
         />
       )}
@@ -463,6 +467,16 @@ function FinanceApp() {
           onImported={(count) =>
             setToast(`${t('app.imported')}: ${count}`)
           }
+        />
+      )}
+
+      {isCreatingObligation && (
+        <ObligationQuickAddModal
+          categories={categories}
+          accounts={accounts}
+          baseCurrency={settings.baseCurrency}
+          onClose={() => setIsCreatingObligation(false)}
+          onSaved={() => setToast(t('app.operationSaved'))}
         />
       )}
 

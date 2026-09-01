@@ -109,6 +109,7 @@ export const DICTIONARY = {
   'quick.receipt': { ru: 'Чек', he: 'קבלה', uk: 'Чек', en: 'Receipt' },
   'quick.list': { ru: 'Список', he: 'רשימה', uk: 'Список', en: 'List' },
   'quick.voice': { ru: 'Голос', he: 'קול', uk: 'Голос', en: 'Voice' },
+  'quick.obligation': { ru: 'Обязательство', he: 'התחייבות', uk: "Зобов'язання", en: 'Obligation' },
   'quick.photograph': { ru: 'Сфотографировать чек', he: 'צילום קבלה', uk: 'Сфотографувати чек', en: 'Photograph the receipt' },
   'quick.scanning': { ru: 'Gemini распознаёт чек…', he: 'Gemini מזהה את הקבלה…', uk: 'Gemini розпізнає чек…', en: 'Gemini is reading the receipt…' },
   'quick.voicePrompt': {
@@ -2275,6 +2276,28 @@ export const DICTIONARY = {
   },
   'form.profit': { ru: 'Прибыль', he: 'רווח', uk: 'Прибуток', en: 'Profit' },
   'form.schedule': { ru: 'График платежей', he: 'לוח תשלומים', uk: 'Графік платежів', en: 'Payment schedule' },
+
+  // ----------------------------------------------- obligation quick add
+  'obq.title': { ru: 'Новое обязательство', he: 'התחייבות חדשה', uk: "Нове зобов'язання", en: 'New obligation' },
+  'obq.subtitle': {
+    ru: 'Рассрочка, кредит, налог или другое обязательство — со своим графиком, отдельно от сегодняшних расходов',
+    he: 'תשלומים, הלוואה, מס או התחייבות אחרת — עם לוח תשלומים משלה, בנפרד מההוצאות של היום',
+    uk: "Розстрочка, кредит, податок або інше зобов'язання — зі своїм графіком, окремо від сьогоднішніх витрат",
+    en: 'Instalments, a loan, tax or another obligation — with its own schedule, separate from today’s expenses',
+  },
+  'obq.titlePlaceholder': { ru: 'Например, кредит на авто', he: 'לדוגמה, הלוואת רכב', uk: 'Наприклад, кредит на авто', en: 'e.g. car loan' },
+  'obq.taxPlaceholder': { ru: 'Например, налог на имущество', he: 'לדוגמה, ארנונה', uk: 'Наприклад, податок на майно', en: 'e.g. property tax' },
+  'obq.totalAmount': { ru: 'Общая сумма', he: 'סכום כולל', uk: 'Загальна сума', en: 'Total amount' },
+  'obq.taxAmount': { ru: 'Сумма', he: 'סכום', uk: 'Сума', en: 'Amount' },
+  'obq.taxPeriod': { ru: 'Период, за который налог', he: 'התקופה שעבורה המס', uk: 'Період, за який податок', en: 'Period the tax covers' },
+  'obq.taxPeriodPlaceholder': { ru: 'например, III квартал 2026', he: 'לדוגמה, רבעון 3 2026', uk: 'наприклад, III квартал 2026', en: 'e.g. Q3 2026' },
+  'obq.taxPeriodHint': {
+    ru: 'Свободный текст — квартал, месяц или год, за который начислен налог',
+    he: 'טקסט חופשי — הרבעון, החודש או השנה שעבורם חויב המס',
+    uk: 'Вільний текст — квартал, місяць або рік, за який нараховано податок',
+    en: 'Free text — the quarter, month or year the tax was assessed for',
+  },
+  'obq.create': { ru: 'Создать обязательство', he: 'יצירת ההתחייבות', uk: "Створити зобов'язання", en: 'Create obligation' },
 
   // --------------------------------------------------------------- debts
   'debts.total': { ru: 'Всего обязательств', he: 'סך ההתחייבויות', uk: 'Усього зобов’язань', en: 'Total owed' },
