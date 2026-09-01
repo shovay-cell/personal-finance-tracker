@@ -1087,7 +1087,7 @@ export function TransactionFormModal({
 
 
 /** Liability types that can be created straight from the expense form. */
-const DEBT_KIND_META: Record<
+export const DEBT_KIND_META: Record<
   DebtKind,
   { label: TranslationKey; defaultTitle: TranslationKey; defaultPayments: number }
 > = {

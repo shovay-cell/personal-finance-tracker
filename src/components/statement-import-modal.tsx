@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import {
   CurrencyCode,
+  DebtKind,
   FinanceAccount,
   FinanceCategory,
   ParsedStatementRow,
@@ -34,6 +35,7 @@ import { useT } from '@/i18n/context';
 import { usePasteUpload } from '@/hooks/use-paste-upload';
 import { accountName, categoryName } from '@/i18n/categories';
 import { Field, ModalShell, PrimaryButton, inputClass } from './ui';
+import { DEBT_KIND_META } from './transaction-form-modal';
 
 interface DraftRow extends ParsedStatementRow {
   id: string;
@@ -43,8 +45,8 @@ interface DraftRow extends ParsedStatementRow {
   duplicate: boolean;
   /** Which file this row came from, shown only when more than one was picked. */
   sourceFile?: string;
-  /** Booked as a debt plan (future payment) instead of an immediate expense. */
-  asDebt: boolean;
+  /** Booked as a debt plan (future payment) instead of an immediate expense — and which kind. */
+  debtKind: DebtKind | null;
   debtPaymentsCount: string;
 }
 
@@ -130,7 +132,7 @@ export function StatementImportModal({
             date: row.date || todayIso(),
             categoryId: resolveStatementCategoryId(row, categories) || '',
             selected: true,
-            asDebt: false,
+            debtKind: null,
             debtPaymentsCount: '1',
             sourceFile: files.length > 1 ? file.name : undefined,
             duplicate: transactions.some(
@@ -190,14 +192,16 @@ export function StatementImportModal({
 
     try {
       for (const row of selected) {
-        // A row marked «Кредит / рассрочка» is not money spent today — it
-        // becomes a debt plan with its own schedule, same as picking that
-        // option in the expense form, so it shows in Долги and Safe-to-Spend
-        // instead of landing in the ledger as an immediate expense.
-        if (row.asDebt && row.kind === 'EXPENSE') {
+        // A row marked as a debt (кредит/рассрочка/налог/чек) is not money
+        // spent today — it becomes a debt plan with its own schedule, same
+        // as picking that option in the expense form, so it shows under the
+        // right kind in Долги and Safe-to-Spend instead of landing in the
+        // ledger as an immediate expense.
+        if (row.debtKind && row.kind === 'EXPENSE') {
+          const meta = DEBT_KIND_META[row.debtKind];
           await addFixedSchedulePlan({
-            planType: 'INSTALLMENT',
-            title: row.description?.trim() || t('tf.kindInstallmentTitle'),
+            planType: row.debtKind,
+            title: row.description?.trim() || t(meta.defaultTitle),
             merchant: row.description,
             totalAmount: row.amount as number,
             currency: row.currency || baseCurrency,
@@ -392,21 +396,22 @@ export function StatementImportModal({
             <button
               type="button"
               onClick={() => {
-                const allOn = rows.every((row) => row.kind !== 'EXPENSE' || row.asDebt);
+                const allOn = rows.every((row) => row.kind !== 'EXPENSE' || row.debtKind);
                 setRows(
                   (prev) =>
-                    prev?.map((row) => (row.kind === 'EXPENSE' ? { ...row, asDebt: !allOn } : row)) ||
-                    null
+                    prev?.map((row) =>
+                      row.kind === 'EXPENSE' ? { ...row, debtKind: allOn ? null : 'INSTALLMENT' } : row
+                    ) || null
                 );
               }}
               className={`w-full flex items-center justify-center gap-1.5 py-2 rounded-xl text-[11px] font-black transition-colors ${
-                rows.every((row) => row.kind !== 'EXPENSE' || row.asDebt)
+                rows.every((row) => row.kind !== 'EXPENSE' || row.debtKind)
                   ? 'bg-violet-100 text-violet-700 dark:bg-violet-950/60 dark:text-violet-400'
                   : 'bg-slate-100 dark:bg-slate-800 text-slate-500'
               }`}
             >
               <CreditCard className="w-3.5 h-3.5" />
-              {rows.every((row) => row.kind !== 'EXPENSE' || row.asDebt)
+              {rows.every((row) => row.kind !== 'EXPENSE' || row.debtKind)
                 ? t('si.bulkAsDebtOff')
                 : t('si.bulkAsDebt')}
             </button>
@@ -513,9 +518,9 @@ export function StatementImportModal({
                     <div className="flex items-center gap-2">
                       <button
                         type="button"
-                        onClick={() => update(row.id, { asDebt: !row.asDebt })}
+                        onClick={() => update(row.id, { debtKind: row.debtKind ? null : 'INSTALLMENT' })}
                         className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[10px] font-black flex-shrink-0 ${
-                          row.asDebt
+                          row.debtKind
                             ? 'bg-violet-100 text-violet-700 dark:bg-violet-950/60 dark:text-violet-400'
                             : 'bg-slate-100 dark:bg-slate-800 text-slate-400'
                         }`}
@@ -523,7 +528,7 @@ export function StatementImportModal({
                         <CreditCard className="w-3 h-3" />
                         {t('si.asDebt')}
                       </button>
-                      {row.asDebt && (
+                      {row.debtKind && (
                         <>
                           <span className="text-[10px] text-slate-400 font-bold">
                             {t('si.paymentsCount')}
@@ -539,7 +544,34 @@ export function StatementImportModal({
                       )}
                     </div>
                   )}
-                  {row.asDebt && (
+                  {row.debtKind && (
+                    <div className="grid grid-cols-4 gap-1.5">
+                      {(Object.keys(DEBT_KIND_META) as DebtKind[]).map((option) => {
+                        const meta = DEBT_KIND_META[option];
+                        const isActive = row.debtKind === option;
+                        return (
+                          <button
+                            key={option}
+                            type="button"
+                            onClick={() =>
+                              update(row.id, {
+                                debtKind: option,
+                                debtPaymentsCount: String(meta.defaultPayments),
+                              })
+                            }
+                            className={`py-1.5 rounded-lg text-[10px] font-black border transition-all ${
+                              isActive
+                                ? 'bg-violet-500 text-white border-transparent'
+                                : 'bg-slate-50 dark:bg-slate-800 text-slate-500 border-slate-200 dark:border-slate-700'
+                            }`}
+                          >
+                            {t(meta.label)}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                  {row.debtKind && (
                     <p className="text-[10px] text-violet-500 dark:text-violet-400 font-medium">
                       {t('si.asDebtHint')}
                     </p>
