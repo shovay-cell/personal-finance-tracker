@@ -153,6 +153,23 @@ export function sumBase(transactions: Transaction[]): number {
 }
 
 /**
+ * A transaction that books a payment on a debt (instalment, tax, loan or
+ * cheque — anything with a fixed payment schedule): those are tracked as
+ * obligations in Долги, not as the period's regular spending, so the two
+ * totals never count the same money twice.
+ */
+export function isDebtRepayment(transaction: Transaction, plans: Plan[]): boolean {
+  if (!transaction.planId) return false;
+  const plan = plans.find((p) => p.id === transaction.planId);
+  return plan?.scheduleType === 'FIXED_SCHEDULE';
+}
+
+/** Real period spending: booked transactions minus debt-plan repayments. */
+export function excludeDebtRepayments(transactions: Transaction[], plans: Plan[]): Transaction[] {
+  return transactions.filter((t) => !isDebtRepayment(t, plans));
+}
+
+/**
  * Income with its separated VAT taken out: what is actually the user's to spend.
  * The VAT share is applied to the base amount so mixed currencies stay correct.
  */

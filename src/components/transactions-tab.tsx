@@ -15,6 +15,7 @@ import {
   CurrencyCode,
   FinanceAccount,
   FinanceCategory,
+  Plan,
   ProfileMember,
   Transaction,
   TransactionKind,
@@ -23,6 +24,7 @@ import { computeAccountBalance } from '@/lib/db';
 import { ACCOUNT_KIND_LABELS, getCategoryIcon } from '@/constants/categories';
 import {
   DateRange,
+  excludeDebtRepayments,
   filterTransactions,
   formatDateHuman,
   formatMoney,
@@ -37,6 +39,7 @@ interface TransactionsTabProps {
   categories: FinanceCategory[];
   accounts: FinanceAccount[];
   members: ProfileMember[];
+  plans: Plan[];
   baseCurrency: CurrencyCode;
   range: DateRange;
   onSelect: (transaction: Transaction) => void;
@@ -47,6 +50,7 @@ export function TransactionsTab({
   categories,
   accounts,
   members,
+  plans,
   baseCurrency,
   range,
   onSelect,
@@ -106,8 +110,14 @@ export function TransactionsTab({
     return Array.from(map.entries());
   }, [visible]);
 
-  const totalExpense = sumBase(periodTransactions.filter((t) => t.kind === 'EXPENSE'));
-  const totalIncome = sumBase(periodTransactions.filter((t) => t.kind === 'INCOME'));
+  // Debt/instalment/loan repayments stay visible in the list below but are
+  // tracked in Долги, not counted again as regular period spending here.
+  const periodSpending = useMemo(
+    () => excludeDebtRepayments(periodTransactions, plans),
+    [periodTransactions, plans]
+  );
+  const totalExpense = sumBase(periodSpending.filter((t) => t.kind === 'EXPENSE'));
+  const totalIncome = sumBase(periodSpending.filter((t) => t.kind === 'INCOME'));
 
   return (
     <div className="space-y-4">

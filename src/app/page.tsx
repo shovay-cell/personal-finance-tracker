@@ -308,6 +308,7 @@ function FinanceApp() {
             categories={categories}
             accounts={accounts}
             members={members}
+            plans={plans}
             baseCurrency={settings.baseCurrency}
             range={range}
             onSelect={setEditingTransaction}

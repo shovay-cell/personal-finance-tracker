@@ -21,6 +21,7 @@ import {
   PeriodPreset,
   budgetProgress,
   categoryBreakdown,
+  excludeDebtRepayments,
   filterTransactions,
   formatMoney,
   monthlyDynamics,
@@ -103,17 +104,24 @@ export function ReportsTab({
     [transactions, range]
   );
 
-  const expenseRows = useMemo(
-    () => categoryBreakdown(periodTransactions, categories, 'EXPENSE'),
-    [periodTransactions, categories]
-  );
-  const incomeRows = useMemo(
-    () => categoryBreakdown(periodTransactions, categories, 'INCOME'),
-    [periodTransactions, categories]
+  // Debt/instalment/loan repayments are tracked in Долги, not counted again
+  // as regular spending here — otherwise the same credit inflates both.
+  const periodSpending = useMemo(
+    () => excludeDebtRepayments(periodTransactions, plans),
+    [periodTransactions, plans]
   );
 
-  const totalExpense = sumBase(periodTransactions.filter((t) => t.kind === 'EXPENSE'));
-  const totalIncome = sumBase(periodTransactions.filter((t) => t.kind === 'INCOME'));
+  const expenseRows = useMemo(
+    () => categoryBreakdown(periodSpending, categories, 'EXPENSE'),
+    [periodSpending, categories]
+  );
+  const incomeRows = useMemo(
+    () => categoryBreakdown(periodSpending, categories, 'INCOME'),
+    [periodSpending, categories]
+  );
+
+  const totalExpense = sumBase(periodSpending.filter((t) => t.kind === 'EXPENSE'));
+  const totalIncome = sumBase(periodSpending.filter((t) => t.kind === 'INCOME'));
 
   const dynamics = useMemo(() => monthlyDynamics(transactions, 6), [transactions]);
   const budgetRows = useMemo(
