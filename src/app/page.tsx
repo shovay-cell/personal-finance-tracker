@@ -338,9 +338,12 @@ function FinanceApp() {
             accounts={accounts}
             members={members}
             plans={plans}
+            occurrences={occurrences}
+            settings={settings}
             baseCurrency={settings.baseCurrency}
             range={range}
             onSelect={setEditingTransaction}
+            onShowUpcoming={() => setActiveTab('planned')}
           />
         )}
 

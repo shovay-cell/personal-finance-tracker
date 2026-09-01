@@ -137,6 +137,22 @@ export const DICTIONARY = {
     en: 'Tap “+” to record a spend in two taps, photograph a receipt or dictate it.',
   },
   'tx.noDescription': { ru: 'Без описания', he: 'ללא תיאור', uk: 'Без опису', en: 'No description' },
+  'tx.chipToday': { ru: 'Сегодня', he: 'היום', uk: 'Сьогодні', en: 'Today' },
+  'tx.chipWeek': { ru: '7 дней', he: '7 ימים', uk: '7 днів', en: '7 days' },
+  'tx.chipMonth': { ru: 'Месяц', he: 'חודש', uk: 'Місяць', en: 'Month' },
+  'tx.chipUpcoming': { ru: 'Предстоящие', he: 'קרובים', uk: 'Найближчі', en: 'Upcoming' },
+  'tx.chipAll': { ru: 'Всё', he: 'הכול', uk: 'Усе', en: 'All' },
+  'tx.dueForPayment': { ru: 'К оплате', he: 'לתשלום', uk: 'До сплати', en: 'Due' },
+  'tx.expected': { ru: 'Ожидается', he: 'צפוי', uk: 'Очікується', en: 'Expected' },
+  'tx.showAllUpcoming': { ru: 'Показать все планы', he: 'הצגת כל התוכניות', uk: 'Показати всі плани', en: 'Show all plans' },
+  'tx.resetFilter': { ru: 'Сбросить', he: 'איפוס', uk: 'Скинути', en: 'Reset' },
+  'tx.emptyUpcomingTitle': { ru: 'Предстоящих событий нет', he: 'אין אירועים קרובים', uk: 'Найближчих подій немає', en: 'Nothing upcoming' },
+  'tx.emptyUpcomingText': {
+    ru: 'Здесь появятся ближайшие плановые платежи и ожидаемые доходы до конца месяца.',
+    he: 'כאן יופיעו התשלומים המתוכננים וההכנסות הצפויות עד סוף החודש.',
+    uk: 'Тут з’являться найближчі планові платежі та очікувані доходи до кінця місяця.',
+    en: 'Upcoming planned payments and expected income for the rest of the month will show up here.',
+  },
 
   // ---------------------------------------------------------------- settings
   'settings.profile': { ru: 'Профиль', he: 'פרופיל', uk: 'Профіль', en: 'Profile' },
