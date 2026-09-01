@@ -13,7 +13,7 @@ import {
 } from 'lucide-react';
 import {
   CurrencyCode,
-  DebtKind,
+  CreatableDebtKind,
   FinanceAccount,
   FinanceCategory,
   ParsedStatementRow,
@@ -46,7 +46,7 @@ interface DraftRow extends ParsedStatementRow {
   /** Which file this row came from, shown only when more than one was picked. */
   sourceFile?: string;
   /** Booked as a debt plan (future payment) instead of an immediate expense — and which kind. */
-  debtKind: DebtKind | null;
+  debtKind: CreatableDebtKind | null;
   debtPaymentsCount: string;
 }
 
@@ -546,7 +546,7 @@ export function StatementImportModal({
                   )}
                   {row.debtKind && (
                     <div className="grid grid-cols-4 gap-1.5">
-                      {(Object.keys(DEBT_KIND_META) as DebtKind[]).map((option) => {
+                      {(Object.keys(DEBT_KIND_META) as CreatableDebtKind[]).map((option) => {
                         const meta = DEBT_KIND_META[option];
                         const isActive = row.debtKind === option;
                         return (

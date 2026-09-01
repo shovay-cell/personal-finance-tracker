@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import {
   Check,
+  CircleDashed,
   CreditCard,
   FileSignature,
   Landmark,
@@ -25,6 +26,7 @@ const KIND_ICON: Record<PlanType, typeof CreditCard> = {
   INSTALLMENT: CreditCard,
   TAX: Landmark,
   LOAN: Wallet,
+  OTHER: CircleDashed,
   CHEQUE: FileSignature,
 };
 
@@ -35,6 +37,7 @@ const KIND_COLOR: Record<PlanType, string> = {
   INSTALLMENT: '#8B5CF6',
   TAX: '#F97316',
   LOAN: '#0EA5E9',
+  OTHER: '#64748B',
   CHEQUE: '#A855F7',
 };
 

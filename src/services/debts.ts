@@ -21,6 +21,7 @@ export interface DebtsOverview {
   installments: number;
   taxes: number;
   loans: number;
+  other: number;
   total: number;
 }
 
@@ -62,11 +63,17 @@ export function debtsOverview(input: {
     installments: round(byType('INSTALLMENT')),
     taxes: round(byType('TAX')),
     loans: round(byType('LOAN')),
+    other: round(byType('OTHER')),
     total: 0,
   };
 
   overview.total = round(
-    overview.vat + overview.cheques + overview.installments + overview.taxes + overview.loans
+    overview.vat +
+      overview.cheques +
+      overview.installments +
+      overview.taxes +
+      overview.loans +
+      overview.other
   );
   return overview;
 }

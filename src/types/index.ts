@@ -174,10 +174,16 @@ export interface RecurringTotals {
 }
 
 /**
- * @deprecated Superseded by `Plan.planType` (scheduleType: FIXED_SCHEDULE).
- * Kept only so the one-time migration and old Drive backups can still be read.
+ * Liability kinds offered when marking an expense as an obligation
+ * ("Оформить как обязательство"). `CHEQUE` is no longer offered there — a
+ * cheque-as-obligation is superseded by the bearer-cheque flow — but stays
+ * in the union so old Plan rows and Drive backups created before this change
+ * still read back correctly.
  */
-export type DebtKind = 'INSTALLMENT' | 'TAX' | 'LOAN' | 'CHEQUE';
+export type DebtKind = 'INSTALLMENT' | 'TAX' | 'LOAN' | 'OTHER' | 'CHEQUE';
+
+/** The kinds actually offered by the "Оформить как обязательство" picker. */
+export type CreatableDebtKind = Exclude<DebtKind, 'CHEQUE'>;
 
 /**
  * @deprecated Superseded by `Plan` (scheduleType: FIXED_SCHEDULE). See the note there.
@@ -244,6 +250,7 @@ export type PlanType =
   | 'INSTALLMENT'
   | 'TAX'
   | 'LOAN'
+  | 'OTHER'
   | 'CHEQUE';
 
 export type PlanStatus = 'ACTIVE' | 'COMPLETED' | 'CANCELLED';
@@ -355,7 +362,7 @@ export interface UpcomingItem {
   date: string;
   title: string;
   amount: number;
-  source: 'VAT' | 'CHEQUE' | 'INSTALLMENT' | 'TAX' | 'LOAN' | 'PLANNED' | 'BEARER_CHEQUE';
+  source: 'VAT' | 'CHEQUE' | 'INSTALLMENT' | 'TAX' | 'LOAN' | 'OTHER' | 'PLANNED' | 'BEARER_CHEQUE';
   isOverdue: boolean;
 }
 

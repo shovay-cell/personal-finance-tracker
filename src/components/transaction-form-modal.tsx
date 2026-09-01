@@ -27,7 +27,7 @@ import {
   TransactionKind,
   TransactionSplit,
   RecurrenceUnit,
-  DebtKind,
+  CreatableDebtKind,
 } from '@/types';
 import {
   addBearerCheque,
@@ -148,7 +148,7 @@ export function TransactionFormModal({
   const [repeatCount, setRepeatCount] = useState('1');
   const [repeatUnit, setRepeatUnit] = useState<RecurrenceUnit>('MONTH');
   const [isDebt, setIsDebt] = useState(false);
-  const [debtKind, setDebtKind] = useState<DebtKind>('INSTALLMENT');
+  const [debtKind, setDebtKind] = useState<CreatableDebtKind>('INSTALLMENT');
   const [paymentsCount, setPaymentsCount] = useState('6');
   const [installmentUnit, setInstallmentUnit] = useState<RecurrenceUnit>('MONTH');
   const [installmentInterval, setInstallmentInterval] = useState('1');
@@ -711,7 +711,7 @@ export function TransactionFormModal({
           {isDebt && (
             <div className="space-y-2.5 pt-1">
               <div className="grid grid-cols-4 gap-1.5">
-                {(Object.keys(DEBT_KIND_META) as DebtKind[]).map((option) => {
+                {(Object.keys(DEBT_KIND_META) as CreatableDebtKind[]).map((option) => {
                   const meta = DEBT_KIND_META[option];
                   const isActive = debtKind === option;
                   return (
@@ -1088,7 +1088,7 @@ export function TransactionFormModal({
 
 /** Liability types that can be created straight from the expense form. */
 export const DEBT_KIND_META: Record<
-  DebtKind,
+  CreatableDebtKind,
   { label: TranslationKey; defaultTitle: TranslationKey; defaultPayments: number }
 > = {
   INSTALLMENT: {
@@ -1096,9 +1096,9 @@ export const DEBT_KIND_META: Record<
     defaultTitle: 'tf.kindInstallmentTitle',
     defaultPayments: 6,
   },
-  CHEQUE: { label: 'tf.kindCheque', defaultTitle: 'tf.kindChequeTitle', defaultPayments: 1 },
   TAX: { label: 'tf.kindTax', defaultTitle: 'tf.kindTax', defaultPayments: 1 },
   LOAN: { label: 'tf.kindLoan', defaultTitle: 'tf.kindLoan', defaultPayments: 1 },
+  OTHER: { label: 'tf.kindOther', defaultTitle: 'tf.kindOtherTitle', defaultPayments: 1 },
 };
 
 /** The period noun in the form that agrees with the number beside it. */

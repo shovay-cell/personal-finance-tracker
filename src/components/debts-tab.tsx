@@ -6,6 +6,7 @@ import {
   Ban,
   CalendarClock,
   Check,
+  CircleDashed,
   CreditCard,
   FileSignature,
   Landmark,
@@ -37,7 +38,7 @@ import { useT } from '@/i18n/context';
 import type { TranslationKey } from '@/i18n/dictionary';
 import { Card, EmptyState, SectionTitle } from './ui';
 
-type Segment = 'ALL' | 'VAT' | 'CHEQUE' | 'INSTALLMENT' | 'TAX' | 'LOAN';
+type Segment = 'ALL' | 'VAT' | 'CHEQUE' | 'INSTALLMENT' | 'TAX' | 'LOAN' | 'OTHER';
 
 interface DebtsTabProps {
   settings: FinanceSettings;
@@ -109,6 +110,7 @@ export function DebtsTab({
     { id: 'INSTALLMENT', label: t('debts.installments'), amount: overview.installments, icon: <CreditCard className="w-3.5 h-3.5" />, color: '#8B5CF6' },
     { id: 'TAX', label: t('debts.taxes'), amount: overview.taxes, icon: <Landmark className="w-3.5 h-3.5" />, color: '#F97316' },
     { id: 'LOAN', label: t('debts.loans'), amount: overview.loans, icon: <Wallet className="w-3.5 h-3.5" />, color: '#0EA5E9' },
+    { id: 'OTHER', label: t('debts.other'), amount: overview.other, icon: <CircleDashed className="w-3.5 h-3.5" />, color: '#64748B' },
   ];
 
   return (
@@ -291,7 +293,7 @@ export function DebtsTab({
         </>
       )}
 
-      {(segment === 'INSTALLMENT' || segment === 'TAX' || segment === 'LOAN') && (
+      {(segment === 'INSTALLMENT' || segment === 'TAX' || segment === 'LOAN' || segment === 'OTHER') && (
         <DebtList
           kind={segment}
           rows={ofKind(segment)}
@@ -311,7 +313,7 @@ function DebtList({
   categories,
   accounts,
 }: {
-  kind: 'INSTALLMENT' | 'TAX' | 'LOAN' | 'CHEQUE';
+  kind: 'INSTALLMENT' | 'TAX' | 'LOAN' | 'OTHER' | 'CHEQUE';
   rows: ReturnType<typeof describeAllFixedSchedulePlans>;
   currency: CurrencyCode;
   categories: FinanceCategory[];
@@ -325,6 +327,7 @@ function DebtList({
     INSTALLMENT: { empty: 'dt.emptyInstallments', hint: 'dt.hintInstallments' },
     TAX: { empty: 'dt.emptyTaxes', hint: 'dt.hintTaxes' },
     LOAN: { empty: 'dt.emptyLoans', hint: 'dt.hintLoans' },
+    OTHER: { empty: 'dt.emptyOther', hint: 'dt.hintOther' },
     CHEQUE: { empty: 'dt.emptyCheques', hint: 'dt.hintCheques' },
   }[kind] as { empty: TranslationKey; hint: TranslationKey };
 
