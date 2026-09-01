@@ -1246,6 +1246,19 @@ export const DICTIONARY = {
     en: 'A similar operation already exists — check so it is not counted twice',
   },
   'si.aiUnsure': { ru: 'ИИ не уверен', he: 'ה‑AI אינו בטוח', uk: 'ШІ не впевнений', en: 'The AI is unsure about' },
+  // ------------------------------------------------------------- paste
+  'paste.unsupportedFormat': {
+    ru: 'Из буфера обмена вставлен неподдерживаемый формат',
+    he: 'הודבק מהלוח פורמט שאינו נתמך',
+    uk: 'З буфера обміну вставлено непідтримуваний формат',
+    en: 'Pasted from the clipboard is a format we can’t use here',
+  },
+  'paste.hint': {
+    ru: 'Можно вставить изображение или файл из буфера обмена (Ctrl+V)',
+    he: 'ניתן להדביק תמונה או קובץ מהלוח (Ctrl+V)',
+    uk: 'Можна вставити зображення або файл із буфера обміну (Ctrl+V)',
+    en: 'You can paste an image or file from the clipboard (Ctrl+V)',
+  },
   // ------------------------------------------------- transaction form
   'tf.scanFailed': { ru: 'Не удалось распознать чек', he: 'לא הצלחנו לקרוא את הקבלה', uk: 'Не вдалося розпізнати чек', en: 'Could not read the receipt' },
   'tf.amountAboveZero': {

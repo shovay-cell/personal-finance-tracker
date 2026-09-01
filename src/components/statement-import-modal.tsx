@@ -31,6 +31,7 @@ import {
 import { isCsvFile, isSpreadsheetFile, readCsvAsTable, readSpreadsheetAsTable } from '@/services/ai/statement-table';
 import { GeminiKeyPrompt } from './gemini-key-prompt';
 import { useT } from '@/i18n/context';
+import { usePasteUpload } from '@/hooks/use-paste-upload';
 import { accountName, categoryName } from '@/i18n/categories';
 import { Field, ModalShell, PrimaryButton, inputClass } from './ui';
 
@@ -156,6 +157,23 @@ export function StatementImportModal({
     setIsBusy(false);
     setProgress(null);
   };
+
+  // Ctrl+V on the upload screen drops a copied screenshot, PDF or
+  // spreadsheet file straight into the same pipeline as "Выбрать файлы".
+  // Only active before rows are parsed — once the list is up for review, a
+  // paste would silently replace it rather than add to it.
+  usePasteUpload({
+    accept: [
+      'image/',
+      'application/pdf',
+      'application/vnd.ms-excel',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'text/csv',
+    ],
+    onFile: (file) => handleFiles([file]),
+    onUnsupported: () => setError(t('paste.unsupportedFormat')),
+    enabled: !rows && !isBusy,
+  });
 
   const update = (id: string, patch: Partial<DraftRow>) =>
     setRows((prev) => prev?.map((row) => (row.id === id ? { ...row, ...patch } : row)) || null);

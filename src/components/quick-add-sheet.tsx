@@ -20,6 +20,7 @@ import { TransactionPrefill } from './transaction-form-modal';
 import { CategoryEditorModal } from './category-manager-modal';
 import { BEARER_CHEQUE_CATEGORY_ID, CURRENCIES } from '@/constants/categories';
 import { useT } from '@/i18n/context';
+import { usePasteUpload } from '@/hooks/use-paste-upload';
 import { GeminiKeyPrompt } from './gemini-key-prompt';
 import {
   analyzeReceiptWithAI,
@@ -253,6 +254,15 @@ export function QuickAddSheet({
       setIsBusy(false);
     }
   };
+
+  // Ctrl+V while the scan sheet is open drops a screenshot or copied receipt
+  // straight into the same pipeline as the upload buttons.
+  usePasteUpload({
+    accept: ['image/'],
+    onFile: handleScan,
+    onUnsupported: () => setError(t('paste.unsupportedFormat')),
+    enabled: mode === 'SCAN',
+  });
 
   function handleVoiceToggle() {
     if (isListening) {

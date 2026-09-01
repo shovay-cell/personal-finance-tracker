@@ -33,6 +33,7 @@ import {
   UserRound,
   CreditCard,
   FileSignature,
+  Smartphone,
   type LucideIcon,
 } from 'lucide-react';
 import {
@@ -101,6 +102,7 @@ export const CATEGORY_ICONS: Record<string, LucideIcon> = {
   HardHat,
   UserRound,
   CreditCard,
+  Smartphone,
 };
 
 export function getCategoryIcon(iconName: string): LucideIcon {
@@ -159,6 +161,16 @@ const EXPENSE_SEEDS: CategorySeed[] = [
     ],
   },
   { key: 'utilities', name: 'Коммуналка', iconName: 'Plug', colorHex: '#0EA5E9' },
+  {
+    key: 'communication',
+    name: 'Связь',
+    iconName: 'Smartphone',
+    colorHex: '#0369A1',
+    children: [
+      { key: 'communication_mobile', name: 'Сотовый телефон' },
+      { key: 'communication_internet', name: 'Интернет' },
+    ],
+  },
   {
     key: 'car',
     name: 'Машина',

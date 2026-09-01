@@ -41,6 +41,7 @@ import {
 import { exportObligationsCsv } from '@/services/export';
 import { PAYEE_KIND_OPTIONS, OBLIGATION_INCOME_CATEGORY_ID } from '@/constants/categories';
 import { useT } from '@/i18n/context';
+import { usePasteUpload } from '@/hooks/use-paste-upload';
 import { accountName, obligationStatusLabel, payeeKindLabelI18n } from '@/i18n/categories';
 import {
   analyzeReceiptWithAI,
@@ -328,6 +329,12 @@ function ObligationModal({
     setDocumentPhoto(await compressForStorage(dataUrl));
   };
 
+  usePasteUpload({
+    accept: ['image/'],
+    onFile: handlePhoto,
+    onUnsupported: () => setError(t('paste.unsupportedFormat')),
+  });
+
   const handleSave = async () => {
     const numericAmount = parseFloat(amount.replace(',', '.'));
     if (!Number.isFinite(numericAmount) || numericAmount <= 0) return setError(t('obl.enterAmount'));
@@ -532,6 +539,12 @@ function SettleObligationModal({
       setIsScanning(false);
     }
   };
+
+  usePasteUpload({
+    accept: ['image/'],
+    onFile: (file) => handleDocument(file, true),
+    onUnsupported: () => setError(t('paste.unsupportedFormat')),
+  });
 
   const handleSave = async () => {
     const numericAmount = parseFloat(amount.replace(',', '.'));

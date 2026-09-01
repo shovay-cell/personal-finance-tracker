@@ -58,6 +58,7 @@ import { translate } from '@/i18n/dictionary';
 import { getActiveLanguage } from '@/i18n/runtime';
 import { netFromGross, vatFromGross } from '@/services/vat';
 import { formatMoney } from '@/services/analytics';
+import { usePasteUpload } from '@/hooks/use-paste-upload';
 import { CategoryEditorModal } from './category-manager-modal';
 import { GeminiKeyPrompt } from './gemini-key-prompt';
 import { SplitEditor } from './split-editor';
@@ -222,6 +223,14 @@ export function TransactionFormModal({
       setIsScanning(false);
     }
   };
+
+  // Ctrl+V anywhere in the form drops a screenshot or copied receipt straight
+  // into the same scan pipeline as the upload buttons below.
+  usePasteUpload({
+    accept: ['image/'],
+    onFile: (file) => handlePhoto(file, true),
+    onUnsupported: () => setError(t('paste.unsupportedFormat')),
+  });
 
   const handleSubmit = async () => {
     const numericAmount = parseFloat(amount.replace(',', '.'));
