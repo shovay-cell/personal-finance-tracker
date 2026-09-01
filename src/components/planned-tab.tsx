@@ -3,22 +3,28 @@
 import React, { useMemo, useState } from 'react';
 import {
   AlarmClock,
+  AlertTriangle,
+  ArrowDownLeft,
+  ArrowUpRight,
   CalendarClock,
   CheckCircle2,
+  Clock,
   Pause,
   Play,
   Plus,
-  Repeat,
+  Scale,
   Trash2,
-  TrendingUp,
 } from 'lucide-react';
 import {
+  BearerCheque,
   CurrencyCode,
   FinanceAccount,
   FinanceCategory,
   FinanceSettings,
+  Obligation,
+  ObligationSettlement,
   Plan,
-  PlanType,
+  PlanOccurrence,
   RecurrenceKind,
   TransactionKind,
 } from '@/types';
@@ -30,17 +36,11 @@ import {
   deletePlan,
   updatePlan,
 } from '@/lib/db';
-import { describeRecurrence, materializeRecurringPlan, planState, recurringTotals } from '@/services/planned';
-import { formatDateHuman, formatMoney } from '@/services/analytics';
-import { paymentCalendar } from '@/services/forecast';
-import {
-  getCategoryIcon,
-  INVESTMENT_CATEGORY_ID,
-  SUBSCRIPTION_CATEGORY_ID,
-} from '@/constants/categories';
-import { PaymentCalendar } from './payment-calendar';
+import { describeRecurrence, materializeRecurringPlan } from '@/services/planned';
+import { formatDateHuman, formatMoney, shiftMonth } from '@/services/analytics';
+import { UpcomingEvent, groupByDay, upcomingEvents } from '@/services/upcoming';
+import { getCategoryIcon } from '@/constants/categories';
 import { useT } from '@/i18n/context';
-import type { TranslationKey } from '@/i18n/dictionary';
 import { accountName, categoryName } from '@/i18n/categories';
 import {
   Card,
@@ -55,137 +55,187 @@ import {
 
 interface PlannedTabProps {
   plans: Plan[];
+  occurrences: PlanOccurrence[];
+  obligations: Obligation[];
+  settlements: ObligationSettlement[];
+  bearerCheques: BearerCheque[];
   categories: FinanceCategory[];
   accounts: FinanceAccount[];
   settings: FinanceSettings;
   autoCreateDefault: boolean;
 }
 
-/** The three RECURRING plan types this tab shows; each carries translation
- *  keys, so the wording follows the language. */
-type RecurringPlanType = 'PAYMENT' | 'SUBSCRIPTION' | 'INVESTMENT';
+type Preset = 'ALL' | 'TODAY' | 'WEEK' | 'MONTH' | 'NEXT_MONTH' | 'OVERDUE' | 'UNCONFIRMED';
 
-const PLAN_KIND_META: Record<
-  RecurringPlanType,
-  {
-    label: TranslationKey;
-    addLabel: TranslationKey;
-    emptyTitle: TranslationKey;
-    emptyText: TranslationKey;
-    defaultCategoryId?: string;
-  }
-> = {
-  PAYMENT: {
-    label: 'plans.payments',
-    addLabel: 'pl.addPayment',
-    emptyTitle: 'pl.emptyPayments',
-    emptyText: 'pl.emptyPaymentsText',
-  },
-  SUBSCRIPTION: {
-    label: 'plans.subscriptions',
-    addLabel: 'pl.addSubscription',
-    emptyTitle: 'pl.emptySubscriptions',
-    emptyText: 'pl.emptySubscriptionsText',
-    defaultCategoryId: SUBSCRIPTION_CATEGORY_ID,
-  },
-  INVESTMENT: {
-    label: 'plans.investments',
-    addLabel: 'pl.addInvestment',
-    emptyTitle: 'pl.emptyInvestments',
-    emptyText: 'pl.emptyInvestmentsText',
-    defaultCategoryId: INVESTMENT_CATEGORY_ID,
-  },
-};
+function sumAmounts(items: { amount: number }[]): number {
+  return Math.round(items.reduce((sum, i) => sum + i.amount, 0) * 100) / 100;
+}
 
-export function PlannedTab({ plans, categories, accounts, settings, autoCreateDefault }: PlannedTabProps) {
-  const [planType, setPlanType] = useState<RecurringPlanType>('PAYMENT');
+function addDaysStr(dateStr: string, days: number): string {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const date = new Date(y, m - 1, d + days);
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(
+    date.getDate()
+  ).padStart(2, '0')}`;
+}
+
+/**
+ * One screen for every known future money movement — payments and income
+ * alike, whether they come from a recurring plan or a fixed-schedule
+ * obligation (credit, instalment, tax). Replaces the old three-way
+ * Платежи/Подписки/Инвестиции split: those were all just plans with
+ * different categories, not different kinds of future money.
+ */
+export function PlannedTab({
+  plans,
+  occurrences,
+  obligations,
+  settlements,
+  bearerCheques,
+  categories,
+  accounts,
+  settings,
+  autoCreateDefault,
+}: PlannedTabProps) {
+  const [kind, setKind] = useState<TransactionKind>('EXPENSE');
+  const [preset, setPreset] = useState<Preset>('ALL');
+  const [categoryFilter, setCategoryFilter] = useState('ALL');
   const [editing, setEditing] = useState<Plan | 'NEW' | null>(null);
-  const { t } = useT();
+  const { t, language } = useT();
 
   const baseCurrency = settings.baseCurrency;
-  const meta = PLAN_KIND_META[planType];
+  const toBase = (amount: number, currency: CurrencyCode) =>
+    convertToBase(amount, currency, settings).baseAmount;
+  const today = todayIso();
+  const thisMonth = currentMonth();
+  const nextMonth = shiftMonth(thisMonth, 1);
+  const weekEnd = addDaysStr(today, 6);
 
-  const recurringPlans = useMemo(() => plans.filter((p) => p.scheduleType === 'RECURRING'), [plans]);
-
-  const ofKind = useMemo(
-    () => recurringPlans.filter((p) => (p.planType || 'PAYMENT') === planType),
-    [recurringPlans, planType]
+  const events = useMemo(
+    () => upcomingEvents({ plans, occurrences, obligations, settlements, bearerCheques, months: 2, today, toBase }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [plans, occurrences, obligations, settlements, bearerCheques, settings, today]
   );
 
-  const states = useMemo(
-    () =>
-      ofKind
-        .map((plan) => planState(plan))
-        .sort((a, b) => (a.plan.nextDueDate || '').localeCompare(b.plan.nextDueDate || '')),
-    [ofKind]
+  const monthEvents = useMemo(
+    () => events.filter((e) => e.date.slice(0, 7) === thisMonth),
+    [events, thisMonth]
+  );
+  const dueThisMonth = sumAmounts(monthEvents.filter((e) => e.kind === 'EXPENSE'));
+  const expectedThisMonth = sumAmounts(monthEvents.filter((e) => e.kind === 'INCOME'));
+  const monthBalance = Math.round((expectedThisMonth - dueThisMonth) * 100) / 100;
+
+  const kindEvents = useMemo(() => events.filter((e) => e.kind === kind), [events, kind]);
+
+  const categoryOptions = useMemo(
+    () => categories.filter((c) => c.kind === kind && !c.parentId && !c.isHidden),
+    [categories, kind]
   );
 
-  const totals = useMemo(
-    () =>
-      recurringTotals(recurringPlans, planType, (amount, currency) =>
-        convertToBase(amount, currency, settings).baseAmount
-      ),
-    [recurringPlans, planType, settings]
+  const byCategory = useMemo(
+    () => (categoryFilter === 'ALL' ? kindEvents : kindEvents.filter((e) => e.categoryId === categoryFilter)),
+    [kindEvents, categoryFilter]
   );
 
-  // Every scheduled charge of the month, whatever section it belongs to — a cash
-  // gap does not care whether it was rent or Netflix.
-  const calendarDays = useMemo(
-    () =>
-      paymentCalendar({
-        month: currentMonth(),
-        plans: recurringPlans,
-        transactions: [],
-        today: todayIso(),
-        toBase: (amount, currency) => convertToBase(amount, currency, settings).baseAmount,
-      }),
-    [recurringPlans, settings]
+  const next7 = useMemo(
+    () => byCategory.filter((e) => e.date >= today && e.date <= weekEnd).slice(0, 5),
+    [byCategory, today, weekEnd]
   );
 
-  const overdue = states.filter((s) => s.plan.status === 'ACTIVE' && s.isOverdue);
-  const upcoming = states.filter((s) => s.plan.status === 'ACTIVE' && !s.isOverdue);
-  const inactive = states.filter((s) => s.plan.status !== 'ACTIVE');
+  const presetFiltered = useMemo(() => {
+    switch (preset) {
+      case 'TODAY':
+        return byCategory.filter((e) => e.date === today);
+      case 'WEEK':
+        return byCategory.filter((e) => e.date >= today && e.date <= weekEnd);
+      case 'MONTH':
+        return byCategory.filter((e) => e.date.slice(0, 7) === thisMonth);
+      case 'NEXT_MONTH':
+        return byCategory.filter((e) => e.date.slice(0, 7) === nextMonth);
+      case 'OVERDUE':
+        return byCategory.filter((e) => e.isOverdue);
+      case 'UNCONFIRMED':
+        return byCategory.filter((e) => e.needsConfirmation);
+      default:
+        return byCategory;
+    }
+  }, [byCategory, preset, today, weekEnd, thisMonth, nextMonth]);
+
+  const days = useMemo(() => groupByDay(presetFiltered), [presetFiltered]);
+
+  const planById = useMemo(() => new Map(plans.map((p) => [p.id, p])), [plans]);
+
+  const openEvent = (item: UpcomingEvent) => {
+    if (!item.planId) return;
+    const plan = planById.get(item.planId);
+    if (plan) setEditing(plan);
+  };
+
+  const presets: { id: Preset; label: string }[] = [
+    { id: 'ALL', label: t('pl.presetAll') },
+    { id: 'TODAY', label: t('pl.presetToday') },
+    { id: 'WEEK', label: t('pl.presetWeek') },
+    { id: 'MONTH', label: t('pl.presetMonth') },
+    { id: 'NEXT_MONTH', label: t('pl.presetNextMonth') },
+    { id: 'OVERDUE', label: t('pl.presetOverdue') },
+    { id: 'UNCONFIRMED', label: t('pl.presetUnconfirmed') },
+  ];
 
   return (
     <div className="space-y-4">
-      <SegmentedControl<RecurringPlanType>
-        value={planType}
-        onChange={setPlanType}
-        options={[
-          { value: 'PAYMENT', label: t('plans.payments') },
-          { value: 'SUBSCRIPTION', label: t('plans.subscriptions') },
-          { value: 'INVESTMENT', label: t('plans.investments') },
-        ]}
-      />
-
-      {planType === 'PAYMENT' && (
-        <PaymentCalendar days={calendarDays} month={currentMonth()} currency={baseCurrency} />
-      )}
-
-      {totals.rows.length > 0 && (
-        <Card className="p-4 space-y-2">
-          <p className="text-[10px] font-black uppercase tracking-wide text-slate-400">
-            {planType === 'INVESTMENT' ? t('plans.saving') : t('plans.fixedCosts')}
-          </p>
-          <div className="flex items-end gap-3">
-            <div>
-              <p className="text-2xl font-black text-slate-900 dark:text-slate-100 tabular-nums leading-tight">
-                {formatMoney(totals.monthly, baseCurrency)}
-              </p>
-              <p className="text-[10px] font-bold text-slate-400">{t('pl.perMonth')}</p>
-            </div>
-            <div className="pb-0.5">
-              <p className="text-sm font-black text-slate-500 dark:text-slate-400 tabular-nums leading-tight">
-                {formatMoney(totals.yearly, baseCurrency)}
-              </p>
-              <p className="text-[10px] font-bold text-slate-400">{t('pl.perYear')}</p>
-            </div>
+      <div className="grid grid-cols-3 gap-2">
+        <Card className="p-3">
+          <div className="flex items-center gap-1 text-[9px] font-black uppercase tracking-wide text-rose-500">
+            <ArrowUpRight className="w-3 h-3" />
+            {t('pl.dueThisMonth')}
           </div>
-          <p className="text-[10px] text-slate-400 font-medium">
-            {totals.rows.length} {t('pl.activeHint')}
+          <p className="text-sm font-black text-slate-900 dark:text-slate-100 mt-0.5 tabular-nums">
+            {formatMoney(dueThisMonth, baseCurrency, { compact: true })}
           </p>
         </Card>
-      )}
+        <Card className="p-3">
+          <div className="flex items-center gap-1 text-[9px] font-black uppercase tracking-wide text-emerald-500">
+            <ArrowDownLeft className="w-3 h-3" />
+            {t('pl.expectedIncomeMonth')}
+          </div>
+          <p className="text-sm font-black text-slate-900 dark:text-slate-100 mt-0.5 tabular-nums">
+            {formatMoney(expectedThisMonth, baseCurrency, { compact: true })}
+          </p>
+        </Card>
+        <Card className="p-3">
+          <div className="flex items-center gap-1 text-[9px] font-black uppercase tracking-wide text-slate-400">
+            <Scale className="w-3 h-3" />
+            {t('pl.monthBalance')}
+          </div>
+          <p
+            className={`text-sm font-black mt-0.5 tabular-nums ${
+              monthBalance < 0 ? 'text-rose-500' : 'text-slate-900 dark:text-slate-100'
+            }`}
+          >
+            {formatMoney(monthBalance, baseCurrency, { compact: true })}
+          </p>
+        </Card>
+      </div>
+
+      <SegmentedControl<TransactionKind>
+        value={kind}
+        onChange={(next) => {
+          setKind(next);
+          setCategoryFilter('ALL');
+        }}
+        options={[
+          {
+            value: 'EXPENSE',
+            label: t('pl.tabPayments'),
+            activeClass: 'bg-white dark:bg-slate-900 text-rose-600 dark:text-rose-400 shadow-sm',
+          },
+          {
+            value: 'INCOME',
+            label: t('pl.tabIncome'),
+            activeClass: 'bg-white dark:bg-slate-900 text-emerald-600 dark:text-emerald-400 shadow-sm',
+          },
+        ]}
+      />
 
       <button
         type="button"
@@ -193,85 +243,99 @@ export function PlannedTab({ plans, categories, accounts, settings, autoCreateDe
         className="w-full py-3 rounded-2xl bg-gradient-to-tr from-sky-500 to-cyan-400 text-white text-xs font-black flex items-center justify-center gap-2 shadow-lg shadow-sky-500/25 active:scale-[0.98] transition-transform"
       >
         <Plus className="w-4 h-4" />
-        {t(meta.addLabel)}
+        {kind === 'EXPENSE' ? t('pl.addPayment') : t('pl.addIncome')}
       </button>
 
-      {overdue.length > 0 && (
+      {next7.length > 0 && (
         <div>
-          <SectionTitle title={`${t('pl.overdue')} · ${overdue.length}`} />
-          <div className="space-y-2">
-            {overdue.map((state) => (
-              <PlannedRow
-                key={state.plan.id}
-                plan={state.plan}
-                categories={categories}
-                baseCurrency={baseCurrency}
-                settings={settings}
-                daysUntilDue={state.daysUntilDue}
-                isOverdue
-                onEdit={() => setEditing(state.plan)}
-              />
+          <SectionTitle title={t('pl.next7')} />
+          <Card className="divide-y divide-slate-50 dark:divide-slate-800/80">
+            {next7.map((item) => (
+              <EventRow key={item.id} item={item} categories={categories} baseCurrency={baseCurrency} onOpen={openEvent} />
             ))}
-          </div>
+          </Card>
         </div>
       )}
 
+      <div className="flex gap-1.5 overflow-x-auto pb-0.5 -mx-1 px-1">
+        {presets.map((option) => (
+          <button
+            key={option.id}
+            type="button"
+            onClick={() => setPreset(option.id)}
+            className={`flex-shrink-0 px-3 py-1.5 rounded-xl text-[11px] font-black transition-colors ${
+              preset === option.id
+                ? 'bg-sky-500 text-white'
+                : 'bg-slate-100 dark:bg-slate-800 text-slate-500'
+            }`}
+          >
+            {option.label}
+          </button>
+        ))}
+      </div>
+
+      {categoryOptions.length > 0 && (
+        <select
+          value={categoryFilter}
+          onChange={(e) => setCategoryFilter(e.target.value)}
+          className={`${inputClass} text-xs`}
+        >
+          <option value="ALL">{t('tx.allCategories')}</option>
+          {categoryOptions.map((category) => (
+            <option key={category.id} value={category.id}>
+              {categoryName(category, language)}
+            </option>
+          ))}
+        </select>
+      )}
+
       <div>
-        <SectionTitle title={planType === 'PAYMENT' ? t('plans.upcoming') : t('plans.active')} />
-        {upcoming.length === 0 && overdue.length === 0 ? (
+        <SectionTitle title={kind === 'EXPENSE' ? t('pl.tabPayments') : t('pl.tabIncome')} />
+        {days.length === 0 ? (
           <EmptyState
-            icon={
-              planType === 'SUBSCRIPTION' ? (
-                <Repeat className="w-7 h-7" />
-              ) : planType === 'INVESTMENT' ? (
-                <TrendingUp className="w-7 h-7" />
-              ) : (
-                <CalendarClock className="w-7 h-7" />
-              )
+            icon={<CalendarClock className="w-7 h-7" />}
+            title={
+              preset === 'ALL'
+                ? kind === 'EXPENSE'
+                  ? t('pl.emptyPayments')
+                  : t('pl.emptyIncome')
+                : t('pl.emptyEventsTitle')
             }
-            title={t(meta.emptyTitle)}
-            description={t(meta.emptyText)}
+            description={
+              preset === 'ALL'
+                ? kind === 'EXPENSE'
+                  ? t('pl.emptyPaymentsText')
+                  : t('pl.emptyIncomeText')
+                : t('pl.emptyEventsText')
+            }
           />
         ) : (
-          <div className="space-y-2">
-            {upcoming.map((state) => (
-              <PlannedRow
-                key={state.plan.id}
-                plan={state.plan}
-                categories={categories}
-                baseCurrency={baseCurrency}
-                settings={settings}
-                daysUntilDue={state.daysUntilDue}
-                onEdit={() => setEditing(state.plan)}
-              />
+          <div className="space-y-3">
+            {days.map((day) => (
+              <div key={day.date}>
+                <div className="flex items-center justify-between px-1 mb-1.5">
+                  <span className="text-[11px] font-black text-slate-500 dark:text-slate-400">
+                    {formatDateHuman(day.date)}
+                  </span>
+                  <span className="text-[11px] font-black text-slate-400 tabular-nums">
+                    {formatMoney(day.total, baseCurrency)}
+                  </span>
+                </div>
+                <Card className="divide-y divide-slate-50 dark:divide-slate-800/80">
+                  {day.items.map((item) => (
+                    <EventRow key={item.id} item={item} categories={categories} baseCurrency={baseCurrency} onOpen={openEvent} />
+                  ))}
+                </Card>
+              </div>
             ))}
           </div>
         )}
       </div>
 
-      {inactive.length > 0 && (
-        <div>
-          <SectionTitle title={t('pl.finished')} />
-          <div className="space-y-2 opacity-60">
-            {inactive.map((state) => (
-              <PlannedRow
-                key={state.plan.id}
-                plan={state.plan}
-                categories={categories}
-                baseCurrency={baseCurrency}
-                settings={settings}
-                daysUntilDue={state.daysUntilDue}
-                onEdit={() => setEditing(state.plan)}
-              />
-            ))}
-          </div>
-        </div>
-      )}
-
       {editing && (
         <PlannedPaymentModal
           plan={editing === 'NEW' ? null : editing}
-          planType={editing === 'NEW' ? planType : ((editing.planType as RecurringPlanType) || 'PAYMENT')}
+          defaultKind={kind}
           categories={categories}
           accounts={accounts}
           baseCurrency={baseCurrency}
@@ -283,120 +347,71 @@ export function PlannedTab({ plans, categories, accounts, settings, autoCreateDe
   );
 }
 
-function PlannedRow({
-  plan,
+function EventRow({
+  item,
   categories,
   baseCurrency,
-  settings,
-  daysUntilDue,
-  isOverdue,
-  onEdit,
+  onOpen,
 }: {
-  plan: Plan;
+  item: UpcomingEvent;
   categories: FinanceCategory[];
   baseCurrency: CurrencyCode;
-  settings: FinanceSettings;
-  daysUntilDue: number;
-  isOverdue?: boolean;
-  onEdit: () => void;
+  onOpen: (item: UpcomingEvent) => void;
 }) {
   const { t } = useT();
-  const category = categories.find((c) => c.id === plan.categoryId);
+  const category = categories.find((c) => c.id === item.categoryId);
   const Icon = getCategoryIcon(category?.iconName || 'CalendarClock');
-  const isRecurring = plan.recurrence !== 'ONCE';
-
-  // Only long billing periods need the "≈ per month" hint — a monthly plan
-  // already shows its monthly cost in the amount itself.
-  const showsMonthlyHint =
-    isRecurring && plan.recurrence !== 'MONTHLY' && plan.recurrence !== 'WEEKLY';
-  const monthlyBase = showsMonthlyHint
-    ? convertToBase(
-        plan.recurrence === 'QUARTERLY'
-          ? plan.amount / 3
-          : plan.recurrence === 'SEMIANNUAL'
-          ? plan.amount / 6
-          : plan.recurrence === 'YEARLY'
-          ? plan.amount / 12
-          : (plan.amount * 30.44) / Math.max(1, plan.intervalDays || 30),
-        plan.currency,
-        settings
-      ).baseAmount
-    : 0;
+  const clickable = Boolean(item.planId);
 
   return (
-    <Card
-      className={`p-3.5 flex items-center gap-3 ${
-        isOverdue ? 'border-rose-200 dark:border-rose-900 bg-rose-50/60 dark:bg-rose-950/20' : ''
-      }`}
-      onClick={onEdit}
+    <div
+      onClick={clickable ? () => onOpen(item) : undefined}
+      className={`flex items-center gap-3 p-3 ${clickable ? 'cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/50' : ''}`}
     >
       <span
-        className="w-10 h-10 rounded-2xl flex items-center justify-center flex-shrink-0"
+        className="w-9 h-9 rounded-2xl flex items-center justify-center flex-shrink-0"
         style={{
           backgroundColor: `${category?.colorHex || '#0EA5E9'}1F`,
           color: category?.colorHex || '#0EA5E9',
         }}
       >
-        <Icon className="w-4.5 h-4.5" style={{ width: 18, height: 18 }} />
+        <Icon className="w-4 h-4" style={{ width: 16, height: 16 }} />
       </span>
 
       <div className="flex-1 min-w-0">
-        <p className="text-xs font-black text-slate-800 dark:text-slate-100 truncate">
-          {plan.title}
+        <p className="text-xs font-black text-slate-800 dark:text-slate-100 truncate">{item.title}</p>
+        <p className="text-[10.5px] text-slate-400 font-medium flex items-center gap-1">
+          {formatDateHuman(item.date)}
+          {item.isOverdue && (
+            <span className="inline-flex items-center gap-0.5 text-rose-500 font-black">
+              <AlertTriangle className="w-3 h-3" />
+              {t('debts.overdue')}
+            </span>
+          )}
+          {!item.isOverdue && item.needsConfirmation && (
+            <span className="inline-flex items-center gap-0.5 text-amber-500 font-black">
+              <Clock className="w-3 h-3" />
+              {t('pl.needsConfirmation')}
+            </span>
+          )}
         </p>
-        <p className="text-[10.5px] text-slate-400 font-medium truncate">
-          {[plan.provider, describeRecurrence(plan), formatDateHuman(plan.nextDueDate || '')]
-            .filter(Boolean)
-            .join(' · ')}
-          {plan.autoCreate ? ` · ${t('pl.auto')}` : ''}
-        </p>
-        {plan.note && (
-          <p className="text-[10.5px] text-slate-500 dark:text-slate-400 font-medium truncate">
-            {plan.note}
-          </p>
-        )}
       </div>
 
-      <div className="text-right flex-shrink-0">
-        <p
-          className={`text-xs font-black tabular-nums ${
-            plan.kind === 'INCOME'
-              ? 'text-emerald-600 dark:text-emerald-400'
-              : 'text-slate-900 dark:text-slate-100'
-          }`}
-        >
-          {plan.kind === 'EXPENSE' ? '−' : '+'}
-          {formatMoney(plan.amount, plan.currency)}
-        </p>
-        {showsMonthlyHint ? (
-          <p className="text-[10px] font-bold text-slate-400 tabular-nums">
-            ≈ {formatMoney(monthlyBase, baseCurrency)}/{t('pl.perMonthShort')}
-          </p>
-        ) : (
-          <p
-            className={`text-[10px] font-black ${
-              isOverdue
-                ? 'text-rose-500'
-                : daysUntilDue <= (plan.remindDaysBefore ?? 0)
-                ? 'text-amber-500'
-                : 'text-slate-400'
-            }`}
-          >
-            {isOverdue
-              ? `${t('pl.overdueBy')} ${Math.abs(daysUntilDue)} ${t('pl.daysShort')}`
-              : daysUntilDue === 0
-              ? t('pl.dueToday')
-              : `${t('pl.inDays')} ${daysUntilDue} ${t('pl.daysShort')}`}
-          </p>
-        )}
-      </div>
-    </Card>
+      <span
+        className={`text-xs font-black tabular-nums flex-shrink-0 ${
+          item.kind === 'EXPENSE' ? 'text-slate-900 dark:text-slate-100' : 'text-emerald-600 dark:text-emerald-400'
+        }`}
+      >
+        {item.kind === 'EXPENSE' ? '−' : '+'}
+        {formatMoney(item.amount, baseCurrency)}
+      </span>
+    </div>
   );
 }
 
 function PlannedPaymentModal({
   plan,
-  planType,
+  defaultKind,
   categories,
   accounts,
   baseCurrency,
@@ -404,7 +419,7 @@ function PlannedPaymentModal({
   onClose,
 }: {
   plan: Plan | null;
-  planType: RecurringPlanType;
+  defaultKind: TransactionKind;
   categories: FinanceCategory[];
   accounts: FinanceAccount[];
   baseCurrency: CurrencyCode;
@@ -412,23 +427,14 @@ function PlannedPaymentModal({
   onClose: () => void;
 }) {
   const { t, language } = useT();
-  const meta = PLAN_KIND_META[planType];
-  const isPayment = planType === 'PAYMENT';
 
   const [title, setTitle] = useState(plan?.title || '');
   const [provider, setProvider] = useState(plan?.provider || '');
-  const [kind, setKind] = useState<TransactionKind>(plan?.kind || 'EXPENSE');
+  const [kind, setKind] = useState<TransactionKind>(plan?.kind || defaultKind);
   const [amount, setAmount] = useState(plan ? String(plan.amount) : '');
-  const [categoryId, setCategoryId] = useState(
-    plan?.categoryId ||
-      (meta.defaultCategoryId && categories.some((c) => c.id === meta.defaultCategoryId)
-        ? meta.defaultCategoryId
-        : '')
-  );
+  const [categoryId, setCategoryId] = useState(plan?.categoryId || '');
   const [accountId, setAccountId] = useState(plan?.accountId || accounts[0]?.id || '');
-  const [recurrence, setRecurrence] = useState<RecurrenceKind>(
-    plan?.recurrence || (isPayment ? 'MONTHLY' : 'MONTHLY')
-  );
+  const [recurrence, setRecurrence] = useState<RecurrenceKind>(plan?.recurrence || 'MONTHLY');
   const [intervalDays, setIntervalDays] = useState(String(plan?.intervalDays || 30));
   const [nextDueDate, setNextDueDate] = useState(plan?.nextDueDate || todayIso());
   const [endDate, setEndDate] = useState(plan?.endDate || '');
@@ -437,8 +443,6 @@ function PlannedPaymentModal({
   const [autoCreate, setAutoCreate] = useState(plan?.autoCreate ?? autoCreateDefault);
   const [error, setError] = useState<string | null>(null);
 
-  // The plan books an operation in the profile's base currency; a different
-  // currency stays only on entries created before it was switched.
   const currency: CurrencyCode = plan?.currency || baseCurrency;
   const relevantCategories = categories.filter((c) => c.kind === kind && !c.parentId && !c.isHidden);
 
@@ -449,7 +453,7 @@ function PlannedPaymentModal({
     if (!categoryId) return setError(t('pl.pickCategory'));
 
     const payload = {
-      planType: planType as PlanType,
+      planType: plan?.planType || ('PAYMENT' as const),
       title: title.trim(),
       provider: provider.trim() || undefined,
       kind,
@@ -473,23 +477,16 @@ function PlannedPaymentModal({
 
   return (
     <ModalShell
-      title={t(plan ? meta.label : meta.addLabel)}
-      subtitle={
-        planType === 'SUBSCRIPTION'
-          ? t('pl.subscriptionSub')
-          : planType === 'INVESTMENT'
-          ? t('pl.investmentSub')
-          : undefined
+      title={
+        plan
+          ? kind === 'EXPENSE'
+            ? t('pl.editPayment')
+            : t('pl.editIncome')
+          : kind === 'EXPENSE'
+          ? t('pl.addPayment')
+          : t('pl.addIncome')
       }
-      icon={
-        planType === 'SUBSCRIPTION' ? (
-          <Repeat className="w-5 h-5" />
-        ) : planType === 'INVESTMENT' ? (
-          <TrendingUp className="w-5 h-5" />
-        ) : (
-          <CalendarClock className="w-5 h-5" />
-        )
-      }
+      icon={<CalendarClock className="w-5 h-5" />}
       onClose={onClose}
       footer={
         <div className="space-y-2">
@@ -507,7 +504,7 @@ function PlannedPaymentModal({
                 className="flex-1 py-2.5 rounded-2xl text-[11px] font-black text-emerald-600 bg-emerald-50 dark:bg-emerald-950/40 flex items-center justify-center gap-1.5"
               >
                 <CheckCircle2 className="w-3.5 h-3.5" />
-                {planType === 'INVESTMENT' ? t('pl.invested') : t('pl.paid')}
+                {t('pl.paid')}
               </button>
               <button
                 type="button"
@@ -541,53 +538,38 @@ function PlannedPaymentModal({
         </div>
       }
     >
-      <Field label={planType === 'SUBSCRIPTION' ? t('pl.service') : t('pl.title')}>
+      <Field label={t('pl.title')}>
         <input
           type="text"
           value={title}
           onChange={(e) => setTitle(e.target.value)}
-          placeholder={
-            planType === 'SUBSCRIPTION'
-              ? 'Netflix'
-              : planType === 'INVESTMENT'
-              ? t('pl.investmentPlaceholder')
-              : t('pl.paymentPlaceholder')
-          }
+          placeholder={kind === 'EXPENSE' ? t('pl.paymentPlaceholder') : 'Зарплата'}
           className={inputClass}
           autoFocus
         />
       </Field>
 
-      {planType !== 'PAYMENT' && (
-        <Field
-          label={planType === 'INVESTMENT' ? t('pl.broker') : t('pl.provider')}
-          hint={t('pl.optional')}
-        >
-          <input
-            type="text"
-            value={provider}
-            onChange={(e) => setProvider(e.target.value)}
-            placeholder={
-              planType === 'INVESTMENT' ? 'Interactive Brokers' : t('pl.providerPlaceholder')
-            }
-            className={inputClass}
-          />
-        </Field>
-      )}
+      <SegmentedControl<TransactionKind>
+        value={kind}
+        onChange={(next) => {
+          setKind(next);
+          setCategoryId('');
+        }}
+        options={[
+          { value: 'EXPENSE', label: t('pl.expenseUpper') },
+          { value: 'INCOME', label: t('pl.incomeUpper') },
+        ]}
+      />
 
-      {isPayment && (
-        <SegmentedControl<TransactionKind>
-          value={kind}
-          onChange={(next) => {
-            setKind(next);
-            setCategoryId('');
-          }}
-          options={[
-            { value: 'EXPENSE', label: t('pl.expenseUpper') },
-            { value: 'INCOME', label: t('pl.incomeUpper') },
-          ]}
+      <Field label={t('pl.provider')} hint={t('pl.optional')}>
+        <input
+          type="text"
+          value={provider}
+          onChange={(e) => setProvider(e.target.value)}
+          placeholder={t('pl.providerPlaceholder')}
+          className={inputClass}
         />
-      )}
+      </Field>
 
       <Field label={`${t('common.amount')}, ${currency}`}>
         <input
@@ -615,7 +597,7 @@ function PlannedPaymentModal({
         </select>
       </Field>
 
-      <Field label={planType === 'INVESTMENT' ? t('pl.debitAccount') : t('common.account')}>
+      <Field label={t('common.account')}>
         <select value={accountId} onChange={(e) => setAccountId(e.target.value)} className={inputClass}>
           {accounts.map((account) => (
             <option key={account.id} value={account.id}>
@@ -631,7 +613,7 @@ function PlannedPaymentModal({
           onChange={(e) => setRecurrence(e.target.value as RecurrenceKind)}
           className={inputClass}
         >
-          {isPayment && <option value="ONCE">{t('pl.once')}</option>}
+          <option value="ONCE">{t('pl.once')}</option>
           <option value="WEEKLY">{t('pl.weekly')}</option>
           <option value="MONTHLY">{t('pl.monthly')}</option>
           <option value="QUARTERLY">{t('pl.quarterly')}</option>
@@ -654,7 +636,7 @@ function PlannedPaymentModal({
       )}
 
       <div className="grid grid-cols-2 gap-3">
-        <Field label={planType === 'PAYMENT' ? t('pl.paymentDate') : t('pl.nextCharge')}>
+        <Field label={t('pl.paymentDate')}>
           <input
             type="date"
             value={nextDueDate}

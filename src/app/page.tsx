@@ -366,6 +366,10 @@ function FinanceApp() {
         {activeTab === 'planned' && (
           <PlannedTab
             plans={plans}
+            occurrences={occurrences}
+            obligations={obligations}
+            settlements={settlements}
+            bearerCheques={bearerCheques}
             categories={categories}
             accounts={accounts}
             settings={settings}
