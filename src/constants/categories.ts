@@ -33,10 +33,12 @@ import {
   UserRound,
   CreditCard,
   FileSignature,
+  Scale,
   Smartphone,
   type LucideIcon,
 } from 'lucide-react';
 import {
+  CreatableDebtKind,
   CurrencyCode,
   CurrencyDefinition,
   FinanceCategory,
@@ -102,6 +104,7 @@ export const CATEGORY_ICONS: Record<string, LucideIcon> = {
   HardHat,
   UserRound,
   CreditCard,
+  Scale,
   Smartphone,
 };
 
@@ -203,6 +206,19 @@ const EXPENSE_SEEDS: CategorySeed[] = [
     order: 137,
   },
   {
+    key: 'obligations',
+    name: 'Обязательства',
+    iconName: 'Scale',
+    colorHex: '#7C3AED',
+    order: 138,
+    children: [
+      { key: 'obligations_installment', name: 'Рассрочка' },
+      { key: 'obligations_loan', name: 'Кредит' },
+      { key: 'obligations_tax', name: 'Налог' },
+      { key: 'obligations_other', name: 'Другое' },
+    ],
+  },
+  {
     key: 'taxes',
     name: 'Налоги',
     iconName: 'Landmark',
@@ -275,6 +291,16 @@ export const ADJUSTMENT_CATEGORY_ID = 'cat-adjustment';
 export const BEARER_CHEQUE_CATEGORY_ID = 'cat-bearer_cheques';
 export const FALLBACK_EXPENSE_CATEGORY_ID = 'cat-other_expense';
 export const FALLBACK_INCOME_CATEGORY_ID = 'cat-other_income';
+
+/** The «Обязательства» parent category — picking it (or a child below) opens
+ *  the dedicated obligation flow instead of recording a plain expense. */
+export const OBLIGATION_CATEGORY_ID = 'cat-obligations';
+export const DEBT_KIND_BY_CATEGORY_ID: Record<string, CreatableDebtKind> = {
+  'cat-obligations_installment': 'INSTALLMENT',
+  'cat-obligations_loan': 'LOAN',
+  'cat-obligations_tax': 'TAX',
+  'cat-obligations_other': 'OTHER',
+};
 
 function buildSeedCategories(seeds: CategorySeed[], kind: TransactionKind): FinanceCategory[] {
   const now = new Date().toISOString();

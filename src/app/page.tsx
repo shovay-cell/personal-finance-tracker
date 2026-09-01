@@ -15,7 +15,7 @@ import {
   summarizeVat,
   DEFAULT_SETTINGS,
 } from '@/lib/db';
-import { AuthSession, Plan, Transaction } from '@/types';
+import { AuthSession, CreatableDebtKind, Plan, Transaction } from '@/types';
 import {
   DateRange,
   PeriodPreset,
@@ -75,6 +75,15 @@ function FinanceApp() {
   >(null);
   const [isImportingStatement, setIsImportingStatement] = useState(false);
   const [isCreatingObligation, setIsCreatingObligation] = useState(false);
+  const [obligationPreset, setObligationPreset] = useState<{
+    kind?: CreatableDebtKind;
+    amount?: number;
+  } | null>(null);
+
+  const openObligation = useCallback((kind?: CreatableDebtKind, amount?: number) => {
+    setObligationPreset({ kind, amount });
+    setIsCreatingObligation(true);
+  }, []);
   const [formPrefill, setFormPrefill] = useState<TransactionPrefill | null>(null);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
   const [pendingPlanned, setPendingPlanned] = useState<Plan[]>([]);
@@ -452,7 +461,7 @@ function FinanceApp() {
           onClose={() => setQuickAddMode(null)}
           onOpenFullForm={(prefill) => setFormPrefill(prefill)}
           onOpenStatementImport={() => setIsImportingStatement(true)}
-          onOpenObligation={() => setIsCreatingObligation(true)}
+          onOpenObligation={openObligation}
           onSaved={() => setToast(t('app.operationSaved'))}
         />
       )}
@@ -475,7 +484,12 @@ function FinanceApp() {
           categories={categories}
           accounts={accounts}
           baseCurrency={settings.baseCurrency}
-          onClose={() => setIsCreatingObligation(false)}
+          initialKind={obligationPreset?.kind}
+          initialAmount={obligationPreset?.amount}
+          onClose={() => {
+            setIsCreatingObligation(false);
+            setObligationPreset(null);
+          }}
           onSaved={() => setToast(t('app.operationSaved'))}
         />
       )}
@@ -488,6 +502,7 @@ function FinanceApp() {
           baseCurrency={settings.baseCurrency}
           settings={settings}
           existing={editingTransaction}
+          onOpenObligation={openObligation}
           prefill={formPrefill || undefined}
           onClose={() => {
             setFormPrefill(null);

@@ -47,7 +47,12 @@ import {
   fieldClass,
   inputClass,
 } from './ui';
-import { BEARER_CHEQUE_CATEGORY_ID, CURRENCIES } from '@/constants/categories';
+import {
+  BEARER_CHEQUE_CATEGORY_ID,
+  CURRENCIES,
+  DEBT_KIND_BY_CATEGORY_ID,
+  OBLIGATION_CATEGORY_ID,
+} from '@/constants/categories';
 import { useT } from '@/i18n/context';
 import type { TranslationKey } from '@/i18n/dictionary';
 import { unitNoun } from '@/i18n/plurals';
@@ -93,6 +98,9 @@ interface TransactionFormModalProps {
   prefill?: TransactionPrefill;
   onClose: () => void;
   onSaved?: (transaction: Transaction) => void;
+  /** Opens the dedicated obligation flow — reached by picking «Обязательства»
+   *  (or a subcategory) instead of an ordinary category. */
+  onOpenObligation?: (kind?: CreatableDebtKind, initialAmount?: number) => void;
 }
 
 export function TransactionFormModal({
@@ -105,6 +113,7 @@ export function TransactionFormModal({
   prefill,
   onClose,
   onSaved,
+  onOpenObligation,
 }: TransactionFormModalProps) {
   const [kind, setKind] = useState<TransactionKind>(
     existing?.kind || prefill?.kind || 'EXPENSE'
@@ -239,6 +248,22 @@ export function TransactionFormModal({
     }
     if (isBearerCheque && !chequePayee.trim()) {
       setError(t('bc.enterPayee'));
+      return;
+    }
+    // Safety net for a category reaching this state some other way (e.g. a
+    // prefill) without going through the subcategory click handler above.
+    if (
+      !existing &&
+      onOpenObligation &&
+      (categoryId === OBLIGATION_CATEGORY_ID ||
+        DEBT_KIND_BY_CATEGORY_ID[subcategoryId || ''] ||
+        DEBT_KIND_BY_CATEGORY_ID[categoryId])
+    ) {
+      onOpenObligation(
+        DEBT_KIND_BY_CATEGORY_ID[subcategoryId || ''] || DEBT_KIND_BY_CATEGORY_ID[categoryId],
+        parseFloat(amount.replace(',', '.')) || undefined
+      );
+      onClose();
       return;
     }
 
@@ -457,7 +482,15 @@ export function TransactionFormModal({
               <button
                 key={sub.id}
                 type="button"
-                onClick={() => setSubcategoryId(subcategoryId === sub.id ? undefined : sub.id)}
+                onClick={() => {
+                  const debtKind = DEBT_KIND_BY_CATEGORY_ID[sub.id];
+                  if (debtKind && onOpenObligation) {
+                    onOpenObligation(debtKind, parseFloat(amount.replace(',', '.')) || undefined);
+                    onClose();
+                    return;
+                  }
+                  setSubcategoryId(subcategoryId === sub.id ? undefined : sub.id);
+                }}
                 className={`px-3 py-1.5 rounded-xl text-[11px] font-bold border transition-all ${
                   subcategoryId === sub.id
                     ? 'bg-sky-500 text-white border-transparent'

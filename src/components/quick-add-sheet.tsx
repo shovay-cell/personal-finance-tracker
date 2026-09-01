@@ -1,8 +1,9 @@
 'use client';
 
 import React, { useEffect, useRef, useState } from 'react';
-import { Delete, Layers, Loader2, Mic, MicOff, Scale, ScanLine, Sparkles, Wallet } from 'lucide-react';
+import { Delete, Layers, Loader2, Mic, MicOff, ScanLine, Sparkles, Wallet } from 'lucide-react';
 import {
+  CreatableDebtKind,
   CurrencyCode,
   FinanceAccount,
   FinanceCategory,
@@ -18,7 +19,12 @@ import {
 } from './ui';
 import { TransactionPrefill } from './transaction-form-modal';
 import { CategoryEditorModal } from './category-manager-modal';
-import { BEARER_CHEQUE_CATEGORY_ID, CURRENCIES } from '@/constants/categories';
+import {
+  BEARER_CHEQUE_CATEGORY_ID,
+  CURRENCIES,
+  DEBT_KIND_BY_CATEGORY_ID,
+  OBLIGATION_CATEGORY_ID,
+} from '@/constants/categories';
 import { useT } from '@/i18n/context';
 import { usePasteUpload } from '@/hooks/use-paste-upload';
 import { GeminiKeyPrompt } from './gemini-key-prompt';
@@ -36,7 +42,7 @@ import {
   VoiceSession,
 } from '@/services/voice/voice-input';
 
-type QuickMode = 'MANUAL' | 'SCAN' | 'VOICE' | 'STATEMENT' | 'OBLIGATION';
+type QuickMode = 'MANUAL' | 'SCAN' | 'VOICE' | 'STATEMENT';
 
 interface QuickAddSheetProps {
   categories: FinanceCategory[];
@@ -49,8 +55,10 @@ interface QuickAddSheetProps {
   onOpenFullForm: (prefill: TransactionPrefill) => void;
   /** Opens the batch importer for a photographed list of bank operations. */
   onOpenStatementImport: () => void;
-  /** Opens the dedicated "credit / instalment / tax / other" entry flow. */
-  onOpenObligation: () => void;
+  /** Opens the dedicated "credit / instalment / tax / other" entry flow —
+   *  reached by picking «Обязательства» (or one of its subcategories) from
+   *  the category grid, not a separate mode of its own. */
+  onOpenObligation: (kind?: CreatableDebtKind, initialAmount?: number) => void;
   onSaved?: () => void;
 }
 
@@ -102,10 +110,6 @@ export function QuickAddSheet({
     }
     if (initialMode === 'STATEMENT') {
       onOpenStatementImport();
-      onClose();
-    }
-    if (initialMode === 'OBLIGATION') {
-      onOpenObligation();
       onClose();
     }
     return () => voiceSession.current?.stop();
@@ -200,6 +204,14 @@ export function QuickAddSheet({
       return;
     }
 
+    // Same for an obligation reached some other way (e.g. a prefill) without
+    // going through handleCategorySelect below.
+    if (categoryId === OBLIGATION_CATEGORY_ID || DEBT_KIND_BY_CATEGORY_ID[categoryId]) {
+      onOpenObligation(DEBT_KIND_BY_CATEGORY_ID[categoryId], numericAmount);
+      onClose();
+      return;
+    }
+
     setIsBusy(true);
     try {
       await addTransaction({
@@ -218,6 +230,19 @@ export function QuickAddSheet({
     } finally {
       setIsBusy(false);
     }
+  };
+
+  // Picking «Обязательства» or one of its subcategories (Рассрочка/Кредит/
+  // Налог/Другое) isn't a plain expense with a category — hand off to the
+  // dedicated flow immediately instead of waiting for "Записать".
+  const handleCategorySelect = (id: string) => {
+    const debtKind = DEBT_KIND_BY_CATEGORY_ID[id];
+    if (id === OBLIGATION_CATEGORY_ID || debtKind) {
+      onOpenObligation(debtKind, parseFloat(amount) || undefined);
+      onClose();
+      return;
+    }
+    setCategoryId(id);
   };
 
   const handleScan = async (file: File | null) => {
@@ -358,7 +383,6 @@ export function QuickAddSheet({
             { value: 'SCAN' as QuickMode, label: t('quick.receipt'), icon: ScanLine },
             { value: 'STATEMENT' as QuickMode, label: t('quick.list'), icon: Layers },
             { value: 'VOICE' as QuickMode, label: t('quick.voice'), icon: Mic },
-            { value: 'OBLIGATION' as QuickMode, label: t('quick.obligation'), icon: Scale },
           ]
         ).map((option) => {
           const Icon = option.icon;
@@ -369,15 +393,10 @@ export function QuickAddSheet({
               type="button"
               onClick={() => {
                 setError(null);
-                // The statement importer and the obligation flow each own their
-                // own review flow — hand over instead of stacking inside this sheet.
+                // The statement importer owns its own review flow — hand over
+                // instead of stacking it inside the quick-entry sheet.
                 if (option.value === 'STATEMENT') {
                   onOpenStatementImport();
-                  onClose();
-                  return;
-                }
-                if (option.value === 'OBLIGATION') {
-                  onOpenObligation();
                   onClose();
                   return;
                 }
@@ -529,7 +548,7 @@ export function QuickAddSheet({
             categories={visibleCategories}
             allCategories={categories}
             selectedId={categoryId}
-            onSelect={setCategoryId}
+            onSelect={handleCategorySelect}
             onCreate={() => setIsCreatingCategory(true)}
           />
         </>

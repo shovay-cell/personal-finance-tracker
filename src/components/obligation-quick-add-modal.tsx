@@ -32,6 +32,8 @@ interface ObligationQuickAddModalProps {
   categories: FinanceCategory[];
   accounts: FinanceAccount[];
   baseCurrency: CurrencyCode;
+  initialKind?: CreatableDebtKind;
+  initialAmount?: number;
   onClose: () => void;
   onSaved?: () => void;
 }
@@ -47,20 +49,23 @@ export function ObligationQuickAddModal({
   categories,
   accounts,
   baseCurrency,
+  initialKind,
+  initialAmount,
   onClose,
   onSaved,
 }: ObligationQuickAddModalProps) {
   const { t, language } = useT();
+  const startKind = initialKind || 'INSTALLMENT';
 
-  const [debtKind, setDebtKind] = useState<CreatableDebtKind>('INSTALLMENT');
+  const [debtKind, setDebtKind] = useState<CreatableDebtKind>(startKind);
   const [title, setTitle] = useState('');
-  const [amount, setAmount] = useState('');
+  const [amount, setAmount] = useState(initialAmount ? String(initialAmount) : '');
   const [categoryId, setCategoryId] = useState(
-    categories.some((c) => c.id === DEFAULT_CATEGORY_ID.INSTALLMENT) ? DEFAULT_CATEGORY_ID.INSTALLMENT : ''
+    categories.some((c) => c.id === DEFAULT_CATEGORY_ID[startKind]) ? DEFAULT_CATEGORY_ID[startKind] : ''
   );
   const [accountId, setAccountId] = useState(accounts[0]?.id || '');
   const [firstDueDate, setFirstDueDate] = useState(todayIso());
-  const [paymentsCount, setPaymentsCount] = useState(String(DEBT_KIND_META.INSTALLMENT.defaultPayments));
+  const [paymentsCount, setPaymentsCount] = useState(String(DEBT_KIND_META[startKind].defaultPayments));
   const [intervalUnit, setIntervalUnit] = useState<RecurrenceUnit>('MONTH');
   const [intervalCount, setIntervalCount] = useState('1');
   const [firstPaymentPaid, setFirstPaymentPaid] = useState(false);

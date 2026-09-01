@@ -57,6 +57,11 @@ const CATEGORY_NAMES: Record<string, Entry> = {
     uk: 'Чеки на пред’явника',
     en: 'Bearer cheques',
   },
+  'cat-obligations': { ru: 'Обязательства', he: 'התחייבויות', uk: "Зобов'язання", en: 'Obligations' },
+  'cat-obligations_installment': { ru: 'Рассрочка', he: 'תשלומים', uk: 'Розстрочка', en: 'Instalments' },
+  'cat-obligations_loan': { ru: 'Кредит', he: 'הלוואה', uk: 'Кредит', en: 'Loan' },
+  'cat-obligations_tax': { ru: 'Налог', he: 'מס', uk: 'Податок', en: 'Tax' },
+  'cat-obligations_other': { ru: 'Другое', he: 'אחר', uk: 'Інше', en: 'Other' },
   'cat-taxes_vat': { ru: 'НДС', he: 'מע״מ', uk: 'ПДВ', en: 'VAT' },
   'cat-taxes_authority': {
     ru: 'Налоговая',
