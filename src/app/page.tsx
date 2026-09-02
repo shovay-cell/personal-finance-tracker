@@ -382,6 +382,7 @@ function FinanceApp() {
             obligations={obligations}
             settlements={settlements}
             bearerCheques={bearerCheques}
+            transactions={transactions}
             categories={categories}
             accounts={accounts}
             settings={settings}

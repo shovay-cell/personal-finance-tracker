@@ -1,15 +1,19 @@
 import {
   BearerCheque,
   CurrencyCode,
+  FinanceCategory,
   Obligation,
   ObligationSettlement,
   Plan,
   PlanOccurrence,
   PlanType,
+  Transaction,
   TransactionKind,
 } from '@/types';
 import { todayIso } from '@/lib/db';
 import { tr } from '@/i18n/t';
+import { categoryNameById } from '@/i18n/categories';
+import { getActiveLanguage } from '@/i18n/runtime';
 import { obligationsWithBalance } from './analytics';
 import { occurrencesBetween } from './forecast';
 
@@ -20,7 +24,7 @@ export interface UpcomingEvent {
   /** Always positive — `kind` gives the direction. */
   amount: number;
   kind: TransactionKind;
-  source: PlanType | 'BEARER_CHEQUE';
+  source: PlanType | 'BEARER_CHEQUE' | 'TRANSACTION';
   isOverdue: boolean;
   /** A RECURRING plan whose date has arrived but which hasn't auto-booked. */
   needsConfirmation: boolean;
@@ -33,8 +37,11 @@ export interface UpcomingEvent {
  * Every known future money movement — both kinds, fixed-schedule obligations
  * and recurring plans alike — in one flat list. «Обязательства» and «Планы»
  * both read from here so a credit or an instalment reads the same amount and
- * date in either place; income only ever comes from RECURRING plans, since
- * FIXED_SCHEDULE/obligation/cheque instruments are expense-only by design.
+ * date in either place. Most income comes from RECURRING plans (FIXED_
+ * SCHEDULE/obligation/cheque instruments are expense-only by design), but a
+ * plain transaction the user post-dated by hand — entered through the
+ * ordinary form, not a plan — is just as much a future movement and must
+ * not vanish for not being plan-shaped.
  */
 export function upcomingEvents(input: {
   plans: Plan[];
@@ -42,6 +49,8 @@ export function upcomingEvents(input: {
   obligations?: Obligation[];
   settlements?: ObligationSettlement[];
   bearerCheques?: BearerCheque[];
+  transactions?: Transaction[];
+  categories?: FinanceCategory[];
   months: number;
   today?: string;
   toBase: (amount: number, currency: CurrencyCode) => number;
@@ -116,6 +125,31 @@ export function upcomingEvents(input: {
         categoryId: plan.categoryId,
       });
     }
+  }
+
+  // A transaction with `planId` is a realized plan payment — already
+  // represented above via its occurrence/plan. A bare one dated after today
+  // is money the user recorded ahead of time by hand, outside any plan.
+  for (const transaction of input.transactions || []) {
+    if (transaction.planId) continue;
+    if (transaction.date <= today || transaction.date > horizon) continue;
+    items.push({
+      id: transaction.id,
+      date: transaction.date,
+      title:
+        transaction.merchant ||
+        transaction.note ||
+        categoryNameById(transaction.categoryId, input.categories || [], getActiveLanguage()) ||
+        tr('form.operation'),
+      // Already converted at the rate that was actually saved with it —
+      // reconverting via toBase would silently use today's rate instead.
+      amount: transaction.baseAmount,
+      kind: transaction.kind,
+      source: 'TRANSACTION',
+      isOverdue: false,
+      needsConfirmation: false,
+      categoryId: transaction.categoryId,
+    });
   }
 
   return items.sort((a, b) => a.date.localeCompare(b.date));

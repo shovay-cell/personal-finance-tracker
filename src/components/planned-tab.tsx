@@ -26,6 +26,7 @@ import {
   Plan,
   PlanOccurrence,
   RecurrenceKind,
+  Transaction,
   TransactionKind,
 } from '@/types';
 import {
@@ -59,6 +60,7 @@ interface PlannedTabProps {
   obligations: Obligation[];
   settlements: ObligationSettlement[];
   bearerCheques: BearerCheque[];
+  transactions: Transaction[];
   categories: FinanceCategory[];
   accounts: FinanceAccount[];
   settings: FinanceSettings;
@@ -92,6 +94,7 @@ export function PlannedTab({
   obligations,
   settlements,
   bearerCheques,
+  transactions,
   categories,
   accounts,
   settings,
@@ -112,9 +115,21 @@ export function PlannedTab({
   const weekEnd = addDaysStr(today, 6);
 
   const events = useMemo(
-    () => upcomingEvents({ plans, occurrences, obligations, settlements, bearerCheques, months: 2, today, toBase }),
+    () =>
+      upcomingEvents({
+        plans,
+        occurrences,
+        obligations,
+        settlements,
+        bearerCheques,
+        transactions,
+        categories,
+        months: 2,
+        today,
+        toBase,
+      }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [plans, occurrences, obligations, settlements, bearerCheques, settings, today]
+    [plans, occurrences, obligations, settlements, bearerCheques, transactions, categories, settings, today]
   );
 
   const monthEvents = useMemo(

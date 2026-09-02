@@ -145,8 +145,23 @@ export function TransactionsTab({
         kind: plan.kind,
       });
     }
+    // A transaction the user post-dated by hand, outside any plan, is just
+    // as much an upcoming movement — `planId` marks the ones already
+    // represented above via their occurrence/plan.
+    for (const transaction of transactions) {
+      if (transaction.planId) continue;
+      if (transaction.date <= today || transaction.date.slice(0, 7) > horizon) continue;
+      const category = categoryById.get(transaction.categoryId);
+      items.push({
+        id: transaction.id,
+        date: transaction.date,
+        title: transaction.merchant || transaction.note || (category ? categoryName(category, language) : t('form.operation')),
+        amount: transaction.baseAmount,
+        kind: transaction.kind,
+      });
+    }
     return items.sort((a, b) => a.date.localeCompare(b.date));
-  }, [chip, plans, occurrences, settings, today]);
+  }, [chip, plans, occurrences, transactions, categoryById, settings, today, t, language]);
 
   const sumAmounts = (items: { amount: number }[]) =>
     Math.round(items.reduce((sum, i) => sum + i.amount, 0) * 100) / 100;
