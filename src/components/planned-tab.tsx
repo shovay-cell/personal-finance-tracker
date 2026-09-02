@@ -43,6 +43,7 @@ import { UpcomingEvent, groupByDay, upcomingEvents } from '@/services/upcoming';
 import { getCategoryIcon } from '@/constants/categories';
 import { useT } from '@/i18n/context';
 import { accountName, categoryName } from '@/i18n/categories';
+import { PlanEditModal } from './debt-card';
 import {
   Card,
   EmptyState,
@@ -65,6 +66,9 @@ interface PlannedTabProps {
   accounts: FinanceAccount[];
   settings: FinanceSettings;
   autoCreateDefault: boolean;
+  /** Opens the ordinary transaction edit form — for an event that is a plain,
+   *  hand-entered transaction rather than a plan (no schedule to manage). */
+  onEditTransaction: (transaction: Transaction) => void;
 }
 
 type Preset = 'ALL' | 'TODAY' | 'WEEK' | 'MONTH' | 'NEXT_MONTH' | 'OVERDUE' | 'UNCONFIRMED' | 'CUSTOM';
@@ -99,6 +103,7 @@ export function PlannedTab({
   accounts,
   settings,
   autoCreateDefault,
+  onEditTransaction,
 }: PlannedTabProps) {
   const [kind, setKind] = useState<TransactionKind>('EXPENSE');
   const [preset, setPreset] = useState<Preset>('ALL');
@@ -199,11 +204,18 @@ export function PlannedTab({
   const days = useMemo(() => groupByDay(presetFiltered), [presetFiltered]);
 
   const planById = useMemo(() => new Map(plans.map((p) => [p.id, p])), [plans]);
+  const transactionById = useMemo(() => new Map(transactions.map((t) => [t.id, t])), [transactions]);
 
   const openEvent = (item: UpcomingEvent) => {
-    if (!item.planId) return;
-    const plan = planById.get(item.planId);
-    if (plan) setEditing(plan);
+    if (item.planId) {
+      const plan = planById.get(item.planId);
+      if (plan) setEditing(plan);
+      return;
+    }
+    // A hand-entered transaction (source 'TRANSACTION') has no plan behind
+    // it — its id is the transaction's own, so it opens the ordinary form.
+    const transaction = transactionById.get(item.id);
+    if (transaction) onEditTransaction(transaction);
   };
 
   const presets: { id: Preset; label: string }[] = [
@@ -381,16 +393,25 @@ export function PlannedTab({
         )}
       </div>
 
-      {editing && (
-        <PlannedPaymentModal
-          plan={editing === 'NEW' ? null : editing}
-          defaultKind={kind}
+      {editing && editing !== 'NEW' && editing.scheduleType === 'FIXED_SCHEDULE' ? (
+        <PlanEditModal
+          plan={editing}
           categories={categories}
           accounts={accounts}
-          baseCurrency={baseCurrency}
-          autoCreateDefault={autoCreateDefault}
           onClose={() => setEditing(null)}
         />
+      ) : (
+        editing && (
+          <PlannedPaymentModal
+            plan={editing === 'NEW' ? null : editing}
+            defaultKind={kind}
+            categories={categories}
+            accounts={accounts}
+            baseCurrency={baseCurrency}
+            autoCreateDefault={autoCreateDefault}
+            onClose={() => setEditing(null)}
+          />
+        )
       )}
     </div>
   );
@@ -410,7 +431,7 @@ function EventRow({
   const { t } = useT();
   const category = categories.find((c) => c.id === item.categoryId);
   const Icon = getCategoryIcon(category?.iconName || 'CalendarClock');
-  const clickable = Boolean(item.planId);
+  const clickable = Boolean(item.planId) || item.source === 'TRANSACTION';
 
   return (
     <div

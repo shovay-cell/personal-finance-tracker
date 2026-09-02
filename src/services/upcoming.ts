@@ -31,6 +31,9 @@ export interface UpcomingEvent {
   /** Present for RECURRING-sourced events — lets a click open that plan for editing. */
   planId?: string;
   categoryId?: string;
+  subcategoryId?: string;
+  accountId?: string;
+  authorId?: string;
 }
 
 /**
@@ -83,7 +86,11 @@ export function upcomingEvents(input: {
       source: plan.planType,
       isOverdue: occurrence.dueDate < today,
       needsConfirmation: false,
+      planId: plan.id,
       categoryId: plan.categoryId,
+      subcategoryId: plan.subcategoryId,
+      accountId: plan.accountId,
+      authorId: plan.authorId,
     });
   }
 
@@ -98,6 +105,7 @@ export function upcomingEvents(input: {
       source: 'CHEQUE',
       isOverdue: row.status === 'OVERDUE',
       needsConfirmation: false,
+      authorId: row.obligation.authorId,
     });
   }
 
@@ -112,6 +120,9 @@ export function upcomingEvents(input: {
       source: 'BEARER_CHEQUE',
       isOverdue: cheque.dueDate < today,
       needsConfirmation: false,
+      categoryId: cheque.categoryId,
+      accountId: cheque.accountId,
+      authorId: cheque.authorId,
     });
   }
 
@@ -129,6 +140,9 @@ export function upcomingEvents(input: {
         needsConfirmation: date <= today && !plan.autoCreate,
         planId: plan.id,
         categoryId: plan.categoryId,
+        subcategoryId: plan.subcategoryId,
+        accountId: plan.accountId,
+        authorId: plan.authorId,
       });
     }
   }
@@ -155,6 +169,9 @@ export function upcomingEvents(input: {
       isOverdue: false,
       needsConfirmation: false,
       categoryId: transaction.categoryId,
+      subcategoryId: transaction.subcategoryId,
+      accountId: transaction.accountId,
+      authorId: transaction.authorId,
     });
   }
 

@@ -212,7 +212,7 @@ export function DebtCard({
  * occurrences not yet paid; a payment already booked is a real transaction
  * with its own category, corrected separately in the ledger.
  */
-function PlanEditModal({
+export function PlanEditModal({
   plan,
   categories,
   accounts,

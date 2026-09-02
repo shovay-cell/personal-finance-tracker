@@ -351,6 +351,9 @@ function FinanceApp() {
             members={members}
             plans={plans}
             occurrences={occurrences}
+            obligations={obligations}
+            settlements={settlements}
+            bearerCheques={bearerCheques}
             settings={settings}
             baseCurrency={settings.baseCurrency}
             range={range}
@@ -387,6 +390,7 @@ function FinanceApp() {
             accounts={accounts}
             settings={settings}
             autoCreateDefault={settings.plannedPaymentAutoCreate}
+            onEditTransaction={setEditingTransaction}
           />
         )}
 
