@@ -7,6 +7,14 @@ export type FinanceTab = 'transactions' | 'budgets' | 'planned' | 'obligations' 
 
 import { useT } from '@/i18n/context';
 import type { TranslationKey } from '@/i18n/dictionary';
+import { APP_UPDATED_AT, APP_VERSION } from '@/constants/app-version';
+
+/** Always an absolute DD.MM.YYYY, unlike formatDateHuman's "Сегодня/Вчера" —
+ *  a version stamp needs to keep reading the same the day after it ships. */
+function formatVersionDate(dateStr: string): string {
+  const [y, m, d] = dateStr.split('-');
+  return `${d}.${m}.${y}`;
+}
 
 const TABS: { id: FinanceTab; labelKey: TranslationKey; Icon: typeof Wallet }[] = [
   { id: 'transactions', labelKey: 'nav.operations', Icon: Wallet },
@@ -99,6 +107,9 @@ export function FinanceHeader({
         <div className="flex-1 min-w-0">
           <h1 className="text-sm font-black text-slate-900 dark:text-slate-100 truncate">
             {profileName}
+            <span className="ml-1.5 text-[9px] font-bold text-slate-300 dark:text-slate-600 align-middle">
+              v{APP_VERSION} · {formatVersionDate(APP_UPDATED_AT)}
+            </span>
           </h1>
           <p className="text-[10px] text-slate-400 font-medium truncate">{subtitle}</p>
         </div>
