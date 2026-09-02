@@ -82,8 +82,12 @@ export function TransactionsTab({
   const memberById = useMemo(() => new Map(members.map((m) => [m.id, m])), [members]);
 
   // Сегодня/7 дней/Месяц are quick local overrides — they don't touch the
-  // shared range the rest of the app (Отчёты) uses; «Всё» falls back to it.
-  const effectiveRange: DateRange = useMemo(() => {
+  // shared range the rest of the app (Отчёты) uses. «Всё» means exactly
+  // that: no date bound at all, past or future — the one chip a transaction
+  // can never fall out of, so anything recorded (a post-dated income
+  // included) stays findable and editable here even once it isn't "this
+  // month, so far" any more.
+  const effectiveRange: DateRange | undefined = useMemo(() => {
     if (chip === 'TODAY') return { from: today, to: today };
     if (chip === 'WEEK') {
       const from = new Date(today);
@@ -91,6 +95,7 @@ export function TransactionsTab({
       return { from: from.toISOString().slice(0, 10), to: today };
     }
     if (chip === 'MONTH') return rangeForPreset('MONTH');
+    if (chip === 'ALL') return undefined;
     return range;
   }, [chip, range, today]);
 
