@@ -301,12 +301,19 @@ function newId(prefix: string): string {
   return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
 }
 
+// toISOString() reports UTC, not the device's local calendar day — for a
+// user ahead of UTC (e.g. Asia/Jerusalem, UTC+2/+3) that lags the real local
+// date for the first hours after local midnight, silently shifting "today"
+// (and everything keyed off it: overdue/upcoming status, month totals) back
+// by a day. Build the date from local getters instead.
 export function todayIso(): string {
-  return new Date().toISOString().slice(0, 10);
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
 export function currentMonth(): string {
-  return new Date().toISOString().slice(0, 7);
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 }
 
 /** Id of the member using this device — persisted so author tags stay stable. */

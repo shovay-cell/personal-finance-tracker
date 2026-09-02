@@ -121,9 +121,6 @@ export function PlannedTab({
     () => events.filter((e) => e.date.slice(0, 7) === thisMonth),
     [events, thisMonth]
   );
-  const dueThisMonth = sumAmounts(monthEvents.filter((e) => e.kind === 'EXPENSE'));
-  const expectedThisMonth = sumAmounts(monthEvents.filter((e) => e.kind === 'INCOME'));
-  const monthBalance = Math.round((expectedThisMonth - dueThisMonth) * 100) / 100;
 
   const kindEvents = useMemo(() => events.filter((e) => e.kind === kind), [events, kind]);
 
@@ -136,6 +133,23 @@ export function PlannedTab({
     () => (categoryFilter === 'ALL' ? kindEvents : kindEvents.filter((e) => e.categoryId === categoryFilter)),
     [kindEvents, categoryFilter]
   );
+
+  // The active tab's card must total the exact same events the list below
+  // can show — otherwise picking a category with nothing due this month
+  // leaves a nonzero card sitting above an empty "Ничего не найдено" list.
+  // The other kind's card has no category selector of its own, so it stays
+  // an unfiltered month total.
+  const monthEventsForActiveKind = useMemo(
+    () => byCategory.filter((e) => e.date.slice(0, 7) === thisMonth),
+    [byCategory, thisMonth]
+  );
+  const dueThisMonth = sumAmounts(
+    kind === 'EXPENSE' ? monthEventsForActiveKind : monthEvents.filter((e) => e.kind === 'EXPENSE')
+  );
+  const expectedThisMonth = sumAmounts(
+    kind === 'INCOME' ? monthEventsForActiveKind : monthEvents.filter((e) => e.kind === 'INCOME')
+  );
+  const monthBalance = Math.round((expectedThisMonth - dueThisMonth) * 100) / 100;
 
   const next7 = useMemo(
     () => byCategory.filter((e) => e.date >= today && e.date <= weekEnd).slice(0, 5),
