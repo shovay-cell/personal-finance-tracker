@@ -37,35 +37,53 @@ export interface DateRange {
   to: string; // YYYY-MM-DD inclusive
 }
 
+// Local calendar date, not toISOString()'s UTC one — a date built from
+// local y/m/d components (as every caller below does) can land on the
+// wrong day once run through toISOString for a user ahead of UTC.
 function iso(date: Date): string {
-  return date.toISOString().slice(0, 10);
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 }
 
+/**
+ * A calendar period — this week/month/quarter/year, start to end — not
+ * "so far": a transaction dated later in the period (a payment recorded
+ * ahead of time) must fall inside its own period's range, not just
+ * whichever one happens to include today.
+ */
 export function rangeForPreset(preset: PeriodPreset, anchor = new Date()): DateRange {
-  const to = iso(anchor);
-
   if (preset === 'WEEK') {
     const from = new Date(anchor);
     // ISO week: Monday as the first day
     const weekday = (from.getDay() + 6) % 7;
     from.setDate(from.getDate() - weekday);
-    return { from: iso(from), to };
+    const to = new Date(from);
+    to.setDate(to.getDate() + 6);
+    return { from: iso(from), to: iso(to) };
   }
 
   if (preset === 'MONTH') {
-    return { from: iso(new Date(anchor.getFullYear(), anchor.getMonth(), 1)), to };
+    return {
+      from: iso(new Date(anchor.getFullYear(), anchor.getMonth(), 1)),
+      to: iso(new Date(anchor.getFullYear(), anchor.getMonth() + 1, 0)),
+    };
   }
 
   if (preset === 'QUARTER') {
     const quarterStartMonth = Math.floor(anchor.getMonth() / 3) * 3;
-    return { from: iso(new Date(anchor.getFullYear(), quarterStartMonth, 1)), to };
+    return {
+      from: iso(new Date(anchor.getFullYear(), quarterStartMonth, 1)),
+      to: iso(new Date(anchor.getFullYear(), quarterStartMonth + 3, 0)),
+    };
   }
 
   if (preset === 'YEAR') {
-    return { from: iso(new Date(anchor.getFullYear(), 0, 1)), to };
+    return { from: iso(new Date(anchor.getFullYear(), 0, 1)), to: iso(new Date(anchor.getFullYear(), 11, 31)) };
   }
 
-  return { from: iso(new Date(anchor.getFullYear(), anchor.getMonth(), 1)), to };
+  return {
+    from: iso(new Date(anchor.getFullYear(), anchor.getMonth(), 1)),
+    to: iso(new Date(anchor.getFullYear(), anchor.getMonth() + 1, 0)),
+  };
 }
 
 export function monthRange(month: string): DateRange {
