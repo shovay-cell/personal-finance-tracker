@@ -170,9 +170,22 @@ export function TransactionFormModal({
   // toggle: picking this category is enough, no extra switch to flip.
   const isBearerCheque = kind === 'EXPENSE' && categoryId === BEARER_CHEQUE_CATEGORY_ID;
 
+  // Bearer cheques are never a plain Transaction — creating one always goes
+  // through the multi-cheque fields below, which only render on a fresh
+  // save. Offering the category while editing an already-saved transaction
+  // leads nowhere: the payee field it requires never appears for an
+  // existing entry, so picking it would strand the user behind a
+  // validation error with no way to satisfy it.
   const rootCategories = useMemo(
-    () => categories.filter((c) => c.kind === kind && !c.parentId && !c.isHidden),
-    [categories, kind]
+    () =>
+      categories.filter(
+        (c) =>
+          c.kind === kind &&
+          !c.parentId &&
+          !c.isHidden &&
+          !(existing && c.id === BEARER_CHEQUE_CATEGORY_ID)
+      ),
+    [categories, kind, existing]
   );
   const subcategories = useMemo(
     () => categories.filter((c) => c.parentId === categoryId && !c.isHidden),
@@ -246,7 +259,7 @@ export function TransactionFormModal({
       setError(t('tf.pickAccount'));
       return;
     }
-    if (isBearerCheque && !chequePayee.trim()) {
+    if (isBearerCheque && !existing && !chequePayee.trim()) {
       setError(t('bc.enterPayee'));
       return;
     }
