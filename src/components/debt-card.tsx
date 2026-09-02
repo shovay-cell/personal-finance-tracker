@@ -227,6 +227,7 @@ function PlanEditModal({
   const [title, setTitle] = useState(plan.title);
   const [merchant, setMerchant] = useState(plan.merchant || '');
   const [categoryId, setCategoryId] = useState(plan.categoryId);
+  const [subcategoryId, setSubcategoryId] = useState<string | undefined>(plan.subcategoryId);
   const [accountId, setAccountId] = useState(plan.accountId);
   const [note, setNote] = useState(plan.note || '');
   const [error, setError] = useState<string | null>(null);
@@ -234,6 +235,7 @@ function PlanEditModal({
   const relevantCategories = categories.filter(
     (c) => c.kind === plan.kind && !c.parentId && !c.isHidden
   );
+  const subcategories = categories.filter((c) => c.parentId === categoryId && !c.isHidden);
 
   const handleSave = async () => {
     if (!title.trim()) return setError(t('pl.enterTitle'));
@@ -243,6 +245,7 @@ function PlanEditModal({
       title: title.trim(),
       merchant: merchant.trim() || undefined,
       categoryId,
+      subcategoryId,
       accountId,
       note: note.trim() || undefined,
     });
@@ -285,7 +288,10 @@ function PlanEditModal({
       <Field label={t('common.category')}>
         <select
           value={categoryId}
-          onChange={(e) => setCategoryId(e.target.value)}
+          onChange={(e) => {
+            setCategoryId(e.target.value);
+            setSubcategoryId(undefined);
+          }}
           className={inputClass}
         >
           {relevantCategories.map((category) => (
@@ -295,6 +301,27 @@ function PlanEditModal({
           ))}
         </select>
       </Field>
+
+      {subcategories.length > 0 && (
+        <Field label={t('form.subcategory')}>
+          <div className="flex flex-wrap gap-2">
+            {subcategories.map((sub) => (
+              <button
+                key={sub.id}
+                type="button"
+                onClick={() => setSubcategoryId(subcategoryId === sub.id ? undefined : sub.id)}
+                className={`px-3 py-1.5 rounded-xl text-[11px] font-bold border transition-all ${
+                  subcategoryId === sub.id
+                    ? 'bg-sky-500 text-white border-transparent'
+                    : 'bg-slate-50 dark:bg-slate-800 text-slate-500 border-slate-200 dark:border-slate-700'
+                }`}
+              >
+                {categoryName(sub, language)}
+              </button>
+            ))}
+          </div>
+        </Field>
+      )}
 
       <Field label={t('common.account')}>
         <select value={accountId} onChange={(e) => setAccountId(e.target.value)} className={inputClass}>

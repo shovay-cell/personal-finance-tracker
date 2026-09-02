@@ -63,6 +63,7 @@ export function ObligationQuickAddModal({
   const [categoryId, setCategoryId] = useState(
     categories.some((c) => c.id === DEFAULT_CATEGORY_ID[startKind]) ? DEFAULT_CATEGORY_ID[startKind] : ''
   );
+  const [subcategoryId, setSubcategoryId] = useState<string | undefined>(undefined);
   const [accountId, setAccountId] = useState(accounts[0]?.id || '');
   const [firstDueDate, setFirstDueDate] = useState(todayIso());
   const [paymentsCount, setPaymentsCount] = useState(String(DEBT_KIND_META[startKind].defaultPayments));
@@ -76,6 +77,7 @@ export function ObligationQuickAddModal({
 
   const isTax = debtKind === 'TAX';
   const relevantCategories = categories.filter((c) => c.kind === 'EXPENSE' && !c.parentId && !c.isHidden);
+  const subcategories = categories.filter((c) => c.parentId === categoryId && !c.isHidden);
 
   const handleKindChange = (kind: CreatableDebtKind) => {
     setDebtKind(kind);
@@ -104,6 +106,7 @@ export function ObligationQuickAddModal({
         totalAmount: numericAmount,
         currency: baseCurrency,
         categoryId,
+        subcategoryId,
         accountId,
         startDate: todayIso(),
         firstDueDate,
@@ -236,7 +239,14 @@ export function ObligationQuickAddModal({
       )}
 
       <Field label={t('common.category')}>
-        <select value={categoryId} onChange={(e) => setCategoryId(e.target.value)} className={inputClass}>
+        <select
+          value={categoryId}
+          onChange={(e) => {
+            setCategoryId(e.target.value);
+            setSubcategoryId(undefined);
+          }}
+          className={inputClass}
+        >
           <option value="">{t('pl.pickCategory')}</option>
           {relevantCategories.map((category) => (
             <option key={category.id} value={category.id}>
@@ -245,6 +255,27 @@ export function ObligationQuickAddModal({
           ))}
         </select>
       </Field>
+
+      {subcategories.length > 0 && (
+        <Field label={t('form.subcategory')}>
+          <div className="flex flex-wrap gap-2">
+            {subcategories.map((sub) => (
+              <button
+                key={sub.id}
+                type="button"
+                onClick={() => setSubcategoryId(subcategoryId === sub.id ? undefined : sub.id)}
+                className={`px-3 py-1.5 rounded-xl text-[11px] font-bold border transition-all ${
+                  subcategoryId === sub.id
+                    ? 'bg-violet-500 text-white border-transparent'
+                    : 'bg-slate-50 dark:bg-slate-800 text-slate-500 border-slate-200 dark:border-slate-700'
+                }`}
+              >
+                {categoryName(sub, language)}
+              </button>
+            ))}
+          </div>
+        </Field>
+      )}
 
       <Field label={t('bc.debitAccount')}>
         <select value={accountId} onChange={(e) => setAccountId(e.target.value)} className={inputClass}>

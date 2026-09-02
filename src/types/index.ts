@@ -269,6 +269,7 @@ export interface Plan {
   amount: number;
   currency: CurrencyCode;
   categoryId: string;
+  subcategoryId?: string;
   accountId: string;
   /** Purchase/assessment date for FIXED_SCHEDULE; first-due seed for RECURRING. */
   startDate: string;

@@ -727,6 +727,7 @@ export interface NewFixedSchedulePlanInput {
   totalAmount: number;
   currency: CurrencyCode;
   categoryId: string;
+  subcategoryId?: string;
   accountId: string;
   startDate: string;
   /** First payment date; defaults to the purchase date. */
@@ -752,6 +753,7 @@ export async function addFixedSchedulePlan(input: NewFixedSchedulePlanInput): Pr
     amount: input.totalAmount,
     currency: input.currency,
     categoryId: input.categoryId,
+    subcategoryId: input.subcategoryId,
     accountId: input.accountId,
     startDate: input.startDate,
     occurrencesCount: input.paymentsCount,
@@ -806,6 +808,7 @@ export async function payPlanOccurrence(
     amount: occurrence.amount,
     currency: occurrence.currency,
     categoryId: plan.categoryId,
+    subcategoryId: plan.subcategoryId,
     accountId: plan.accountId,
     date,
     note: `${plan.title} · ${tr('dbx.payment')} ${occurrence.index}/${totalCount}`,
