@@ -172,6 +172,12 @@ export function TransactionsTab({
     Math.round(items.reduce((sum, i) => sum + i.amount, 0) * 100) / 100;
   const upcomingExpense = sumAmounts(upcomingItems.filter((i) => i.kind === 'EXPENSE'));
   const upcomingIncome = sumAmounts(upcomingItems.filter((i) => i.kind === 'INCOME'));
+  // The cards above stay a combined overview regardless of the tab, but the
+  // list below is the same idea as every other chip's list: one kind at a time.
+  const upcomingItemsForKind = useMemo(
+    () => upcomingItems.filter((i) => i.kind === kind),
+    [upcomingItems, kind]
+  );
 
   // Expense and income have separate category trees, so a filter picked on one
   // tab would silently empty the other.
@@ -283,10 +289,32 @@ export function TransactionsTab({
         )}
       </div>
 
+      <SegmentedControl<TransactionKind>
+        value={kind}
+        onChange={(next) => {
+          setKind(next);
+          // The category trees do not overlap, so a filter kept across the
+          // switch would show an empty list with no visible reason.
+          setCategoryFilter('ALL');
+        }}
+        options={[
+          {
+            value: 'EXPENSE',
+            label: t('common.expenses'),
+            activeClass: 'bg-white dark:bg-slate-900 text-rose-600 dark:text-rose-400 shadow-sm',
+          },
+          {
+            value: 'INCOME',
+            label: t('common.incomes'),
+            activeClass: 'bg-white dark:bg-slate-900 text-emerald-600 dark:text-emerald-400 shadow-sm',
+          },
+        ]}
+      />
+
       {chip === 'UPCOMING' ? (
         <div>
           <SectionTitle title={t('tx.chipUpcoming')} />
-          {upcomingItems.length === 0 ? (
+          {upcomingItemsForKind.length === 0 ? (
             <EmptyState
               icon={<CalendarClock className="w-7 h-7" />}
               title={t('tx.emptyUpcomingTitle')}
@@ -294,7 +322,7 @@ export function TransactionsTab({
             />
           ) : (
             <Card className="divide-y divide-slate-50 dark:divide-slate-800/80">
-              {upcomingItems.slice(0, 7).map((item) => (
+              {upcomingItemsForKind.slice(0, 7).map((item) => (
                 <div key={item.id} className="flex items-center gap-3 p-3">
                   <span className="flex-1 min-w-0">
                     <span className="block text-xs font-black text-slate-800 dark:text-slate-100 truncate">
@@ -361,28 +389,6 @@ export function TransactionsTab({
             })}
         </div>
       </div>
-
-      <SegmentedControl<TransactionKind>
-        value={kind}
-        onChange={(next) => {
-          setKind(next);
-          // The category trees do not overlap, so a filter kept across the
-          // switch would show an empty list with no visible reason.
-          setCategoryFilter('ALL');
-        }}
-        options={[
-          {
-            value: 'EXPENSE',
-            label: t('common.expenses'),
-            activeClass: 'bg-white dark:bg-slate-900 text-rose-600 dark:text-rose-400 shadow-sm',
-          },
-          {
-            value: 'INCOME',
-            label: t('common.incomes'),
-            activeClass: 'bg-white dark:bg-slate-900 text-emerald-600 dark:text-emerald-400 shadow-sm',
-          },
-        ]}
-      />
 
       <div className="flex gap-2">
         <div className="relative flex-1">

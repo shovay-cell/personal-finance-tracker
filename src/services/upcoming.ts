@@ -56,9 +56,15 @@ export function upcomingEvents(input: {
   toBase: (amount: number, currency: CurrencyCode) => number;
 }): UpcomingEvent[] {
   const today = input.today || todayIso();
-  const horizonDate = new Date(today);
-  horizonDate.setMonth(horizonDate.getMonth() + input.months);
-  const horizon = horizonDate.toISOString().slice(0, 10);
+  // Built from y/m/d parts and read back the same way — new Date(todayStr)
+  // parses as UTC midnight, and toISOString() converts back to UTC, so
+  // round-tripping through it can silently land on the wrong day for a
+  // user ahead of UTC.
+  const [y, m, d] = today.split('-').map(Number);
+  const horizonDate = new Date(y, m - 1 + input.months, d);
+  const horizon = `${horizonDate.getFullYear()}-${String(horizonDate.getMonth() + 1).padStart(2, '0')}-${String(
+    horizonDate.getDate()
+  ).padStart(2, '0')}`;
 
   const items: UpcomingEvent[] = [];
   const planById = new Map(input.plans.map((plan) => [plan.id, plan]));

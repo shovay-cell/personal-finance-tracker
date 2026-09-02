@@ -883,6 +883,7 @@ export const DICTIONARY = {
   'pl.presetNextMonth': { ru: 'Следующий месяц', he: 'החודש הבא', uk: 'Наступний місяць', en: 'Next month' },
   'pl.presetOverdue': { ru: 'Просроченные', he: 'באיחור', uk: 'Прострочені', en: 'Overdue' },
   'pl.presetUnconfirmed': { ru: 'Неподтверждённые', he: 'ממתינים לאישור', uk: 'Непідтверджені', en: 'Unconfirmed' },
+  'pl.presetCustom': { ru: 'Дата…', he: 'תאריך…', uk: 'Дата…', en: 'Date…' },
   'pl.needsConfirmation': { ru: 'Ожидает подтверждения', he: 'ממתין לאישור', uk: 'Очікує підтвердження', en: 'Awaiting confirmation' },
   'pl.emptyEventsTitle': { ru: 'Ничего не найдено', he: 'לא נמצא כלום', uk: 'Нічого не знайдено', en: 'Nothing found' },
   'pl.emptyEventsText': {

@@ -67,7 +67,7 @@ interface PlannedTabProps {
   autoCreateDefault: boolean;
 }
 
-type Preset = 'ALL' | 'TODAY' | 'WEEK' | 'MONTH' | 'NEXT_MONTH' | 'OVERDUE' | 'UNCONFIRMED';
+type Preset = 'ALL' | 'TODAY' | 'WEEK' | 'MONTH' | 'NEXT_MONTH' | 'OVERDUE' | 'UNCONFIRMED' | 'CUSTOM';
 
 function sumAmounts(items: { amount: number }[]): number {
   return Math.round(items.reduce((sum, i) => sum + i.amount, 0) * 100) / 100;
@@ -102,6 +102,7 @@ export function PlannedTab({
 }: PlannedTabProps) {
   const [kind, setKind] = useState<TransactionKind>('EXPENSE');
   const [preset, setPreset] = useState<Preset>('ALL');
+  const [customDate, setCustomDate] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('ALL');
   const [editing, setEditing] = useState<Plan | 'NEW' | null>(null);
   const { t, language } = useT();
@@ -124,7 +125,10 @@ export function PlannedTab({
         bearerCheques,
         transactions,
         categories,
-        months: 2,
+        // A future payment or income must never quietly fall off this
+        // screen just for being far out — a year out covers anything
+        // anyone plans this far ahead of time.
+        months: 12,
         today,
         toBase,
       }),
@@ -185,10 +189,12 @@ export function PlannedTab({
         return byCategory.filter((e) => e.isOverdue);
       case 'UNCONFIRMED':
         return byCategory.filter((e) => e.needsConfirmation);
+      case 'CUSTOM':
+        return customDate ? byCategory.filter((e) => e.date === customDate) : byCategory;
       default:
         return byCategory;
     }
-  }, [byCategory, preset, today, weekEnd, thisMonth, nextMonth]);
+  }, [byCategory, preset, today, weekEnd, thisMonth, nextMonth, customDate]);
 
   const days = useMemo(() => groupByDay(presetFiltered), [presetFiltered]);
 
@@ -208,6 +214,7 @@ export function PlannedTab({
     { id: 'NEXT_MONTH', label: t('pl.presetNextMonth') },
     { id: 'OVERDUE', label: t('pl.presetOverdue') },
     { id: 'UNCONFIRMED', label: t('pl.presetUnconfirmed') },
+    { id: 'CUSTOM', label: t('pl.presetCustom') },
   ];
 
   return (
@@ -291,7 +298,11 @@ export function PlannedTab({
           <button
             key={option.id}
             type="button"
-            onClick={() => setPreset(option.id)}
+            onClick={() => {
+              setPreset(option.id);
+              // First tap: seed with today so the picker opens on a real date.
+              if (option.id === 'CUSTOM' && !customDate) setCustomDate(today);
+            }}
             className={`flex-shrink-0 px-3 py-1.5 rounded-xl text-[11px] font-black transition-colors ${
               preset === option.id
                 ? 'bg-sky-500 text-white'
@@ -302,6 +313,15 @@ export function PlannedTab({
           </button>
         ))}
       </div>
+
+      {preset === 'CUSTOM' && (
+        <input
+          type="date"
+          value={customDate}
+          onChange={(e) => setCustomDate(e.target.value)}
+          className={inputClass}
+        />
+      )}
 
       {categoryOptions.length > 0 && (
         <select
