@@ -802,11 +802,12 @@ export interface ConvertToObligationInput {
  * Turns a set of existing transactions — already booked, on their own
  * dates, possibly years apart — into one FIXED_SCHEDULE obligation: a
  * PlanOccurrence per transaction (dated and amounted exactly like it,
- * `isPaid` from the start since the money is already recorded), each
- * transaction re-labelled and pointed at the new plan. Nothing about the
- * transactions' amounts, dates, accounts or categories changes — only the
- * note (so the stale text a statement import left behind doesn't linger)
- * and the new `planId` link.
+ * `isPaid` from the start since the money is already recorded — leaving it
+ * unpaid would show the same payment twice: once as the real transaction,
+ * once as a still-pending occurrence), each transaction re-labelled and
+ * pointed at the new plan. Nothing about the transactions' amounts, dates,
+ * accounts or categories changes — only the note (so the stale text a
+ * statement import left behind doesn't linger) and the new `planId` link.
  */
 export async function convertTransactionsToObligation(input: ConvertToObligationInput): Promise<Plan> {
   const rows = await financeDb.transactions.bulkGet(input.transactionIds);

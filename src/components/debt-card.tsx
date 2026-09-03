@@ -82,9 +82,7 @@ export function DebtCard({
           </p>
           <p className="text-[10.5px] text-slate-400 font-medium truncate">
             {paidCount} / {totalCount} {t('debts.ofPayments')}
-            {nextOccurrence
-              ? ` · ${t('dc.next')} ${formatDateHuman(nextOccurrence.dueDate)}`
-              : ` · ${t('dc.closed')}`}
+            {nextOccurrence ? ` · ${t('dc.next')} ${formatDateHuman(nextOccurrence.dueDate)}` : ''}
           </p>
           {plan.note && (
             <p className="text-[10.5px] text-slate-500 dark:text-slate-400 font-medium truncate">

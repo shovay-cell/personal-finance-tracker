@@ -83,9 +83,6 @@ export function ConvertToObligationModal({
       </div>
 
       <p className="text-[10.5px] text-slate-400 font-medium leading-relaxed">{t('cvo.bulkHint')}</p>
-      <p className="text-[10.5px] text-amber-600 dark:text-amber-400 font-bold leading-relaxed">
-        {t('cvo.bulkCompletedNote')}
-      </p>
 
       <div className="grid grid-cols-4 gap-1.5">
         {(Object.keys(DEBT_KIND_META) as CreatableDebtKind[]).map((option) => {
