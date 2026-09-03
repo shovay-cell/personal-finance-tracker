@@ -21,6 +21,7 @@ import {
   VatSummary,
   DebtPlan,
   DebtInstallment,
+  CreatableDebtKind,
   Plan,
   PlanOccurrence,
   PlanScheduleType,
@@ -786,6 +787,82 @@ export async function addFixedSchedulePlan(input: NewFixedSchedulePlanInput): Pr
     await payPlanOccurrence(occurrences[0].id);
   }
 
+  return plan;
+}
+
+export interface ConvertToObligationInput {
+  /** Already-real transactions to fold into one obligation — e.g. an
+   *  imported loan schedule that was recorded as plain expenses. */
+  transactionIds: string[];
+  planType: CreatableDebtKind;
+  title: string;
+}
+
+/**
+ * Turns a set of existing transactions — already booked, on their own
+ * dates, possibly years apart — into one FIXED_SCHEDULE obligation: a
+ * PlanOccurrence per transaction (dated and amounted exactly like it,
+ * `isPaid` from the start since the money is already recorded), each
+ * transaction re-labelled and pointed at the new plan. Nothing about the
+ * transactions' amounts, dates, accounts or categories changes — only the
+ * note (so the stale text a statement import left behind doesn't linger)
+ * and the new `planId` link.
+ */
+export async function convertTransactionsToObligation(input: ConvertToObligationInput): Promise<Plan> {
+  const rows = await financeDb.transactions.bulkGet(input.transactionIds);
+  const valid = rows.filter((t): t is Transaction => t != null && t.kind === 'EXPENSE');
+  if (valid.length === 0) {
+    throw new Error(tr('cvo.nothingToConvert'));
+  }
+  valid.sort((a, b) => a.date.localeCompare(b.date) || a.createdAt.localeCompare(b.createdAt));
+
+  const currency = valid[0].currency;
+  const totalAmount = Math.round(valid.reduce((sum, t) => sum + t.amount, 0) * 100) / 100;
+  const now = new Date().toISOString();
+
+  const plan: Plan = {
+    id: newId('debt'),
+    planType: input.planType,
+    scheduleType: 'FIXED_SCHEDULE',
+    status: 'ACTIVE',
+    title: input.title,
+    kind: 'EXPENSE',
+    amount: totalAmount,
+    currency,
+    categoryId: valid[0].categoryId,
+    subcategoryId: valid[0].subcategoryId,
+    accountId: valid[0].accountId,
+    startDate: valid[0].date,
+    occurrencesCount: valid.length,
+    occurrencesPaid: 0,
+    outstandingAmount: totalAmount,
+    authorId: getCurrentMemberId(),
+    createdAt: now,
+    updatedAt: now,
+  };
+  await financeDb.plans.put(plan);
+
+  const occurrences: PlanOccurrence[] = valid.map((transaction, index) => ({
+    id: newId('occ'),
+    planId: plan.id,
+    index: index + 1,
+    dueDate: transaction.date,
+    amount: transaction.amount,
+    currency: transaction.currency,
+    isPaid: true,
+    paidDate: transaction.date,
+    transactionId: transaction.id,
+  }));
+  await financeDb.planOccurrences.bulkPut(occurrences);
+
+  for (let i = 0; i < valid.length; i++) {
+    await financeDb.transactions.update(valid[i].id, {
+      planId: plan.id,
+      note: `${input.title} · ${tr('dbx.payment')} ${i + 1}/${valid.length}`,
+    });
+  }
+
+  await syncFixedSchedulePlanCache(plan.id);
   return plan;
 }
 

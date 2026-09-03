@@ -10,6 +10,7 @@ import {
   Receipt,
   RotateCcw,
   ScanLine,
+  Scale,
   Search,
   Wallet,
 } from 'lucide-react';
@@ -33,6 +34,7 @@ import { DateRange, formatDateHuman, formatMoney, rangeForPreset } from '@/servi
 import { UpcomingEvent, upcomingEvents } from '@/services/upcoming';
 import { useT } from '@/i18n/context';
 import { accountKindLabel, accountName, categoryName, seededName } from '@/i18n/categories';
+import { ConvertToObligationModal } from './convert-to-obligation-modal';
 import { Card, EmptyState, SectionTitle, SegmentedControl, inputClass } from './ui';
 
 type QuickChip = 'TODAY' | 'WEEK' | 'MONTH' | 'UPCOMING' | 'ALL';
@@ -51,6 +53,9 @@ interface UnifiedRow {
   subcategoryId?: string;
   accountId?: string;
   authorId?: string;
+  /** A realized instalment/obligation payment — kept in the list, excluded
+   *  from the cards so it isn't counted twice against «Обязательства». */
+  isDebtRepayment?: boolean;
   transaction?: Transaction;
   event?: UpcomingEvent;
 }
@@ -98,6 +103,7 @@ export function TransactionsTab({
   const [dateTo, setDateTo] = useState('');
   const [showFilters, setShowFilters] = useState(false);
   const [chip, setChip] = useState<QuickChip>('ALL');
+  const [isConverting, setIsConverting] = useState(false);
   const { t, language } = useT();
   const today = todayIso();
   const toBase = (amount: number, currency: CurrencyCode) => convertToBase(amount, currency, settings).baseAmount;
@@ -159,9 +165,9 @@ export function TransactionsTab({
     const rows: UnifiedRow[] = [];
     for (const transaction of transactions) {
       // Already tracked as its own instalment/obligation in «Обязательства» —
-      // keeping it out of these totals mirrors the old excludeDebtRepayments.
+      // kept in the list (it's still a real transaction) but flagged so the
+      // cards can exclude it, mirroring the old excludeDebtRepayments.
       const plan = transaction.planId ? planById.get(transaction.planId) : undefined;
-      if (plan?.scheduleType === 'FIXED_SCHEDULE') continue;
       rows.push({
         id: `t-${transaction.id}`,
         date: transaction.date,
@@ -172,6 +178,7 @@ export function TransactionsTab({
         subcategoryId: transaction.subcategoryId,
         accountId: transaction.accountId,
         authorId: transaction.authorId,
+        isDebtRepayment: plan?.scheduleType === 'FIXED_SCHEDULE',
         transaction,
       });
     }
@@ -217,12 +224,25 @@ export function TransactionsTab({
       .sort((a, b) => b.date.localeCompare(a.date));
   }, [rangeFiltered, kind, statusFilter, memberFilter, accountFilter, categoryFilter, search]);
 
+  // Only real transactions can be folded into an obligation — a plan/
+  // cheque event has no ledger entry of its own to re-point.
+  // Already linked to a plan (e.g. a previous conversion) — re-sweeping it
+  // would orphan that plan's occurrence, so it's not offered a second time.
+  const visibleTransactions = useMemo(
+    () =>
+      visible
+        .map((r) => r.transaction)
+        .filter((t): t is Transaction => t != null && !t.planId),
+    [visible]
+  );
+
   // The cards stay a combined overview regardless of the kind tab — the
   // active tab's category filter narrows only its own card, the same fix
   // already applied on «Планы» to keep the card and the list in sync.
   const cardRowsBase = useMemo(
     () =>
       rangeFiltered.filter((r) => {
+        if (r.isDebtRepayment) return false;
         if (statusFilter !== 'ALL' && r.status !== statusFilter) return false;
         if (memberFilter !== 'ALL' && r.authorId !== memberFilter) return false;
         if (accountFilter !== 'ALL' && r.accountId !== accountFilter) return false;
@@ -501,6 +521,31 @@ export function TransactionsTab({
             <option value="UNCONFIRMED">{t('tx.statusUnconfirmed')}</option>
           </select>
         </Card>
+      )}
+
+      {activeFilterCount > 0 && visibleTransactions.length > 0 && (
+        <div className="flex items-center justify-between gap-2 px-1">
+          <span className="text-[10.5px] font-bold text-slate-400">
+            {visibleTransactions.length} {t('tx.bulkFound')}
+          </span>
+          <button
+            type="button"
+            onClick={() => setIsConverting(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[11px] font-black text-violet-600 dark:text-violet-400 bg-violet-50 dark:bg-violet-950/40"
+          >
+            <Scale className="w-3.5 h-3.5" />
+            {t('tx.bulkConvert')}
+          </button>
+        </div>
+      )}
+
+      {isConverting && (
+        <ConvertToObligationModal
+          transactions={visibleTransactions}
+          baseCurrency={baseCurrency}
+          onClose={() => setIsConverting(false)}
+          onDone={resetAll}
+        />
       )}
 
       {grouped.length === 0 ? (
