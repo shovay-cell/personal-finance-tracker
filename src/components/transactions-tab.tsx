@@ -12,6 +12,7 @@ import {
   ScanLine,
   Scale,
   Search,
+  Tag,
   Wallet,
 } from 'lucide-react';
 import {
@@ -35,6 +36,7 @@ import { UpcomingEvent, upcomingEvents } from '@/services/upcoming';
 import { useT } from '@/i18n/context';
 import { accountKindLabel, accountName, categoryName, seededName } from '@/i18n/categories';
 import { ConvertToObligationModal } from './convert-to-obligation-modal';
+import { BulkChangeCategoryModal } from './bulk-change-category-modal';
 import { Card, EmptyState, SectionTitle, SegmentedControl, inputClass } from './ui';
 
 type QuickChip = 'TODAY' | 'WEEK' | 'MONTH' | 'UPCOMING' | 'ALL';
@@ -104,6 +106,7 @@ export function TransactionsTab({
   const [showFilters, setShowFilters] = useState(false);
   const [chip, setChip] = useState<QuickChip>('ALL');
   const [isConverting, setIsConverting] = useState(false);
+  const [isChangingCategory, setIsChangingCategory] = useState(false);
   const { t, language } = useT();
   const today = todayIso();
   const toBase = (amount: number, currency: CurrencyCode) => convertToBase(amount, currency, settings).baseAmount;
@@ -233,6 +236,15 @@ export function TransactionsTab({
       visible
         .map((r) => r.transaction)
         .filter((t): t is Transaction => t != null && !t.planId),
+    [visible]
+  );
+
+  // Unlike visibleTransactions, this keeps plan-linked rows in — a bulk
+  // category fix is exactly what an already-converted obligation's
+  // payments need (its own categoryId only ever steers occurrences not
+  // yet paid, so it can't reach transactions that already exist).
+  const visibleAllTransactions = useMemo(
+    () => visible.map((r) => r.transaction).filter((t): t is Transaction => t != null),
     [visible]
   );
 
@@ -523,19 +535,31 @@ export function TransactionsTab({
         </Card>
       )}
 
-      {activeFilterCount > 0 && visibleTransactions.length > 0 && (
+      {activeFilterCount > 0 && visibleAllTransactions.length > 0 && (
         <div className="flex items-center justify-between gap-2 px-1">
           <span className="text-[10.5px] font-bold text-slate-400">
-            {visibleTransactions.length} {t('tx.bulkFound')}
+            {visibleAllTransactions.length} {t('tx.bulkFound')}
           </span>
-          <button
-            type="button"
-            onClick={() => setIsConverting(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[11px] font-black text-violet-600 dark:text-violet-400 bg-violet-50 dark:bg-violet-950/40"
-          >
-            <Scale className="w-3.5 h-3.5" />
-            {t('tx.bulkConvert')}
-          </button>
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => setIsChangingCategory(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[11px] font-black text-sky-600 dark:text-sky-400 bg-sky-50 dark:bg-sky-950/40"
+            >
+              <Tag className="w-3.5 h-3.5" />
+              {t('tx.bulkChangeCategory')}
+            </button>
+            {visibleTransactions.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setIsConverting(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[11px] font-black text-violet-600 dark:text-violet-400 bg-violet-50 dark:bg-violet-950/40"
+              >
+                <Scale className="w-3.5 h-3.5" />
+                {t('tx.bulkConvert')}
+              </button>
+            )}
+          </div>
         </div>
       )}
 
@@ -544,6 +568,16 @@ export function TransactionsTab({
           transactions={visibleTransactions}
           baseCurrency={baseCurrency}
           onClose={() => setIsConverting(false)}
+          onDone={resetAll}
+        />
+      )}
+
+      {isChangingCategory && (
+        <BulkChangeCategoryModal
+          transactions={visibleAllTransactions}
+          categories={categories}
+          baseCurrency={baseCurrency}
+          onClose={() => setIsChangingCategory(false)}
           onDone={resetAll}
         />
       )}

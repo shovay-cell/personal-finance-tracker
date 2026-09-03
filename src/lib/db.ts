@@ -867,6 +867,31 @@ export async function convertTransactionsToObligation(input: ConvertToObligation
   return plan;
 }
 
+export interface BulkChangeCategoryInput {
+  transactionIds: string[];
+  categoryId: string;
+  subcategoryId?: string;
+}
+
+/**
+ * Re-points a batch of already-booked transactions at a different category
+ * in one go. Editing a plan's own categoryId (PlanEditModal) only steers
+ * occurrences not yet paid — once every occurrence is already linked to a
+ * real transaction (the common case right after a bulk conversion), there
+ * is nothing left for that edit to apply to, and the transactions' own
+ * categories never move. This is the one place that actually rewrites them.
+ */
+export async function bulkUpdateTransactionCategory(input: BulkChangeCategoryInput): Promise<number> {
+  const rows = await financeDb.transactions.bulkGet(input.transactionIds);
+  const valid = rows.filter((t): t is Transaction => t != null);
+  await Promise.all(
+    valid.map((t) =>
+      updateTransaction(t.id, { categoryId: input.categoryId, subcategoryId: input.subcategoryId })
+    )
+  );
+  return valid.length;
+}
+
 /** Turns one scheduled payment into a real expense, marks it paid, and keeps
  *  the parent plan's cached paid-count/outstanding/status in sync. */
 export async function payPlanOccurrence(
