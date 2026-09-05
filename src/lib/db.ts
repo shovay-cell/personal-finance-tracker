@@ -1963,6 +1963,8 @@ function addDaysIso(dateStr: string, days: number): string {
 
 export interface BearerChequeSeriesUpdate {
   payee?: string;
+  /** Sets every cheque in the series to this same amount (not a total to split). */
+  amount?: number;
   categoryId?: string;
   accountId?: string;
   note?: string;
@@ -1983,6 +1985,7 @@ export async function updateBearerChequeSeries(
   const patched = cheques.map((c) => {
     const next: BearerCheque = { ...c, updatedAt: now };
     if (updates.payee !== undefined) next.payee = updates.payee;
+    if (updates.amount !== undefined) next.amount = updates.amount;
     if (updates.categoryId !== undefined) next.categoryId = updates.categoryId;
     if (updates.accountId !== undefined) next.accountId = updates.accountId;
     if (updates.note !== undefined) next.note = updates.note;

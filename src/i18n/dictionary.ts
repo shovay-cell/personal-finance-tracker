@@ -2254,17 +2254,23 @@ export const DICTIONARY = {
     uk: 'Скасувати всю серію',
     en: 'Cancel whole series',
   },
+  'bc.seriesAmountHint': {
+    ru: 'Если заполнить — поставит одну и ту же сумму каждому чеку серии',
+    he: 'אם ממלאים — יגדיר את אותו סכום לכל צ׳קי הסדרה',
+    uk: 'Якщо заповнити — встановить одну й ту саму суму кожному чеку серії',
+    en: 'If filled in, sets every cheque in the series to this same amount',
+  },
   'bc.seriesNoteHint': {
     ru: 'Если заполнить — заменит заметку у каждого чека серии',
     he: 'אם ממלאים — יחליף את ההערה בכל צ׳קי הסדרה',
     uk: 'Якщо заповнити — замінить нотатку в кожному чеку серії',
     en: 'If filled in, replaces the note on every cheque in the series',
   },
-  'bc.seriesNotePlaceholder': {
+  'bc.seriesLeaveUnchanged': {
     ru: 'Не менять у существующих чеков',
     he: 'לא לשנות בצ׳קים הקיימים',
     uk: 'Не змінювати в наявних чеках',
-    en: 'Leave existing notes unchanged',
+    en: 'Leave existing cheques unchanged',
   },
   'bc.seriesShiftDays': {
     ru: 'Сдвинуть дату списания, дней',

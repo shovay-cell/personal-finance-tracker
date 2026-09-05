@@ -755,6 +755,7 @@ function BearerChequeSeriesEditModal({
   const { t, language } = useT();
   const first = series.items[0];
   const [payee, setPayee] = useState(first.payee);
+  const [amount, setAmount] = useState('');
   const [categoryId, setCategoryId] = useState(first.categoryId);
   const [accountId, setAccountId] = useState(first.accountId);
   const [note, setNote] = useState('');
@@ -771,10 +772,16 @@ function BearerChequeSeriesEditModal({
 
   const handleSave = async () => {
     if (!payee.trim()) return setError(t('bc.enterPayee'));
+    let numericAmount: number | undefined;
+    if (amount.trim()) {
+      numericAmount = parseFloat(amount.replace(',', '.'));
+      if (!Number.isFinite(numericAmount) || numericAmount <= 0) return setError(t('pl.enterAmount'));
+    }
     setBusy(true);
     const days = parseInt(shiftDays, 10);
     await updateBearerChequeSeries(series.seriesId, {
       payee: payee.trim(),
+      amount: numericAmount,
       categoryId,
       accountId,
       note: note.trim() ? note.trim() : undefined,
@@ -829,6 +836,17 @@ function BearerChequeSeriesEditModal({
         />
       </Field>
 
+      <Field label={`${t('common.amount')}, ${first.currency}`} hint={t('bc.seriesAmountHint')}>
+        <input
+          type="text"
+          inputMode="decimal"
+          value={amount}
+          onChange={(e) => setAmount(e.target.value)}
+          placeholder={t('bc.seriesLeaveUnchanged')}
+          className={`${inputClass} text-lg font-black`}
+        />
+      </Field>
+
       <Field label={t('common.category')}>
         <select value={categoryId} onChange={(e) => setCategoryId(e.target.value)} className={inputClass}>
           {relevantCategories.map((category) => (
@@ -856,7 +874,7 @@ function BearerChequeSeriesEditModal({
           type="text"
           value={note}
           onChange={(e) => setNote(e.target.value)}
-          placeholder={t('bc.seriesNotePlaceholder')}
+          placeholder={t('bc.seriesLeaveUnchanged')}
           className={inputClass}
         />
       </Field>
