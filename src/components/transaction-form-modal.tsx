@@ -170,22 +170,17 @@ export function TransactionFormModal({
   // toggle: picking this category is enough, no extra switch to flip.
   const isBearerCheque = kind === 'EXPENSE' && categoryId === BEARER_CHEQUE_CATEGORY_ID;
 
-  // Bearer cheques are never a plain Transaction — creating one always goes
-  // through the multi-cheque fields below, which only render on a fresh
-  // save. Offering the category while editing an already-saved transaction
-  // leads nowhere: the payee field it requires never appears for an
-  // existing entry, so picking it would strand the user behind a
-  // validation error with no way to satisfy it.
+  // A brand-new bearer cheque is never a plain Transaction — creating one
+  // always goes through the multi-cheque fields below, which only render on
+  // a fresh save (see `isBearerCheque && !existing` throughout this form).
+  // Editing an already-saved transaction is different: it never routes
+  // through that creation branch (the `existing` save path returns early,
+  // before it), so offering this category there just retags it like any
+  // other — the date/account/merchant fields below stay visible for that
+  // case specifically so the edit form doesn't quietly lose them.
   const rootCategories = useMemo(
-    () =>
-      categories.filter(
-        (c) =>
-          c.kind === kind &&
-          !c.parentId &&
-          !c.isHidden &&
-          !(existing && c.id === BEARER_CHEQUE_CATEGORY_ID)
-      ),
-    [categories, kind, existing]
+    () => categories.filter((c) => c.kind === kind && !c.parentId && !c.isHidden),
+    [categories, kind]
   );
   const subcategories = useMemo(
     () => categories.filter((c) => c.parentId === categoryId && !c.isHidden),
@@ -777,7 +772,7 @@ export function TransactionFormModal({
         </button>
       )}
 
-      {!isBearerCheque && (
+      {(!isBearerCheque || existing) && (
         <div className="grid grid-cols-2 gap-3">
           <Field label={t('common.date')} warn={uncertainFields.includes('date')}>
             <input
@@ -809,7 +804,7 @@ export function TransactionFormModal({
         </div>
       )}
 
-      {!isBearerCheque && (
+      {(!isBearerCheque || existing) && (
         <Field label={t('form.merchant')} warn={uncertainFields.includes('merchant')}>
           <input
             type="text"
