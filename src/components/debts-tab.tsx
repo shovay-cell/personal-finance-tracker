@@ -10,6 +10,7 @@ import {
   CreditCard,
   FileSignature,
   Landmark,
+  Pencil,
   Percent,
   Scale,
   Wallet,
@@ -29,15 +30,23 @@ import {
   VatPayment,
   VatSummary,
 } from '@/types';
-import { cancelBearerCheque, clearBearerCheque, convertToBase, todayIso } from '@/lib/db';
+import {
+  cancelBearerCheque,
+  clearBearerCheque,
+  convertToBase,
+  deleteBearerCheque,
+  todayIso,
+  updateBearerCheque,
+} from '@/lib/db';
 import { formatDateHuman, formatMoney, monthLabel } from '@/services/analytics';
 import { debtsOverview, describeAllFixedSchedulePlans, upcomingByMonth } from '@/services/debts';
 import { VatCard } from './vat-card';
 import { DebtCard } from './debt-card';
 import { ObligationsTab } from './obligations-tab';
 import { useT } from '@/i18n/context';
+import { accountName, categoryName } from '@/i18n/categories';
 import type { TranslationKey } from '@/i18n/dictionary';
-import { Card, EmptyState, SectionTitle } from './ui';
+import { Card, EmptyState, Field, ModalShell, PrimaryButton, SectionTitle, inputClass } from './ui';
 
 type Segment = 'ALL' | 'VAT' | 'CHEQUE' | 'INSTALLMENT' | 'TAX' | 'LOAN' | 'OTHER';
 
@@ -272,7 +281,12 @@ export function DebtsTab({
         <>
           <div>
             <SectionTitle title={t('bc.pendingTitle')} />
-            <PendingChequesList cheques={bearerCheques} currency={baseCurrency} />
+            <PendingChequesList
+              cheques={bearerCheques}
+              currency={baseCurrency}
+              categories={categories}
+              accounts={accounts}
+            />
           </div>
 
           <DebtList
@@ -368,12 +382,17 @@ function DebtList({
 function PendingChequesList({
   cheques,
   currency,
+  categories,
+  accounts,
 }: {
   cheques: BearerCheque[];
   currency: CurrencyCode;
+  categories: FinanceCategory[];
+  accounts: FinanceAccount[];
 }) {
   const { t } = useT();
   const today = todayIso();
+  const [editing, setEditing] = useState<BearerCheque | null>(null);
   const pending = cheques
     .filter((c) => c.status === 'ISSUED')
     .sort((a, b) => a.dueDate.localeCompare(b.dueDate));
@@ -422,6 +441,14 @@ function PendingChequesList({
             <div className="flex items-center gap-2">
               <button
                 type="button"
+                onClick={() => setEditing(cheque)}
+                className="px-2.5 py-2 rounded-xl bg-slate-50 dark:bg-slate-800/60 text-slate-500 dark:text-slate-400 flex items-center justify-center active:scale-95 transition-transform"
+                title={t('dc.edit')}
+              >
+                <Pencil className="w-3.5 h-3.5" />
+              </button>
+              <button
+                type="button"
                 onClick={() => clearBearerCheque(cheque.id)}
                 className="flex-1 py-2 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 text-[10.5px] font-black flex items-center justify-center gap-1.5 active:scale-95 transition-transform"
               >
@@ -440,6 +467,164 @@ function PendingChequesList({
           </Card>
         );
       })}
+
+      {editing && (
+        <BearerChequeEditModal
+          cheque={editing}
+          categories={categories}
+          accounts={accounts}
+          onClose={() => setEditing(null)}
+        />
+      )}
     </div>
+  );
+}
+
+/**
+ * Fields for a postdated cheque already issued — payee, amount, dates,
+ * account, cheque number, note. Nothing about this changes what clearing or
+ * cancelling it does; it just corrects the record itself.
+ */
+export function BearerChequeEditModal({
+  cheque,
+  categories,
+  accounts,
+  onClose,
+}: {
+  cheque: BearerCheque;
+  categories: FinanceCategory[];
+  accounts: FinanceAccount[];
+  onClose: () => void;
+}) {
+  const { t, language } = useT();
+  const [payee, setPayee] = useState(cheque.payee);
+  const [chequeNumber, setChequeNumber] = useState(cheque.chequeNumber || '');
+  const [amount, setAmount] = useState(String(cheque.amount));
+  const [categoryId, setCategoryId] = useState(cheque.categoryId);
+  const [accountId, setAccountId] = useState(cheque.accountId);
+  const [issueDate, setIssueDate] = useState(cheque.issueDate);
+  const [dueDate, setDueDate] = useState(cheque.dueDate);
+  const [note, setNote] = useState(cheque.note || '');
+  const [error, setError] = useState<string | null>(null);
+
+  const relevantCategories = categories.filter((c) => c.kind === 'EXPENSE' && !c.parentId && !c.isHidden);
+
+  const handleSave = async () => {
+    const numericAmount = parseFloat(amount.replace(',', '.'));
+    if (!payee.trim()) return setError(t('bc.enterPayee'));
+    if (!Number.isFinite(numericAmount) || numericAmount <= 0) return setError(t('pl.enterAmount'));
+
+    await updateBearerCheque(cheque.id, {
+      payee: payee.trim(),
+      chequeNumber: chequeNumber.trim() || undefined,
+      amount: numericAmount,
+      categoryId,
+      accountId,
+      issueDate,
+      dueDate,
+      note: note.trim() || undefined,
+    });
+    onClose();
+  };
+
+  return (
+    <ModalShell
+      title={t('bc.editTitle')}
+      icon={<Pencil className="w-5 h-5" />}
+      onClose={onClose}
+      footer={
+        <div className="space-y-2">
+          {error && <p className="text-[11px] font-bold text-rose-500 text-center">{error}</p>}
+          <PrimaryButton onClick={handleSave}>{t('common.save')}</PrimaryButton>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={async () => {
+                await clearBearerCheque(cheque.id);
+                onClose();
+              }}
+              className="flex-1 py-2.5 rounded-2xl text-[11px] font-black text-emerald-600 bg-emerald-50 dark:bg-emerald-950/40 flex items-center justify-center gap-1.5"
+            >
+              <Check className="w-3.5 h-3.5" />
+              {t('bc.markCleared')}
+            </button>
+            <button
+              type="button"
+              onClick={async () => {
+                await deleteBearerCheque(cheque.id);
+                onClose();
+              }}
+              className="px-4 py-2.5 rounded-2xl text-rose-500 bg-rose-50 dark:bg-rose-950/40 flex items-center justify-center"
+            >
+              <Ban className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </div>
+      }
+    >
+      <Field label={t('bc.payee')}>
+        <input
+          type="text"
+          value={payee}
+          onChange={(e) => setPayee(e.target.value)}
+          className={inputClass}
+          autoFocus
+        />
+      </Field>
+
+      <Field label={`${t('common.amount')}, ${cheque.currency}`}>
+        <input
+          type="text"
+          inputMode="decimal"
+          value={amount}
+          onChange={(e) => setAmount(e.target.value)}
+          className={`${inputClass} text-lg font-black`}
+        />
+      </Field>
+
+      <Field label={t('common.category')}>
+        <select value={categoryId} onChange={(e) => setCategoryId(e.target.value)} className={inputClass}>
+          {relevantCategories.map((category) => (
+            <option key={category.id} value={category.id}>
+              {categoryName(category, language)}
+            </option>
+          ))}
+        </select>
+      </Field>
+
+      <div className="grid grid-cols-2 gap-3">
+        <Field label={t('bc.issueDate')}>
+          <input type="date" value={issueDate} onChange={(e) => setIssueDate(e.target.value)} className={inputClass} />
+        </Field>
+        <Field label={t('bc.dueDate')}>
+          <input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} className={inputClass} />
+        </Field>
+      </div>
+
+      <Field label={t('bc.chequeNumber')} hint={t('bc.chequeNumberOptional')}>
+        <input
+          type="text"
+          value={chequeNumber}
+          onChange={(e) => setChequeNumber(e.target.value)}
+          className={inputClass}
+        />
+      </Field>
+
+      <Field label={t('bc.debitAccount')}>
+        <select value={accountId} onChange={(e) => setAccountId(e.target.value)} className={inputClass}>
+          {accounts
+            .filter((a) => !a.isArchived || a.id === accountId)
+            .map((account) => (
+              <option key={account.id} value={account.id}>
+                {accountName(account, language)}
+              </option>
+            ))}
+        </select>
+      </Field>
+
+      <Field label={t('common.note')}>
+        <input type="text" value={note} onChange={(e) => setNote(e.target.value)} className={inputClass} />
+      </Field>
+    </ModalShell>
   );
 }

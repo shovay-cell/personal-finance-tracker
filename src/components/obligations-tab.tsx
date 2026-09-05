@@ -303,7 +303,7 @@ function ObligationRow({
   );
 }
 
-function ObligationModal({
+export function ObligationModal({
   obligation,
   baseCurrency,
   onClose,

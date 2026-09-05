@@ -2198,6 +2198,7 @@ export const DICTIONARY = {
     en: 'Debited from the account on the due date, not today',
   },
   'bc.payee': { ru: 'Кому выписан', he: 'למי הונפק', uk: 'Кому виписано', en: 'Payee' },
+  'bc.editTitle': { ru: 'Изменить чек', he: 'עריכת שיק', uk: 'Змінити чек', en: 'Edit cheque' },
   'bc.payeePlaceholder': { ru: 'Имя или организация', he: 'שם או חברה', uk: "Ім'я або організація", en: 'Name or company' },
   'bc.chequeNumber': { ru: 'Номер чека', he: 'מספר הצ׳ק', uk: 'Номер чека', en: 'Cheque number' },
   'bc.chequeNumberOptional': { ru: 'Необязательно', he: 'לא חובה', uk: 'Необов’язково', en: 'Optional' },

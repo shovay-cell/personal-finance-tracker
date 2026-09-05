@@ -48,6 +48,8 @@ import { useT } from '@/i18n/context';
 import { accountName, categoryName } from '@/i18n/categories';
 import { EditScopeModal, OccurrenceOverrideModal, PlanEditScope } from './plan-scope-modal';
 import { PlanEditModal } from './debt-card';
+import { BearerChequeEditModal } from './debts-tab';
+import { ObligationModal } from './obligations-tab';
 import {
   Card,
   EmptyState,
@@ -121,6 +123,8 @@ export function PlannedTab({
     date: string;
     occurrence?: PlanOccurrence;
   } | null>(null);
+  const [editingCheque, setEditingCheque] = useState<BearerCheque | null>(null);
+  const [editingObligation, setEditingObligation] = useState<Obligation | null>(null);
   const [overrideTarget, setOverrideTarget] = useState<{
     plan: Plan;
     date: string;
@@ -251,8 +255,23 @@ export function PlannedTab({
     }
     // A hand-entered transaction (source 'TRANSACTION') has no plan behind
     // it — its id is the transaction's own, so it opens the ordinary form.
-    const transaction = transactionById.get(item.id);
-    if (transaction) onEditTransaction(transaction);
+    if (item.source === 'TRANSACTION') {
+      const transaction = transactionById.get(item.id);
+      if (transaction) onEditTransaction(transaction);
+      return;
+    }
+    // A postdated cheque the profile issued (`item.id` is the cheque's own
+    // id) or an old-style issued obligation (bearer note) — each has its
+    // own editor elsewhere in the app; open it directly from here too.
+    if (item.source === 'BEARER_CHEQUE') {
+      const cheque = bearerCheques.find((c) => c.id === item.id);
+      if (cheque) setEditingCheque(cheque);
+      return;
+    }
+    if (item.source === 'CHEQUE') {
+      const obligation = obligations.find((o) => o.id === item.id);
+      if (obligation) setEditingObligation(obligation);
+    }
   };
 
   const chooseScope = async (scope: PlanEditScope) => {
@@ -486,6 +505,23 @@ export function PlannedTab({
           onClose={() => setOverrideTarget(null)}
         />
       )}
+
+      {editingCheque && (
+        <BearerChequeEditModal
+          cheque={editingCheque}
+          categories={categories}
+          accounts={accounts}
+          onClose={() => setEditingCheque(null)}
+        />
+      )}
+
+      {editingObligation && (
+        <ObligationModal
+          obligation={editingObligation}
+          baseCurrency={baseCurrency}
+          onClose={() => setEditingObligation(null)}
+        />
+      )}
     </div>
   );
 }
@@ -504,7 +540,11 @@ function EventRow({
   const { t } = useT();
   const category = categories.find((c) => c.id === item.categoryId);
   const Icon = getCategoryIcon(category?.iconName || 'CalendarClock');
-  const clickable = Boolean(item.planId) || item.source === 'TRANSACTION';
+  const clickable =
+    Boolean(item.planId) ||
+    item.source === 'TRANSACTION' ||
+    item.source === 'BEARER_CHEQUE' ||
+    item.source === 'CHEQUE';
 
   return (
     <div
