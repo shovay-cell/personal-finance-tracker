@@ -35,6 +35,7 @@ import {
   buildInstallmentAmounts,
   deleteTransaction,
   getCurrentMemberId,
+  updateBearerCheque,
   todayIso,
   updateTransaction,
 } from '@/lib/db';
@@ -327,9 +328,12 @@ export function TransactionFormModal({
           chequeLastDueDate || undefined
         );
         const baseNote = note.trim();
+        // Every cheque in a split series shares one seriesId — the first
+        // cheque's own id — so the group can be found and edited together.
+        let seriesId: string | undefined;
 
         for (let i = 0; i < count; i++) {
-          await addBearerCheque({
+          const created = await addBearerCheque({
             payee: chequePayee.trim(),
             chequeNumber: chequeNumberForIndex(chequeNumber.trim(), i, count),
             amount: amounts[i],
@@ -342,7 +346,14 @@ export function TransactionFormModal({
               count > 1
                 ? [baseNote, `${t('bc.chequeNoun')} ${i + 1}/${count}`].filter(Boolean).join(' · ')
                 : baseNote || undefined,
+            seriesId,
           });
+          // The first cheque generates the id every later one points back
+          // to — but only learns its own id after creation, so patch it in.
+          if (count > 1 && !seriesId) {
+            seriesId = created.id;
+            await updateBearerCheque(created.id, { seriesId });
+          }
         }
         onClose();
         return;

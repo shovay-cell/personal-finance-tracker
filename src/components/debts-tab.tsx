@@ -10,6 +10,7 @@ import {
   CreditCard,
   FileSignature,
   Landmark,
+  Layers,
   Pencil,
   Percent,
   Scale,
@@ -32,11 +33,13 @@ import {
 } from '@/types';
 import {
   cancelBearerCheque,
+  cancelBearerChequeSeries,
   clearBearerCheque,
   convertToBase,
   deleteBearerCheque,
   todayIso,
   updateBearerCheque,
+  updateBearerChequeSeries,
 } from '@/lib/db';
 import { formatDateHuman, formatMoney, monthLabel } from '@/services/analytics';
 import { debtsOverview, describeAllFixedSchedulePlans, upcomingByMonth } from '@/services/debts';
@@ -279,6 +282,8 @@ export function DebtsTab({
 
       {segment === 'CHEQUE' && (
         <>
+          <BearerChequeSeriesList cheques={bearerCheques} categories={categories} accounts={accounts} />
+
           <div>
             <SectionTitle title={t('bc.pendingTitle')} />
             <PendingChequesList
@@ -625,6 +630,266 @@ export function BearerChequeEditModal({
       <Field label={t('common.note')}>
         <input type="text" value={note} onChange={(e) => setNote(e.target.value)} className={inputClass} />
       </Field>
+    </ModalShell>
+  );
+}
+
+interface ChequeSeries {
+  seriesId: string;
+  payee: string;
+  items: BearerCheque[];
+}
+
+/** Groups cheques that share a `seriesId` — the linked postdated-cheque sets. */
+function groupChequeSeries(cheques: BearerCheque[]): ChequeSeries[] {
+  const map = new Map<string, BearerCheque[]>();
+  for (const cheque of cheques) {
+    if (!cheque.seriesId) continue;
+    const list = map.get(cheque.seriesId) || [];
+    list.push(cheque);
+    map.set(cheque.seriesId, list);
+  }
+  return Array.from(map.entries())
+    .filter(([, items]) => items.length > 1)
+    .map(([seriesId, items]) => ({
+      seriesId,
+      payee: items[0].payee,
+      items: items.slice().sort((a, b) => a.dueDate.localeCompare(b.dueDate)),
+    }))
+    .sort((a, b) => a.items[0].dueDate.localeCompare(b.items[0].dueDate));
+}
+
+/**
+ * Cheques issued together as one split payment (same payee, several
+ * postdated cheques) — surfaced as a group so the whole set can be found and
+ * edited in one place instead of hunting through the flat pending list.
+ */
+function BearerChequeSeriesList({
+  cheques,
+  categories,
+  accounts,
+}: {
+  cheques: BearerCheque[];
+  categories: FinanceCategory[];
+  accounts: FinanceAccount[];
+}) {
+  const { t } = useT();
+  const [editingSeries, setEditingSeries] = useState<ChequeSeries | null>(null);
+  const series = groupChequeSeries(cheques);
+
+  if (series.length === 0) return null;
+
+  return (
+    <div>
+      <SectionTitle title={t('bc.seriesTitle')} />
+      <div className="space-y-2">
+        {series.map((s) => {
+          const issued = s.items.filter((c) => c.status === 'ISSUED');
+          const cleared = s.items.filter((c) => c.status === 'CLEARED');
+          const outstanding = issued.reduce((sum, c) => sum + c.amount, 0);
+          return (
+            <Card key={s.seriesId} className="p-3 space-y-2">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="text-xs font-black text-slate-800 dark:text-slate-100 truncate">{s.payee}</p>
+                  <p className="text-[10px] font-bold text-slate-400 mt-0.5">
+                    {s.items.length} {t('bc.seriesCountLabel')} · {t('bc.seriesClearedLabel')} {cleared.length}/
+                    {s.items.length}
+                  </p>
+                </div>
+                <span className="text-xs font-black text-slate-900 dark:text-slate-100 tabular-nums flex-shrink-0">
+                  {formatMoney(outstanding, s.items[0].currency)}
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditingSeries(s)}
+                className="w-full py-2 rounded-xl bg-violet-50 dark:bg-violet-950/40 text-violet-600 dark:text-violet-400 text-[10.5px] font-black flex items-center justify-center gap-1.5 active:scale-95 transition-transform"
+              >
+                <Layers className="w-3.5 h-3.5" />
+                {t('bc.seriesManage')}
+              </button>
+            </Card>
+          );
+        })}
+      </div>
+
+      {editingSeries && (
+        <BearerChequeSeriesEditModal
+          series={editingSeries}
+          categories={categories}
+          accounts={accounts}
+          onClose={() => setEditingSeries(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+function SeriesRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-center justify-between gap-2 text-[11px]">
+      <span className="text-slate-400 font-medium">{label}</span>
+      <span className="text-slate-700 dark:text-slate-200 font-black tabular-nums">{value}</span>
+    </div>
+  );
+}
+
+/**
+ * Bulk edit for one cheque series: shared fields (payee/category/account/
+ * note) apply to every cheque in the set at once, and due dates can be
+ * shifted together. Cleared and cancelled cheques keep their own history —
+ * only still-issued ones move or get cancelled.
+ */
+function BearerChequeSeriesEditModal({
+  series,
+  categories,
+  accounts,
+  onClose,
+}: {
+  series: ChequeSeries;
+  categories: FinanceCategory[];
+  accounts: FinanceAccount[];
+  onClose: () => void;
+}) {
+  const { t, language } = useT();
+  const first = series.items[0];
+  const [payee, setPayee] = useState(first.payee);
+  const [categoryId, setCategoryId] = useState(first.categoryId);
+  const [accountId, setAccountId] = useState(first.accountId);
+  const [note, setNote] = useState('');
+  const [shiftDays, setShiftDays] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const relevantCategories = categories.filter((c) => c.kind === 'EXPENSE' && !c.parentId && !c.isHidden);
+  const issued = series.items.filter((c) => c.status === 'ISSUED');
+  const cleared = series.items.filter((c) => c.status === 'CLEARED');
+  const cancelled = series.items.filter((c) => c.status === 'CANCELLED');
+  const outstandingSum = issued.reduce((sum, c) => sum + c.amount, 0);
+  const clearedSum = cleared.reduce((sum, c) => sum + c.amount, 0);
+
+  const handleSave = async () => {
+    if (!payee.trim()) return setError(t('bc.enterPayee'));
+    setBusy(true);
+    const days = parseInt(shiftDays, 10);
+    await updateBearerChequeSeries(series.seriesId, {
+      payee: payee.trim(),
+      categoryId,
+      accountId,
+      note: note.trim() ? note.trim() : undefined,
+      shiftDueDateDays: Number.isFinite(days) && days !== 0 ? days : undefined,
+    });
+    onClose();
+  };
+
+  const handleCancelSeries = async () => {
+    setBusy(true);
+    await cancelBearerChequeSeries(series.seriesId);
+    onClose();
+  };
+
+  return (
+    <ModalShell
+      title={t('bc.seriesEditTitle')}
+      subtitle={`${first.payee} · ${series.items.length} ${t('bc.chequeNoun').toLowerCase()}`}
+      icon={<Layers className="w-5 h-5" />}
+      onClose={onClose}
+      footer={
+        <div className="space-y-2">
+          {error && <p className="text-[11px] font-bold text-rose-500 text-center">{error}</p>}
+          <PrimaryButton onClick={handleSave} disabled={busy}>
+            {t('bc.seriesApplyToAll')}
+          </PrimaryButton>
+          <button
+            type="button"
+            disabled={busy || issued.length === 0}
+            onClick={handleCancelSeries}
+            className="w-full py-2.5 rounded-2xl text-[11px] font-black text-rose-500 bg-rose-50 dark:bg-rose-950/40 flex items-center justify-center gap-1.5 disabled:opacity-40"
+          >
+            <Ban className="w-3.5 h-3.5" />
+            {t('bc.seriesCancelAll')}
+          </button>
+        </div>
+      }
+    >
+      <Card className="p-3.5 space-y-1.5">
+        <SeriesRow label={t('bc.statusIssued')} value={`${issued.length} · ${formatMoney(outstandingSum, first.currency)}`} />
+        <SeriesRow label={t('bc.statusCleared')} value={`${cleared.length} · ${formatMoney(clearedSum, first.currency)}`} />
+        {cancelled.length > 0 && <SeriesRow label={t('bc.statusCancelled')} value={`${cancelled.length}`} />}
+      </Card>
+
+      <Field label={t('bc.payee')}>
+        <input
+          type="text"
+          value={payee}
+          onChange={(e) => setPayee(e.target.value)}
+          className={inputClass}
+          autoFocus
+        />
+      </Field>
+
+      <Field label={t('common.category')}>
+        <select value={categoryId} onChange={(e) => setCategoryId(e.target.value)} className={inputClass}>
+          {relevantCategories.map((category) => (
+            <option key={category.id} value={category.id}>
+              {categoryName(category, language)}
+            </option>
+          ))}
+        </select>
+      </Field>
+
+      <Field label={t('bc.debitAccount')}>
+        <select value={accountId} onChange={(e) => setAccountId(e.target.value)} className={inputClass}>
+          {accounts
+            .filter((a) => !a.isArchived || a.id === accountId)
+            .map((account) => (
+              <option key={account.id} value={account.id}>
+                {accountName(account, language)}
+              </option>
+            ))}
+        </select>
+      </Field>
+
+      <Field label={t('common.note')} hint={t('bc.seriesNoteHint')}>
+        <input
+          type="text"
+          value={note}
+          onChange={(e) => setNote(e.target.value)}
+          placeholder={t('bc.seriesNotePlaceholder')}
+          className={inputClass}
+        />
+      </Field>
+
+      <Field label={t('bc.seriesShiftDays')} hint={t('bc.seriesShiftDaysHint')}>
+        <input
+          type="text"
+          inputMode="numeric"
+          value={shiftDays}
+          onChange={(e) => setShiftDays(e.target.value.replace(/[^-\d]/g, ''))}
+          placeholder="0"
+          className={inputClass}
+        />
+      </Field>
+
+      <div className="space-y-1.5 pt-1">
+        {series.items.map((c) => (
+          <div key={c.id} className="flex items-center justify-between gap-2 text-[10.5px] px-1">
+            <span
+              className={`font-bold ${
+                c.status === 'ISSUED'
+                  ? 'text-slate-500 dark:text-slate-400'
+                  : c.status === 'CLEARED'
+                    ? 'text-emerald-600'
+                    : 'text-slate-300 dark:text-slate-600 line-through'
+              }`}
+            >
+              {formatDateHuman(c.dueDate)}
+            </span>
+            <span className="text-slate-400 font-medium tabular-nums">{formatMoney(c.amount, c.currency)}</span>
+          </div>
+        ))}
+      </div>
     </ModalShell>
   );
 }

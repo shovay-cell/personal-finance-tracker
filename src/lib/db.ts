@@ -412,6 +412,8 @@ export async function initializeFinanceDb(): Promise<void> {
   if (!(await financeDb.settings.get('default'))) {
     await financeDb.settings.put({ ...DEFAULT_SETTINGS, updatedAt: now });
   }
+
+  await backfillBearerChequeSeries();
 }
 
 // ---------------------------------------------------------------- settings
@@ -1861,6 +1863,7 @@ export interface NewBearerChequeInput {
   issueDate: string;
   dueDate: string;
   note?: string;
+  seriesId?: string;
 }
 
 export async function addBearerCheque(input: NewBearerChequeInput): Promise<BearerCheque> {
@@ -1878,6 +1881,7 @@ export async function addBearerCheque(input: NewBearerChequeInput): Promise<Bear
     status: 'ISSUED',
     note: input.note,
     authorId: getCurrentMemberId(),
+    seriesId: input.seriesId,
     createdAt: now,
     updatedAt: now,
   };
@@ -1947,5 +1951,99 @@ export async function deleteBearerCheque(id: string): Promise<void> {
     await financeDb.transactions.delete(cheque.transactionId);
   }
   await financeDb.bearerCheques.delete(id);
+}
+
+function addDaysIso(dateStr: string, days: number): string {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const date = new Date(y, m - 1, d + days);
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(
+    date.getDate()
+  ).padStart(2, '0')}`;
+}
+
+export interface BearerChequeSeriesUpdate {
+  payee?: string;
+  categoryId?: string;
+  accountId?: string;
+  note?: string;
+  /** Moves every still-issued cheque's due date by this many days (kept spacing). */
+  shiftDueDateDays?: number;
+}
+
+/** Applies shared fields to every cheque in a series at once. */
+export async function updateBearerChequeSeries(
+  seriesId: string,
+  updates: BearerChequeSeriesUpdate
+): Promise<void> {
+  const all = await financeDb.bearerCheques.toArray();
+  const cheques = all.filter((c) => c.seriesId === seriesId);
+  if (cheques.length === 0) return;
+
+  const now = new Date().toISOString();
+  const patched = cheques.map((c) => {
+    const next: BearerCheque = { ...c, updatedAt: now };
+    if (updates.payee !== undefined) next.payee = updates.payee;
+    if (updates.categoryId !== undefined) next.categoryId = updates.categoryId;
+    if (updates.accountId !== undefined) next.accountId = updates.accountId;
+    if (updates.note !== undefined) next.note = updates.note;
+    if (updates.shiftDueDateDays && c.status === 'ISSUED') {
+      next.dueDate = addDaysIso(c.dueDate, updates.shiftDueDateDays);
+    }
+    return next;
+  });
+  await financeDb.bearerCheques.bulkPut(patched);
+}
+
+/** Cancels every still-issued cheque in a series; cleared ones are left alone. */
+export async function cancelBearerChequeSeries(seriesId: string): Promise<void> {
+  const all = await financeDb.bearerCheques.toArray();
+  const cheques = all.filter((c) => c.seriesId === seriesId && c.status === 'ISSUED');
+  if (cheques.length === 0) return;
+
+  const now = new Date().toISOString();
+  await financeDb.bearerCheques.bulkPut(
+    cheques.map((c) => ({ ...c, status: 'CANCELLED' as BearerChequeStatus, updatedAt: now }))
+  );
+}
+
+/**
+ * Cheques issued before series linking existed have no `seriesId` — only the
+ * "N/M" suffix the split-issue flow already wrote into their note. Group
+ * those by (payee, account, issue date, M) and tag matching complete sets so
+ * old split-cheque series show up linked too. Purely additive and safe to
+ * run on every boot: already-tagged cheques are skipped, and any set that
+ * doesn't cleanly resolve to a full, non-duplicate 1..M run is left alone.
+ */
+export async function backfillBearerChequeSeries(): Promise<void> {
+  const cheques = await financeDb.bearerCheques.toArray();
+  const candidates = cheques.filter((c) => !c.seriesId && c.note && /(\d+)\/(\d+)$/.test(c.note));
+  if (candidates.length === 0) return;
+
+  const groups = new Map<string, { cheque: BearerCheque; index: number; total: number }[]>();
+  for (const cheque of candidates) {
+    const match = cheque.note!.match(/(\d+)\/(\d+)$/)!;
+    const index = parseInt(match[1], 10);
+    const total = parseInt(match[2], 10);
+    if (!index || !total || index > total || total < 2) continue;
+    const key = `${cheque.payee}|${cheque.accountId}|${cheque.issueDate}|${total}`;
+    const list = groups.get(key) || [];
+    list.push({ cheque, index, total });
+    groups.set(key, list);
+  }
+
+  const now = new Date().toISOString();
+  const updates: BearerCheque[] = [];
+  for (const list of Array.from(groups.values())) {
+    const total = list[0].total;
+    if (list.length !== total) continue; // partial/ambiguous match — leave unlinked
+    const indices = new Set(list.map((item) => item.index));
+    if (indices.size !== total) continue; // duplicate indices — leave unlinked
+    const seriesId = list.slice().sort((a, b) => a.index - b.index)[0].cheque.id;
+    for (const item of list) {
+      updates.push({ ...item.cheque, seriesId, updatedAt: now });
+    }
+  }
+
+  if (updates.length > 0) await financeDb.bearerCheques.bulkPut(updates);
 }
 

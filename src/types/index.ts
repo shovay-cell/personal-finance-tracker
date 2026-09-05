@@ -428,6 +428,13 @@ export interface BearerCheque {
   authorId: string;
   /** Expense created once the cheque actually clears. */
   transactionId?: string;
+  /**
+   * Shared by every cheque issued together as one split payment to the same
+   * payee (see `chequeCount` in the issuing form) — set to the id of the
+   * first cheque in the set. Lets the group be found and edited together
+   * instead of as unrelated rows.
+   */
+  seriesId?: string;
   createdAt: string;
   updatedAt: string;
 }
