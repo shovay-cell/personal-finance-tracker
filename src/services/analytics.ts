@@ -3,6 +3,7 @@ import {
   Budget,
   Plan,
   PlanOccurrence,
+  PlanOccurrenceOverride,
   SafeToSpend,
   PacingComparison,
   PacingPoint,
@@ -421,11 +422,16 @@ export function safeToSpend(input: {
   occurrences?: PlanOccurrence[];
   /** Uncleared bearer cheques due inside the month — reserved, not yet spent. */
   bearerCheques?: BearerCheque[];
+  /** «Только эту операцию» edits on not-yet-fired RECURRING dates. */
+  overrides?: PlanOccurrenceOverride[];
   toBase: (amount: number, currency: CurrencyCode) => number;
 }): SafeToSpend {
   const { month, transactions, budgets, plans, toBase } = input;
   const occurrences = input.occurrences || [];
   const bearerCheques = input.bearerCheques || [];
+  const overrideByKey = new Map(
+    (input.overrides || []).map((override) => [`${override.planId}__${override.dueDate}`, override])
+  );
   const today = input.today || todayIso();
   const range = monthRange(month);
   const inMonth = transactions.filter((t) => isWithin(t.date, range));
@@ -450,7 +456,9 @@ export function safeToSpend(input: {
     const alreadyBooked = inMonth.some(
       (t) => t.planId === plan.id && t.date === plan.nextDueDate
     );
-    return alreadyBooked ? sum : sum + toBase(plan.amount, plan.currency);
+    if (alreadyBooked) return sum;
+    const override = overrideByKey.get(`${plan.id}__${plan.nextDueDate}`);
+    return sum + toBase(override?.amount ?? plan.amount, plan.currency);
   }, 0);
 
   const upcomingOccurrences = occurrences.reduce((sum, occurrence) => {

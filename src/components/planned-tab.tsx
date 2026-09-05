@@ -25,6 +25,7 @@ import {
   ObligationSettlement,
   Plan,
   PlanOccurrence,
+  PlanOccurrenceOverride,
   RecurrenceKind,
   Transaction,
   TransactionKind,
@@ -35,6 +36,8 @@ import {
   currentMonth,
   todayIso,
   deletePlan,
+  splitFixedSchedulePlanFromOccurrence,
+  splitRecurringPlanFromDate,
   updatePlan,
 } from '@/lib/db';
 import { describeRecurrence, materializeRecurringPlan } from '@/services/planned';
@@ -43,6 +46,7 @@ import { UpcomingEvent, groupByDay, upcomingEvents } from '@/services/upcoming';
 import { getCategoryIcon } from '@/constants/categories';
 import { useT } from '@/i18n/context';
 import { accountName, categoryName } from '@/i18n/categories';
+import { EditScopeModal, OccurrenceOverrideModal, PlanEditScope } from './plan-scope-modal';
 import { PlanEditModal } from './debt-card';
 import {
   Card,
@@ -58,6 +62,7 @@ import {
 interface PlannedTabProps {
   plans: Plan[];
   occurrences: PlanOccurrence[];
+  planOverrides?: PlanOccurrenceOverride[];
   obligations: Obligation[];
   settlements: ObligationSettlement[];
   bearerCheques: BearerCheque[];
@@ -95,6 +100,7 @@ function addDaysStr(dateStr: string, days: number): string {
 export function PlannedTab({
   plans,
   occurrences,
+  planOverrides,
   obligations,
   settlements,
   bearerCheques,
@@ -110,6 +116,16 @@ export function PlannedTab({
   const [customDate, setCustomDate] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('ALL');
   const [editing, setEditing] = useState<Plan | 'NEW' | null>(null);
+  const [scopeTarget, setScopeTarget] = useState<{
+    plan: Plan;
+    date: string;
+    occurrence?: PlanOccurrence;
+  } | null>(null);
+  const [overrideTarget, setOverrideTarget] = useState<{
+    plan: Plan;
+    date: string;
+    occurrence?: PlanOccurrence;
+  } | null>(null);
   const { t, language } = useT();
 
   const baseCurrency = settings.baseCurrency;
@@ -125,6 +141,7 @@ export function PlannedTab({
       upcomingEvents({
         plans,
         occurrences,
+        overrides: planOverrides,
         obligations,
         settlements,
         bearerCheques,
@@ -138,7 +155,7 @@ export function PlannedTab({
         toBase,
       }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [plans, occurrences, obligations, settlements, bearerCheques, transactions, categories, settings, today]
+    [plans, occurrences, planOverrides, obligations, settlements, bearerCheques, transactions, categories, settings, today]
   );
 
   const monthEvents = useMemo(
@@ -205,17 +222,60 @@ export function PlannedTab({
 
   const planById = useMemo(() => new Map(plans.map((p) => [p.id, p])), [plans]);
   const transactionById = useMemo(() => new Map(transactions.map((t) => [t.id, t])), [transactions]);
+  const occurrenceById = useMemo(() => new Map(occurrences.map((o) => [o.id, o])), [occurrences]);
 
   const openEvent = (item: UpcomingEvent) => {
     if (item.planId) {
       const plan = planById.get(item.planId);
-      if (plan) setEditing(plan);
+      if (!plan) return;
+
+      // FIXED_SCHEDULE events carry the real occurrence id; RECURRING ones
+      // are synthetic (`${planId}-${date}`) — either way `item.date` names
+      // the exact payment the user clicked.
+      const occurrence = plan.scheduleType === 'FIXED_SCHEDULE' ? occurrenceById.get(item.id) : undefined;
+
+      // A single one-off payment has nothing to disambiguate between "this"
+      // and "the rule" — they are the same thing, so skip straight to the
+      // plan editor exactly like before this existed.
+      const hasMoreThanOnePayment =
+        plan.scheduleType === 'FIXED_SCHEDULE'
+          ? (plan.occurrencesCount ?? 0) > 1
+          : plan.recurrence !== 'ONCE';
+
+      if (!hasMoreThanOnePayment) {
+        setEditing(plan);
+        return;
+      }
+      setScopeTarget({ plan, date: item.date, occurrence });
       return;
     }
     // A hand-entered transaction (source 'TRANSACTION') has no plan behind
     // it — its id is the transaction's own, so it opens the ordinary form.
     const transaction = transactionById.get(item.id);
     if (transaction) onEditTransaction(transaction);
+  };
+
+  const chooseScope = async (scope: PlanEditScope) => {
+    if (!scopeTarget) return;
+    const { plan, date, occurrence } = scopeTarget;
+    setScopeTarget(null);
+
+    if (scope === 'THIS') {
+      setOverrideTarget({ plan, date, occurrence });
+      return;
+    }
+    if (scope === 'RULE') {
+      setEditing(plan);
+      return;
+    }
+    // THIS_AND_FUTURE — spin off a new plan starting at this date/occurrence,
+    // then hand it straight to the existing plan editor for the user's
+    // actual edits; the split itself carries no field changes.
+    const newPlan =
+      plan.scheduleType === 'FIXED_SCHEDULE' && occurrence
+        ? await splitFixedSchedulePlanFromOccurrence(occurrence.id, {})
+        : await splitRecurringPlanFromDate(plan.id, date, {});
+    if (newPlan) setEditing(newPlan);
   };
 
   const presets: { id: Preset; label: string }[] = [
@@ -412,6 +472,19 @@ export function PlannedTab({
             onClose={() => setEditing(null)}
           />
         )
+      )}
+
+      {scopeTarget && <EditScopeModal onChoose={chooseScope} onClose={() => setScopeTarget(null)} />}
+
+      {overrideTarget && (
+        <OccurrenceOverrideModal
+          plan={overrideTarget.plan}
+          date={overrideTarget.date}
+          occurrence={overrideTarget.occurrence}
+          categories={categories}
+          accounts={accounts}
+          onClose={() => setOverrideTarget(null)}
+        />
       )}
     </div>
   );

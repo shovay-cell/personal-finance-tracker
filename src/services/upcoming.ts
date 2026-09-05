@@ -6,11 +6,12 @@ import {
   ObligationSettlement,
   Plan,
   PlanOccurrence,
+  PlanOccurrenceOverride,
   PlanType,
   Transaction,
   TransactionKind,
 } from '@/types';
-import { todayIso } from '@/lib/db';
+import { effectivePlanFields, todayIso } from '@/lib/db';
 import { tr } from '@/i18n/t';
 import { categoryNameById } from '@/i18n/categories';
 import { getActiveLanguage } from '@/i18n/runtime';
@@ -54,6 +55,8 @@ export function upcomingEvents(input: {
   bearerCheques?: BearerCheque[];
   transactions?: Transaction[];
   categories?: FinanceCategory[];
+  /** «Только эту операцию» edits on not-yet-fired RECURRING dates. */
+  overrides?: PlanOccurrenceOverride[];
   months: number;
   today?: string;
   toBase: (amount: number, currency: CurrencyCode) => number;
@@ -71,6 +74,9 @@ export function upcomingEvents(input: {
 
   const items: UpcomingEvent[] = [];
   const planById = new Map(input.plans.map((plan) => [plan.id, plan]));
+  const overrideByKey = new Map(
+    (input.overrides || []).map((override) => [`${override.planId}__${override.dueDate}`, override])
+  );
 
   for (const occurrence of input.occurrences) {
     if (occurrence.isPaid || occurrence.dueDate > horizon) continue;
@@ -129,19 +135,21 @@ export function upcomingEvents(input: {
   for (const plan of input.plans) {
     if (plan.scheduleType !== 'RECURRING' || plan.status !== 'ACTIVE') continue;
     for (const date of occurrencesBetween(plan, today, horizon)) {
+      const override = overrideByKey.get(`${plan.id}__${date}`);
+      const fields = effectivePlanFields(plan, override);
       items.push({
         id: `${plan.id}-${date}`,
         date,
-        title: plan.title,
-        amount: input.toBase(plan.amount, plan.currency),
+        title: override?.note || plan.title,
+        amount: input.toBase(override?.amount ?? plan.amount, plan.currency),
         kind: plan.kind,
         source: plan.planType,
         isOverdue: date < today,
         needsConfirmation: date <= today && !plan.autoCreate,
         planId: plan.id,
-        categoryId: plan.categoryId,
-        subcategoryId: plan.subcategoryId,
-        accountId: plan.accountId,
+        categoryId: fields.categoryId,
+        subcategoryId: fields.subcategoryId,
+        accountId: fields.accountId,
         authorId: plan.authorId,
       });
     }

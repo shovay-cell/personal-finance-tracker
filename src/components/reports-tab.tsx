@@ -10,6 +10,7 @@ import {
   FinanceSettings,
   Plan,
   PlanOccurrence,
+  PlanOccurrenceOverride,
   Obligation,
   ObligationSettlement,
   ProfileMember,
@@ -42,6 +43,7 @@ interface ReportsTabProps {
   transactions: Transaction[];
   plans: Plan[];
   occurrences: PlanOccurrence[];
+  planOverrides?: PlanOccurrenceOverride[];
   settings: FinanceSettings;
   categories: FinanceCategory[];
   accounts: FinanceAccount[];
@@ -67,6 +69,7 @@ export function ReportsTab({
   transactions,
   plans,
   occurrences,
+  planOverrides,
   settings,
   categories,
   accounts,
@@ -92,11 +95,12 @@ export function ReportsTab({
         transactions,
         plans,
         occurrences,
+        overrides: planOverrides,
         days: forecastDays,
         today: todayIso(),
         toBase: (amount, currency) => convertToBase(amount, currency, settings).baseAmount,
       }),
-    [accounts, transactions, plans, occurrences, forecastDays, settings]
+    [accounts, transactions, plans, occurrences, planOverrides, forecastDays, settings]
   );
 
   const periodTransactions = useMemo(

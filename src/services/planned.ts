@@ -1,5 +1,12 @@
 import { Plan, PlanCostRow, PlanState, PlanTotals, PlanType, Transaction } from '@/types';
-import { addTransaction, financeDb, todayIso, updatePlan } from '@/lib/db';
+import {
+  addTransaction,
+  effectivePlanFields,
+  financeDb,
+  getPlanOccurrenceOverride,
+  todayIso,
+  updatePlan,
+} from '@/lib/db';
 import { getActiveLanguage } from '@/i18n/runtime';
 
 function parseIso(dateStr: string): Date {
@@ -218,18 +225,28 @@ export async function materializeRecurringPlan(
   overrides: Partial<Transaction> = {}
 ): Promise<Transaction> {
   const dueDate = plan.nextDueDate || todayIso();
+
+  // A "только эту операцию" edit on a not-yet-fired date lives here, not on
+  // the plan — merge it over the plan's own fields, then it's spent: once
+  // this materialises into a real Transaction, that transaction is what
+  // future edits touch.
+  const override = await getPlanOccurrenceOverride(plan.id, dueDate);
+  const fields = effectivePlanFields(plan, override);
   const transaction = await addTransaction({
     kind: plan.kind,
-    amount: plan.amount,
+    amount: override?.amount ?? plan.amount,
     currency: plan.currency,
-    categoryId: plan.categoryId,
-    accountId: plan.accountId,
+    categoryId: fields.categoryId,
+    subcategoryId: fields.subcategoryId,
+    accountId: fields.accountId,
+    merchant: fields.merchant,
     date: dueDate,
-    note: plan.note || plan.title,
+    note: override?.note || plan.note || plan.title,
     planId: plan.id,
     source: 'PLANNED',
     ...overrides,
   } as any);
+  if (override) await financeDb.planOccurrenceOverrides.delete(override.id);
 
   const next = nextOccurrence(plan, dueDate);
   await updatePlan(plan.id, {

@@ -1,6 +1,6 @@
 'use client';
 
-import { BudgetProgress, Plan, ProfileMember, Transaction } from '@/types';
+import { BudgetProgress, Plan, PlanOccurrenceOverride, ProfileMember, Transaction } from '@/types';
 import { formatMoney } from './analytics';
 import { describeRecurrence, planState } from './planned';
 import { tr } from '@/i18n/t';
@@ -89,17 +89,25 @@ export function checkBudgetAlerts(
   }
 }
 
-export function checkPlannedPaymentReminders(plans: Plan[]): void {
+export function checkPlannedPaymentReminders(
+  plans: Plan[],
+  overrides: PlanOccurrenceOverride[] = []
+): void {
+  const overrideByKey = new Map(
+    overrides.map((override) => [`${override.planId}__${override.dueDate}`, override])
+  );
+
   for (const plan of plans) {
     if (plan.scheduleType !== 'RECURRING' || plan.status !== 'ACTIVE' || !plan.nextDueDate) continue;
     const state = planState(plan);
+    const override = overrideByKey.get(`${plan.id}__${plan.nextDueDate}`);
+    const title = override?.note || plan.title;
+    const amount = formatMoney(override?.amount ?? plan.amount, plan.currency);
 
     if (state.isOverdue) {
       notify(
         tr('svc.overduePayment'),
-        `${plan.title} — ${formatMoney(plan.amount, plan.currency)}, ${tr(
-          'svc.dueWas'
-        )} ${plan.nextDueDate}`,
+        `${title} — ${amount}, ${tr('svc.dueWas')} ${plan.nextDueDate}`,
         `planned-overdue-${plan.id}-${plan.nextDueDate}`
       );
       continue;
@@ -108,7 +116,7 @@ export function checkPlannedPaymentReminders(plans: Plan[]): void {
     if (state.isWithinReminderWindow) {
       notify(
         tr('svc.paymentSoon'),
-        `${plan.title} — ${formatMoney(plan.amount, plan.currency)} ${tr('svc.inDays')} ${
+        `${title} — ${amount} ${tr('svc.inDays')} ${
           state.daysUntilDue
         } ${tr('svc.daysShort')} (${describeRecurrence(plan)})`,
         `planned-soon-${plan.id}-${plan.nextDueDate}`

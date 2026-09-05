@@ -18,6 +18,7 @@ import {
   FinanceSettings,
   Plan,
   PlanOccurrence,
+  PlanOccurrenceOverride,
   ProfileMember,
   Transaction,
 } from '@/types';
@@ -55,6 +56,7 @@ interface BudgetsTabProps {
   members: ProfileMember[];
   plans: Plan[];
   occurrences: PlanOccurrence[];
+  planOverrides?: PlanOccurrenceOverride[];
   bearerCheques: BearerCheque[];
   settings: FinanceSettings;
   month: string;
@@ -69,6 +71,7 @@ export function BudgetsTab({
   members,
   plans,
   occurrences,
+  planOverrides,
   bearerCheques,
   settings,
   month,
@@ -92,10 +95,11 @@ export function BudgetsTab({
         budgets,
         plans,
         occurrences,
+        overrides: planOverrides,
         bearerCheques,
         toBase: (amount, currency) => convertToBase(amount, currency, settings).baseAmount,
       }),
-    [month, transactions, budgets, plans, occurrences, bearerCheques, settings]
+    [month, transactions, budgets, plans, occurrences, planOverrides, bearerCheques, settings]
   );
 
   const pacing = useMemo(() => pacingComparison(transactions, month), [transactions, month]);

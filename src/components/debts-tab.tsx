@@ -24,6 +24,7 @@ import {
   ObligationSettlement,
   Plan,
   PlanOccurrence,
+  PlanOccurrenceOverride,
   PlanType,
   VatPayment,
   VatSummary,
@@ -48,6 +49,7 @@ interface DebtsTabProps {
   settlements: ObligationSettlement[];
   plans: Plan[];
   occurrences: PlanOccurrence[];
+  planOverrides?: PlanOccurrenceOverride[];
   bearerCheques: BearerCheque[];
   vatSummary?: VatSummary;
   vatPayments: VatPayment[];
@@ -65,6 +67,7 @@ export function DebtsTab({
   settlements,
   plans,
   occurrences,
+  planOverrides,
   bearerCheques,
   vatSummary,
   vatPayments,
@@ -88,6 +91,7 @@ export function DebtsTab({
       upcomingByMonth({
         plans,
         occurrences,
+        overrides: planOverrides,
         obligations,
         settlements,
         bearerCheques,
@@ -95,7 +99,7 @@ export function DebtsTab({
         toBase,
       }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [plans, occurrences, obligations, settlements, bearerCheques, settings]
+    [plans, occurrences, planOverrides, obligations, settlements, bearerCheques, settings]
   );
 
   const described = useMemo(

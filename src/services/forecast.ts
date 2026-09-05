@@ -8,6 +8,7 @@ import {
   Plan,
   PlanKind,
   PlanOccurrence,
+  PlanOccurrenceOverride,
   Transaction,
 } from '@/types';
 import { computeAccountBalance } from '@/lib/db';
@@ -56,12 +57,17 @@ export function forecastCashFlow(input: {
   plans: Plan[];
   /** Scheduled fixed-schedule occurrences that have not been paid yet. */
   occurrences?: PlanOccurrence[];
+  /** «Только эту операцию» edits on not-yet-fired RECURRING dates. */
+  overrides?: PlanOccurrenceOverride[];
   days: number;
   today: string;
   toBase: (amount: number, currency: CurrencyCode) => number;
 }): CashFlowForecast {
   const { accounts, transactions, plans, days, today, toBase } = input;
   const occurrences = input.occurrences || [];
+  const overrideByKey = new Map(
+    (input.overrides || []).map((override) => [`${override.planId}__${override.dueDate}`, override])
+  );
   const horizon = addDays(today, days);
 
   const startBalance = accounts
@@ -79,7 +85,8 @@ export function forecastCashFlow(input: {
     if (plan.scheduleType !== 'RECURRING' || plan.status !== 'ACTIVE') continue;
 
     for (const date of occurrencesBetween(plan, addDays(today, 1), horizon)) {
-      const base = toBase(plan.amount, plan.currency);
+      const override = overrideByKey.get(`${plan.id}__${date}`);
+      const base = toBase(override?.amount ?? plan.amount, plan.currency);
       const signed = plan.kind === 'INCOME' ? base : -base;
 
       if (signed >= 0) totalIncome += signed;
@@ -88,10 +95,10 @@ export function forecastCashFlow(input: {
       const list = eventsByDate.get(date) || [];
       list.push({
         date,
-        title: plan.title,
+        title: override?.note || plan.title,
         amount: Math.round(signed * 100) / 100,
         planKind: plan.planType as PlanKind,
-        categoryId: plan.categoryId,
+        categoryId: override?.categoryId || plan.categoryId,
       });
       eventsByDate.set(date, list);
     }

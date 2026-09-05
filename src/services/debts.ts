@@ -6,6 +6,7 @@ import {
   ObligationSettlement,
   Plan,
   PlanOccurrence,
+  PlanOccurrenceOverride,
   PlanWithSchedule,
   UpcomingItem,
   UpcomingMonth,
@@ -106,6 +107,8 @@ export function upcomingByMonth(input: {
   obligations: Obligation[];
   settlements: ObligationSettlement[];
   bearerCheques?: BearerCheque[];
+  /** «Только эту операцию» edits on not-yet-fired RECURRING dates. */
+  overrides?: PlanOccurrenceOverride[];
   months: number;
   today?: string;
   toBase: (amount: number, currency: CurrencyCode) => number;
@@ -116,6 +119,9 @@ export function upcomingByMonth(input: {
   const horizon = horizonDate.toISOString().slice(0, 10);
 
   const items: UpcomingItem[] = [];
+  const overrideByKey = new Map(
+    (input.overrides || []).map((override) => [`${override.planId}__${override.dueDate}`, override])
+  );
 
   const planById = new Map(input.plans.map((plan) => [plan.id, plan]));
   for (const occurrence of input.occurrences) {
@@ -167,11 +173,12 @@ export function upcomingByMonth(input: {
       continue;
     }
     for (const date of occurrencesBetween(plan, today, horizon)) {
+      const override = overrideByKey.get(`${plan.id}__${date}`);
       items.push({
         id: `${plan.id}-${date}`,
         date,
-        title: plan.title,
-        amount: input.toBase(plan.amount, plan.currency),
+        title: override?.note || plan.title,
+        amount: input.toBase(override?.amount ?? plan.amount, plan.currency),
         source: 'PLANNED',
         isOverdue: date < today,
       });

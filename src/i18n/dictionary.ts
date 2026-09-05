@@ -2360,6 +2360,37 @@ export const DICTIONARY = {
     en: 'Applies to every payment still ahead. Already-booked operations need fixing separately in Transactions',
   },
 
+  // ----------------------------------------------- plan edit-scope prompt
+  'pes.title': { ru: 'Что изменить?', he: 'מה לשנות?', uk: 'Що змінити?', en: 'What to change?' },
+  'pes.this': { ru: 'Только эту операцию', he: 'רק את התנועה הזו', uk: 'Тільки цю операцію', en: 'Just this operation' },
+  'pes.thisHint': {
+    ru: 'Изменится только этот платёж — само правило и все остальные даты останутся как есть',
+    he: 'ישתנה רק תשלום זה — הכלל עצמו וכל שאר התאריכים יישארו כפי שהם',
+    uk: 'Зміниться лише цей платіж — саме правило і всі інші дати залишаться як є',
+    en: 'Only this payment changes — the rule itself and every other date stay as they are',
+  },
+  'pes.thisAndFuture': { ru: 'Эту и будущие', he: 'זו וההבאות', uk: 'Цю і майбутні', en: 'This and future' },
+  'pes.thisAndFutureHint': {
+    ru: 'С этой даты правило продолжится по-новому, а прошлые операции не изменятся',
+    he: 'מתאריך זה הכלל יימשך באופן חדש, והתנועות הקודמות לא ישתנו',
+    uk: 'З цієї дати правило продовжиться по-новому, а минулі операції не зміняться',
+    en: 'From this date the rule continues with the new settings — past operations are untouched',
+  },
+  'pes.rule': { ru: 'Всё правило', he: 'כל הכלל', uk: 'Усе правило', en: 'The whole rule' },
+  'pes.ruleHint': {
+    ru: 'Изменится сама повторная операция целиком — коснётся всех ещё не наступивших дат',
+    he: 'התנועה החוזרת עצמה תשתנה כולה — ייגע בכל התאריכים שעוד לא הגיעו',
+    uk: 'Зміниться сама повторна операція цілком — торкнеться всіх дат, що ще не настали',
+    en: 'The recurring rule itself changes — affects every date that has not happened yet',
+  },
+  'pes.overrideTitle': { ru: 'Изменить платёж', he: 'שינוי תשלום', uk: 'Змінити платіж', en: 'Edit payment' },
+  'pes.overrideHint': {
+    ru: 'Это правка только одной даты. Чтобы изменить всё правило, откройте его отдельно.',
+    he: 'זהו תיקון לתאריך אחד בלבד. כדי לשנות את כל הכלל, פתחו אותו בנפרד.',
+    uk: 'Це правка лише однієї дати. Щоб змінити все правило, відкрийте його окремо.',
+    en: 'This edits one date only. To change the whole rule, open it separately.',
+  },
+
   // -------------------------------------------------------------- budget
   'budget.monthly': { ru: 'Общий бюджет месяца', he: 'תקציב חודשי כולל', uk: 'Загальний бюджет місяця', en: 'Monthly budget' },
   'budget.limits': { ru: 'Лимиты по категориям', he: 'מגבלות לפי קטגוריה', uk: 'Ліміти за категоріями', en: 'Category limits' },

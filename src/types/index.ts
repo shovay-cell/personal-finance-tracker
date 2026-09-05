@@ -317,6 +317,41 @@ export interface PlanOccurrence {
   paidDate?: string;
   /** Expense created when the payment was marked paid. */
   transactionId?: string;
+
+  // --- Per-occurrence overrides, all optional: an unset field inherits from
+  // the parent Plan exactly like before this existed. Set by "только эту
+  // операцию" edits so one payment can diverge from the plan's own fields
+  // without touching the rule or any other occurrence. ---
+  categoryId?: string;
+  subcategoryId?: string;
+  accountId?: string;
+  merchant?: string;
+  note?: string;
+}
+
+/**
+ * A point-in-time override for a single virtual RECURRING occurrence — the
+ * RECURRING equivalent of the override fields above on `PlanOccurrence`,
+ * kept in its own table rather than materialising a real `PlanOccurrence`
+ * row: several places (services/upcoming.ts, debts.ts, forecast.ts,
+ * analytics.ts) read `planOccurrences` assuming every row is FIXED_SCHEDULE
+ * while separately walking RECURRING dates virtually — a real row here would
+ * make both halves count the same payment. Deleted once the occurrence it
+ * describes actually materialises into a Transaction.
+ */
+export interface PlanOccurrenceOverride {
+  id: string;
+  planId: string;
+  /** The RECURRING plan's virtual due date this override applies to. */
+  dueDate: string;
+  amount?: number;
+  categoryId?: string;
+  subcategoryId?: string;
+  accountId?: string;
+  merchant?: string;
+  note?: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface PlanWithSchedule {
@@ -707,6 +742,8 @@ export interface FinanceBackupPayload {
   transactions: Transaction[];
   plans: Plan[];
   planOccurrences: PlanOccurrence[];
+  /** Absent in a backup taken before this existed — treated as empty. */
+  planOccurrenceOverrides?: PlanOccurrenceOverride[];
   /** @deprecated Pre-migration shape — only present in a backup taken before the Plan merge. */
   plannedPayments?: PlannedPayment[];
   /** @deprecated Pre-migration shape — only present in a backup taken before the Plan merge. */

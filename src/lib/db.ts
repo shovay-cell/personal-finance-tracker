@@ -24,6 +24,7 @@ import {
   CreatableDebtKind,
   Plan,
   PlanOccurrence,
+  PlanOccurrenceOverride,
   PlanScheduleType,
   PlanStatus,
   PlanType,
@@ -67,6 +68,7 @@ export class FinanceDatabase extends Dexie {
   bearerCheques!: Table<BearerCheque, string>;
   plans!: Table<Plan, string>;
   planOccurrences!: Table<PlanOccurrence, string>;
+  planOccurrenceOverrides!: Table<PlanOccurrenceOverride, string>;
   planMigrationSnapshots!: Table<PlanMigrationSnapshot, string>;
   settings!: Table<FinanceSettings, string>;
 
@@ -127,6 +129,14 @@ export class FinanceDatabase extends Dexie {
         });
         await migratePlannedPaymentsAndDebtsToPlans(tx);
       });
+
+    // v6 adds point-in-time overrides for a single virtual RECURRING
+    // occurrence — see the doc comment on `PlanOccurrenceOverride` in
+    // @/types for why this is its own table rather than a real
+    // `PlanOccurrence` row. Pure addition, nothing to backfill.
+    this.version(6).stores({
+      planOccurrenceOverrides: 'id, planId, dueDate',
+    });
   }
 }
 
@@ -892,6 +902,42 @@ export async function bulkUpdateTransactionCategory(input: BulkChangeCategoryInp
   return valid.length;
 }
 
+/** Fields a single FIXED_SCHEDULE occurrence or RECURRING override may set to
+ *  diverge from the parent Plan — everything else about the payment (amount,
+ *  currency, date/index/paid-state) is handled separately at each call site
+ *  since its fallback meaning differs between the two schedule types (a
+ *  FIXED_SCHEDULE occurrence's `amount` is its own scheduled instalment and
+ *  never falls back to the plan's total; a RECURRING override's `amount`
+ *  does fall back to the plan's per-occurrence amount). Undefined here means
+ *  "inherit from the plan" — set by a "только эту операцию" edit. */
+interface OccurrenceFieldOverrides {
+  categoryId?: string;
+  subcategoryId?: string;
+  accountId?: string;
+  merchant?: string;
+}
+
+export function effectivePlanFields(plan: Plan, overrides?: OccurrenceFieldOverrides | null) {
+  return {
+    categoryId: overrides?.categoryId ?? plan.categoryId,
+    subcategoryId: overrides?.subcategoryId ?? plan.subcategoryId,
+    accountId: overrides?.accountId ?? plan.accountId,
+    merchant: overrides?.merchant ?? plan.merchant,
+  };
+}
+
+/** The point-in-time override for one virtual RECURRING date, if the user
+ *  ever edited "только эту операцию" for it. No compound index exists on
+ *  (planId, dueDate) — a plan's own override list is small enough that a
+ *  linear scan after the indexed planId lookup is not worth one. */
+export async function getPlanOccurrenceOverride(
+  planId: string,
+  dueDate: string
+): Promise<PlanOccurrenceOverride | undefined> {
+  const rows = await financeDb.planOccurrenceOverrides.where('planId').equals(planId).toArray();
+  return rows.find((o) => o.dueDate === dueDate);
+}
+
 /** Turns one scheduled payment into a real expense, marks it paid, and keeps
  *  the parent plan's cached paid-count/outstanding/status in sync. */
 export async function payPlanOccurrence(
@@ -906,16 +952,17 @@ export async function payPlanOccurrence(
 
   const date = paidDate || todayIso();
   const totalCount = await financeDb.planOccurrences.where('planId').equals(plan.id).count();
+  const fields = effectivePlanFields(plan, occurrence);
   const transaction = await addTransaction({
     kind: 'EXPENSE',
     amount: occurrence.amount,
     currency: occurrence.currency,
-    categoryId: plan.categoryId,
-    subcategoryId: plan.subcategoryId,
-    accountId: plan.accountId,
+    categoryId: fields.categoryId,
+    subcategoryId: fields.subcategoryId,
+    accountId: fields.accountId,
     date,
-    note: `${plan.title} · ${tr('dbx.payment')} ${occurrence.index}/${totalCount}`,
-    merchant: plan.merchant,
+    note: occurrence.note || `${plan.title} · ${tr('dbx.payment')} ${occurrence.index}/${totalCount}`,
+    merchant: fields.merchant,
     planId: plan.id,
     source: 'MANUAL',
   } as any);
@@ -958,6 +1005,193 @@ async function syncFixedSchedulePlanCache(planId: string): Promise<void> {
     status: occurrences.length > 0 && paid.length === occurrences.length ? 'COMPLETED' : 'ACTIVE',
     updatedAt: new Date().toISOString(),
   });
+}
+
+function dayBefore(dateIso: string): string {
+  const [y, m, d] = dateIso.split('-').map(Number);
+  const date = new Date(y, m - 1, d);
+  date.setDate(date.getDate() - 1);
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(
+    date.getDate()
+  ).padStart(2, '0')}`;
+}
+
+/** Title/merchant/category/subcategory/account/note — the fields shared by
+ *  "эту и будущие" and "всё правило" edits. Amount is deliberately excluded:
+ *  it is handled separately per schedule type (a RECURRING plan's `amount`
+ *  already applies to every non-overridden future date the moment `updatePlan`
+ *  changes it; a FIXED_SCHEDULE plan's `amount` is its total financed and
+ *  changing it means recomputing the remaining instalments — a distinct,
+ *  explicit action, not folded into this general patch). */
+export interface PlanIdentityPatch {
+  title?: string;
+  merchant?: string;
+  categoryId?: string;
+  subcategoryId?: string;
+  accountId?: string;
+  note?: string;
+}
+
+/** «Только эту операцию» on a not-yet-fired RECURRING date: the plan's own
+ *  rule is untouched, only this one virtual date diverges from it. Spent the
+ *  moment that date actually fires — see `materializeRecurringPlan`. */
+export async function upsertPlanOccurrenceOverride(
+  planId: string,
+  dueDate: string,
+  patch: PlanIdentityPatch & { amount?: number }
+): Promise<void> {
+  const existing = await getPlanOccurrenceOverride(planId, dueDate);
+  const now = new Date().toISOString();
+  if (existing) {
+    await financeDb.planOccurrenceOverrides.update(existing.id, { ...patch, updatedAt: now });
+    return;
+  }
+  await financeDb.planOccurrenceOverrides.put({
+    id: newId('ovr'),
+    planId,
+    dueDate,
+    ...patch,
+    createdAt: now,
+    updatedAt: now,
+  });
+}
+
+/** «Только эту операцию» on a not-yet-paid FIXED_SCHEDULE occurrence — the
+ *  plan and every other occurrence stay untouched. */
+export async function updatePlanOccurrenceFields(
+  occurrenceId: string,
+  patch: PlanIdentityPatch & { amount?: number; dueDate?: string }
+): Promise<void> {
+  const occurrence = await financeDb.planOccurrences.get(occurrenceId);
+  if (!occurrence || occurrence.isPaid) return;
+  await financeDb.planOccurrences.update(occurrenceId, patch);
+  await syncFixedSchedulePlanCache(occurrence.planId);
+}
+
+/**
+ * «Эту и будущие» for a RECURRING plan: ends the old plan the day before
+ * `splitDate` and spins off a new plan carrying `patch`, starting exactly at
+ * `splitDate`. Already-materialised transactions keep pointing at the old
+ * (now-ended) plan. If nothing has ever fired yet, there is no "past" to
+ * protect — degrades to a plain `updatePlan` instead of creating a pointless
+ * immediately-ended stub.
+ */
+export async function splitRecurringPlanFromDate(
+  planId: string,
+  splitDate: string,
+  patch: PlanIdentityPatch
+): Promise<Plan | null> {
+  const plan = await financeDb.plans.get(planId);
+  if (!plan || plan.scheduleType !== 'RECURRING') return null;
+
+  if (!plan.lastRunDate || splitDate <= plan.startDate) {
+    await updatePlan(planId, patch);
+    return (await financeDb.plans.get(planId)) || null;
+  }
+
+  const oldPlanUpdates: Partial<Plan> = { endDate: dayBefore(splitDate) };
+  if (plan.nextDueDate && plan.nextDueDate >= splitDate) {
+    // The very next fire would land ON or AFTER the split date — `endDate`
+    // alone only stops nextOccurrence() from stepping past it, it does not
+    // stop today's already-computed nextDueDate from firing once more.
+    oldPlanUpdates.status = 'COMPLETED';
+  }
+  await updatePlan(planId, oldPlanUpdates);
+
+  const now = new Date().toISOString();
+  const newPlan: Plan = {
+    ...plan,
+    ...patch,
+    id: newId('plan'),
+    startDate: splitDate,
+    nextDueDate: splitDate,
+    lastRunDate: undefined,
+    status: 'ACTIVE',
+    createdAt: now,
+    updatedAt: now,
+  };
+  await financeDb.plans.put(newPlan);
+
+  // A future override set earlier for a date at/after the split belongs with
+  // the plan that now owns that date — otherwise it would silently vanish.
+  const overrides = await financeDb.planOccurrenceOverrides.where('planId').equals(planId).toArray();
+  for (const override of overrides) {
+    if (override.dueDate >= splitDate) {
+      await financeDb.planOccurrenceOverrides.update(override.id, { planId: newPlan.id, updatedAt: now });
+    }
+  }
+
+  return newPlan;
+}
+
+/**
+ * «Эту и будущие» for a FIXED_SCHEDULE plan (instalment/obligation): the
+ * not-yet-paid occurrences from `occurrence.index` onward move to a new plan
+ * carrying `patch` — their id/dueDate/amount stay exactly as scheduled (an
+ * instalment's amount comes from `buildInstallmentAmounts` and is not
+ * reproducible generically), only `planId` and a fresh 1-based `index`
+ * change so "платёж N/total" reads correctly under the new plan. Paid
+ * occurrences never move — they are already real, linked transactions and
+ * stay with the old plan's history. If the split point is the very first
+ * occurrence, there is no history to protect — degrades to `updatePlan`.
+ */
+export async function splitFixedSchedulePlanFromOccurrence(
+  occurrenceId: string,
+  patch: PlanIdentityPatch
+): Promise<Plan | null> {
+  const occurrence = await financeDb.planOccurrences.get(occurrenceId);
+  if (!occurrence || occurrence.isPaid) return null;
+  const plan = await financeDb.plans.get(occurrence.planId);
+  if (!plan || plan.scheduleType !== 'FIXED_SCHEDULE') return null;
+
+  if (occurrence.index === 1) {
+    await updatePlan(plan.id, patch);
+    return (await financeDb.plans.get(plan.id)) || null;
+  }
+
+  const now = new Date().toISOString();
+  const newPlanId = newId('debt');
+  let movedAmount = 0;
+  let movedCount = 0;
+
+  await financeDb.transaction('rw', [financeDb.plans, financeDb.planOccurrences], async () => {
+    const all = await financeDb.planOccurrences.where('planId').equals(plan.id).toArray();
+    const toMove = all
+      .filter((o) => !o.isPaid && o.index >= occurrence.index)
+      .sort((a, b) => a.index - b.index);
+    movedCount = toMove.length;
+    movedAmount = Math.round(toMove.reduce((sum, o) => sum + o.amount, 0) * 100) / 100;
+
+    const newPlan: Plan = {
+      ...plan,
+      ...patch,
+      id: newPlanId,
+      amount: movedAmount,
+      occurrencesCount: movedCount,
+      occurrencesPaid: 0,
+      outstandingAmount: movedAmount,
+      startDate: toMove[0]?.dueDate || plan.startDate,
+      createdAt: now,
+      updatedAt: now,
+    };
+    await financeDb.plans.put(newPlan);
+
+    for (let i = 0; i < toMove.length; i++) {
+      await financeDb.planOccurrences.update(toMove[i].id, { planId: newPlanId, index: i + 1 });
+    }
+
+    const remaining = all.filter((o) => o.isPaid || o.index < occurrence.index);
+    const remainingAmount = Math.round(remaining.reduce((sum, o) => sum + o.amount, 0) * 100) / 100;
+    await financeDb.plans.update(plan.id, {
+      amount: remainingAmount,
+      occurrencesCount: remaining.length,
+      updatedAt: now,
+    });
+  });
+
+  await syncFixedSchedulePlanCache(plan.id);
+  await syncFixedSchedulePlanCache(newPlanId);
+  return (await financeDb.plans.get(newPlanId)) || null;
 }
 
 /**
@@ -1152,6 +1386,7 @@ export async function exportFinanceDatabaseJson(): Promise<string> {
     transactions,
     plans,
     planOccurrences,
+    planOccurrenceOverrides,
     obligations,
     obligationSettlements,
     budgets,
@@ -1165,6 +1400,7 @@ export async function exportFinanceDatabaseJson(): Promise<string> {
     financeDb.transactions.toArray(),
     financeDb.plans.toArray(),
     financeDb.planOccurrences.toArray(),
+    financeDb.planOccurrenceOverrides.toArray(),
     financeDb.obligations.toArray(),
     financeDb.obligationSettlements.toArray(),
     financeDb.budgets.toArray(),
@@ -1188,6 +1424,7 @@ export async function exportFinanceDatabaseJson(): Promise<string> {
     transactions,
     plans,
     planOccurrences,
+    planOccurrenceOverrides,
     obligations,
     obligationSettlements,
     budgets,
@@ -1240,6 +1477,7 @@ export async function importFinanceDatabaseJson(
         financeDb.transactions,
         financeDb.plans,
         financeDb.planOccurrences,
+        financeDb.planOccurrenceOverrides,
         financeDb.obligations,
         financeDb.obligationSettlements,
         financeDb.budgets,
@@ -1255,6 +1493,7 @@ export async function importFinanceDatabaseJson(
           [financeDb.transactions, data.transactions],
           [financeDb.plans, plans],
           [financeDb.planOccurrences, planOccurrences],
+          [financeDb.planOccurrenceOverrides, data.planOccurrenceOverrides],
           [financeDb.obligations, data.obligations],
           [financeDb.obligationSettlements, data.obligationSettlements],
           [financeDb.budgets, data.budgets],
@@ -1316,6 +1555,7 @@ export async function mergeFinanceDatabaseJson(
       [financeDb.categories, data.categories],
       [financeDb.plans, plans],
       [financeDb.planOccurrences, planOccurrences],
+      [financeDb.planOccurrenceOverrides, data.planOccurrenceOverrides],
       [financeDb.obligations, data.obligations],
       [financeDb.obligationSettlements, data.obligationSettlements],
       [financeDb.budgets, data.budgets],
@@ -1339,6 +1579,7 @@ export async function clearAllFinanceData(): Promise<void> {
     financeDb.transactions.clear(),
     financeDb.plans.clear(),
     financeDb.planOccurrences.clear(),
+    financeDb.planOccurrenceOverrides.clear(),
     // A full wipe clears the frozen legacy tables too — "delete everything"
     // means everything, not just the tables the app still reads from.
     financeDb.plannedPayments.clear(),

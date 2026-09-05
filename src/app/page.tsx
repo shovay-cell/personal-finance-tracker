@@ -102,6 +102,7 @@ function FinanceApp() {
   const budgets = useLiveQuery(() => financeDb.budgets.toArray(), [], []);
   const plans = useLiveQuery(() => financeDb.plans.toArray(), [], []);
   const occurrences = useLiveQuery(() => financeDb.planOccurrences.toArray(), [], []);
+  const planOverrides = useLiveQuery(() => financeDb.planOccurrenceOverrides.toArray(), [], []);
   const obligations = useLiveQuery(() => financeDb.obligations.toArray(), [], []);
   const settlements = useLiveQuery(() => financeDb.obligationSettlements.toArray(), [], []);
   const vatPayments = useLiveQuery(() => financeDb.vatPayments.toArray(), [], []);
@@ -205,8 +206,8 @@ function FinanceApp() {
 
   useEffect(() => {
     if (!mounted || plans.length === 0) return;
-    checkPlannedPaymentReminders(plans);
-  }, [mounted, plans]);
+    checkPlannedPaymentReminders(plans, planOverrides);
+  }, [mounted, plans, planOverrides]);
 
   const handleTransactionSaved = useCallback(
     (transaction: Transaction) => {
@@ -351,6 +352,7 @@ function FinanceApp() {
             members={members}
             plans={plans}
             occurrences={occurrences}
+            planOverrides={planOverrides}
             obligations={obligations}
             settlements={settlements}
             bearerCheques={bearerCheques}
@@ -370,6 +372,7 @@ function FinanceApp() {
             members={members}
             plans={plans}
             occurrences={occurrences}
+            planOverrides={planOverrides}
             bearerCheques={bearerCheques}
             settings={settings}
             month={month}
@@ -382,6 +385,7 @@ function FinanceApp() {
           <PlannedTab
             plans={plans}
             occurrences={occurrences}
+            planOverrides={planOverrides}
             obligations={obligations}
             settlements={settlements}
             bearerCheques={bearerCheques}
@@ -403,6 +407,7 @@ function FinanceApp() {
             settlements={settlements}
             plans={plans}
             occurrences={occurrences}
+            planOverrides={planOverrides}
             bearerCheques={bearerCheques}
             vatSummary={vatSummary}
             vatPayments={vatPayments}
@@ -414,6 +419,7 @@ function FinanceApp() {
             transactions={transactions}
             plans={plans}
             occurrences={occurrences}
+            planOverrides={planOverrides}
             settings={settings}
             categories={categories}
             accounts={accounts}

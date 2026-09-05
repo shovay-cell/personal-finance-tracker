@@ -25,6 +25,7 @@ import {
   ObligationSettlement,
   Plan,
   PlanOccurrence,
+  PlanOccurrenceOverride,
   ProfileMember,
   Transaction,
   TransactionKind,
@@ -69,6 +70,7 @@ interface TransactionsTabProps {
   members: ProfileMember[];
   plans: Plan[];
   occurrences: PlanOccurrence[];
+  planOverrides?: PlanOccurrenceOverride[];
   obligations: Obligation[];
   settlements: ObligationSettlement[];
   bearerCheques: BearerCheque[];
@@ -86,6 +88,7 @@ export function TransactionsTab({
   members,
   plans,
   occurrences,
+  planOverrides,
   obligations,
   settlements,
   bearerCheques,
@@ -150,6 +153,7 @@ export function TransactionsTab({
       upcomingEvents({
         plans,
         occurrences,
+        overrides: planOverrides,
         obligations,
         settlements,
         bearerCheques,
@@ -159,7 +163,7 @@ export function TransactionsTab({
         toBase,
       }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [plans, occurrences, obligations, settlements, bearerCheques, categories, today, settings]
+    [plans, occurrences, planOverrides, obligations, settlements, bearerCheques, categories, today, settings]
   );
 
   // One unified row per real transaction and per not-yet-realized plan event,
