@@ -496,7 +496,11 @@ export function TransactionFormModal({
                 key={sub.id}
                 type="button"
                 onClick={() => {
-                  const debtKind = DEBT_KIND_BY_CATEGORY_ID[sub.id];
+                  // Only a brand-new transaction can redirect into "create an
+                  // obligation" — editing one that already exists (e.g. a
+                  // booked payment that belongs to an obligation already)
+                  // must not discard the edit and spawn a duplicate.
+                  const debtKind = !existing ? DEBT_KIND_BY_CATEGORY_ID[sub.id] : undefined;
                   if (debtKind && onOpenObligation) {
                     onOpenObligation(debtKind, parseFloat(amount.replace(',', '.')) || undefined);
                     onClose();

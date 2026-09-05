@@ -13,6 +13,7 @@ import {
   Wallet,
 } from 'lucide-react';
 import {
+  CreatableDebtKind,
   CurrencyCode,
   FinanceAccount,
   FinanceCategory,
@@ -23,12 +24,16 @@ import {
 } from '@/types';
 import {
   deletePlan,
+  deletePlanAndTransactions,
+  getPlanDeletionImpact,
   payPlanOccurrence,
+  PlanDeletionImpact,
   splitFixedSchedulePlanFromOccurrence,
   unpayPlanOccurrence,
   updatePlan,
 } from '@/lib/db';
 import { EditScopeModal, OccurrenceOverrideModal, PlanEditScope } from './plan-scope-modal';
+import { DEBT_KIND_META } from './transaction-form-modal';
 import { formatDateHuman, formatMoney } from '@/services/analytics';
 import { useT } from '@/i18n/context';
 import { accountName, categoryName } from '@/i18n/categories';
@@ -76,6 +81,7 @@ export function DebtCard({
   const [editingPlan, setEditingPlan] = useState<Plan | null>(null);
   const [scopeTarget, setScopeTarget] = useState<PlanOccurrence | null>(null);
   const [overrideTarget, setOverrideTarget] = useState<PlanOccurrence | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
   const { t } = useT();
   const { plan, paidAmount, outstandingAmount, paidCount, totalCount, nextOccurrence } = row;
 
@@ -227,7 +233,7 @@ export function DebtCard({
             </button>
             <button
               type="button"
-              onClick={() => deletePlan(plan.id)}
+              onClick={() => setIsDeleting(true)}
               className="flex-1 py-2 rounded-xl text-[10px] font-black text-rose-500 bg-rose-50 dark:bg-rose-950/40 flex items-center justify-center gap-1.5"
             >
               <Trash2 className="w-3 h-3" />
@@ -258,15 +264,125 @@ export function DebtCard({
           onClose={() => setOverrideTarget(null)}
         />
       )}
+
+      {isDeleting && <DeleteObligationModal plan={plan} currency={currency} onClose={() => setIsDeleting(false)} />}
     </Card>
   );
 }
 
 /**
- * Title/merchant/category/account/note only — the schedule and amounts stay
+ * Shows exactly what deleting this obligation touches — payment count,
+ * total/paid/outstanding sums, and how many real transactions it already
+ * produced — before offering the two variants: keep the booked payments as
+ * plain transactions (the schedule and any not-yet-paid occurrences go
+ * away), or remove those transactions too. Either way this is one atomic
+ * operation (`deletePlan`/`deletePlanAndTransactions`) — never a partial
+ * delete left half-done.
+ */
+function DeleteObligationModal({
+  plan,
+  currency,
+  onClose,
+}: {
+  plan: Plan;
+  currency: CurrencyCode;
+  onClose: () => void;
+}) {
+  const { t } = useT();
+  const [impact, setImpact] = useState<PlanDeletionImpact | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    getPlanDeletionImpact(plan.id).then((result) => {
+      if (!cancelled) setImpact(result);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [plan.id]);
+
+  const handleDelete = async (withTransactions: boolean) => {
+    setIsDeleting(true);
+    if (withTransactions) await deletePlanAndTransactions(plan.id);
+    else await deletePlan(plan.id);
+    onClose();
+  };
+
+  return (
+    <ModalShell
+      title={t('dc.deleteTitle')}
+      subtitle={plan.title}
+      icon={<Trash2 className="w-5 h-5" />}
+      onClose={onClose}
+    >
+      {!impact ? (
+        <p className="text-[11px] text-slate-400 font-medium text-center py-4">{t('common.loading')}</p>
+      ) : (
+        <div className="space-y-4">
+          <Card className="p-3.5 space-y-1.5">
+            <Row label={t('dc.impactSchedule')} value={`${impact.occurrenceCount}`} />
+            <Row label={t('dc.impactPaid')} value={`${impact.paidCount} · ${formatMoney(impact.paidAmount, plan.currency)}`} />
+            <Row
+              label={t('dc.impactUnpaid')}
+              value={`${impact.unpaidCount} · ${formatMoney(impact.outstandingAmount, plan.currency)}`}
+            />
+            <Row
+              label={t('dc.impactTransactions')}
+              value={`${impact.linkedTransactionCount} · ${formatMoney(impact.linkedTransactionAmount, currency)}`}
+            />
+          </Card>
+
+          <div className="space-y-2">
+            <button
+              type="button"
+              disabled={isDeleting}
+              onClick={() => handleDelete(false)}
+              className="w-full py-3 rounded-2xl text-[11px] font-black text-slate-700 dark:text-slate-200 bg-slate-100 dark:bg-slate-800 flex items-center justify-center gap-1.5 disabled:opacity-40"
+            >
+              {t('dc.deleteKeepTransactions')}
+            </button>
+            <p className="text-[10px] text-slate-400 font-medium text-center px-2">
+              {t('dc.deleteKeepTransactionsHint')}
+            </p>
+
+            <button
+              type="button"
+              disabled={isDeleting}
+              onClick={() => handleDelete(true)}
+              className="w-full py-3 rounded-2xl text-[11px] font-black text-white bg-rose-500 flex items-center justify-center gap-1.5 disabled:opacity-40"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              {t('dc.deleteEverything')}
+            </button>
+            <p className="text-[10px] text-rose-500 font-bold text-center px-2">
+              {t('dc.deleteEverythingHint')}
+            </p>
+          </div>
+        </div>
+      )}
+    </ModalShell>
+  );
+}
+
+function Row({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-center justify-between gap-2 text-[11px]">
+      <span className="text-slate-400 font-medium">{label}</span>
+      <span className="text-slate-700 dark:text-slate-200 font-black tabular-nums">{value}</span>
+    </div>
+  );
+}
+
+/**
+ * Title/merchant/type/category/account/note — the schedule and amounts stay
  * fixed once occurrences exist. Changing the category here only steers
  * occurrences not yet paid; a payment already booked is a real transaction
- * with its own category, corrected separately in the ledger.
+ * with its own category, corrected separately in the ledger. Changing the
+ * type (Рассрочка/Налог/Кредит/Другое) reclassifies this same obligation in
+ * place — its id, schedule, paid history and linked transactions are
+ * untouched, so it just moves to a different group in «Обязательства»
+ * immediately, nothing to re-link.
  */
 export function PlanEditModal({
   plan,
@@ -282,6 +398,7 @@ export function PlanEditModal({
   const { t, language } = useT();
   const [title, setTitle] = useState(plan.title);
   const [merchant, setMerchant] = useState(plan.merchant || '');
+  const [planType, setPlanType] = useState<PlanType>(plan.planType);
   const [categoryId, setCategoryId] = useState(plan.categoryId);
   const [subcategoryId, setSubcategoryId] = useState<string | undefined>(plan.subcategoryId);
   const [accountId, setAccountId] = useState(plan.accountId);
@@ -300,6 +417,7 @@ export function PlanEditModal({
     await updatePlan(plan.id, {
       title: title.trim(),
       merchant: merchant.trim() || undefined,
+      planType,
       categoryId,
       subcategoryId,
       accountId,
@@ -339,6 +457,29 @@ export function PlanEditModal({
           placeholder={t('tf.merchantPlaceholder')}
           className={inputClass}
         />
+      </Field>
+
+      <Field label={t('dc.obligationType')} hint={t('dc.obligationTypeHint')}>
+        <div className="grid grid-cols-4 gap-1.5">
+          {(Object.keys(DEBT_KIND_META) as CreatableDebtKind[]).map((option) => {
+            const meta = DEBT_KIND_META[option];
+            const isActive = planType === option;
+            return (
+              <button
+                key={option}
+                type="button"
+                onClick={() => setPlanType(option)}
+                className={`py-2 rounded-xl text-[10px] font-black border transition-all ${
+                  isActive
+                    ? 'bg-violet-500 text-white border-transparent'
+                    : 'bg-slate-50 dark:bg-slate-800 text-slate-500 border-slate-200 dark:border-slate-700'
+                }`}
+              >
+                {t(meta.label)}
+              </button>
+            );
+          })}
+        </div>
       </Field>
 
       <Field label={t('common.category')}>

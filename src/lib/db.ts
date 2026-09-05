@@ -719,14 +719,75 @@ export async function cancelPlan(id: string): Promise<void> {
   await financeDb.plans.update(id, { status: 'CANCELLED', updatedAt: new Date().toISOString() });
 }
 
+/** Everything a delete-obligation confirmation needs to show before acting:
+ *  how many payments/transactions are involved and what they add up to. */
+export interface PlanDeletionImpact {
+  occurrenceCount: number;
+  paidCount: number;
+  unpaidCount: number;
+  totalAmount: number;
+  paidAmount: number;
+  outstandingAmount: number;
+  /** Real, already-booked transactions this plan is linked to — kept by
+   *  `deletePlan`, removed only by `deletePlanAndTransactions`. */
+  linkedTransactionCount: number;
+  linkedTransactionAmount: number;
+}
+
+export async function getPlanDeletionImpact(planId: string): Promise<PlanDeletionImpact> {
+  const [occurrences, transactions] = await Promise.all([
+    financeDb.planOccurrences.where('planId').equals(planId).toArray(),
+    financeDb.transactions.where('planId').equals(planId).toArray(),
+  ]);
+  const paid = occurrences.filter((o) => o.isPaid);
+  const round = (n: number) => Math.round(n * 100) / 100;
+  return {
+    occurrenceCount: occurrences.length,
+    paidCount: paid.length,
+    unpaidCount: occurrences.length - paid.length,
+    totalAmount: round(occurrences.reduce((sum, o) => sum + o.amount, 0)),
+    paidAmount: round(paid.reduce((sum, o) => sum + o.amount, 0)),
+    outstandingAmount: round(occurrences.reduce((sum, o) => sum + (o.isPaid ? 0 : o.amount), 0)),
+    linkedTransactionCount: transactions.length,
+    linkedTransactionAmount: round(transactions.reduce((sum, t) => sum + t.amount, 0)),
+  };
+}
+
+/** Removes the plan and its schedule, keeping every payment already booked
+ *  as an ordinary, standalone transaction — "график удалить, проведённые
+ *  операции сохранить". Clears `planId` on those transactions so none of
+ *  them are left pointing at a plan that no longer exists. */
 export async function deletePlan(id: string): Promise<void> {
-  const occurrences = await financeDb.planOccurrences.where('planId').equals(id).toArray();
-  for (const occurrence of occurrences) {
-    // Payments already booked stay in history: deleting the plan must not
-    // rewrite money that actually left the account.
-    await financeDb.planOccurrences.delete(occurrence.id);
-  }
-  await financeDb.plans.delete(id);
+  await financeDb.transaction(
+    'rw',
+    [financeDb.plans, financeDb.planOccurrences, financeDb.transactions],
+    async () => {
+      await financeDb.planOccurrences.where('planId').equals(id).delete();
+      const linked = await financeDb.transactions.where('planId').equals(id).toArray();
+      for (const t of linked) {
+        await financeDb.transactions.update(t.id, { planId: undefined });
+      }
+      await financeDb.plans.delete(id);
+    }
+  );
+}
+
+/** Removes the plan, its schedule, AND every transaction it ever produced —
+ *  "полностью удалить кредит и все связанные с ним операции". Irreversible;
+ *  the caller is expected to have confirmed this explicitly. */
+export async function deletePlanAndTransactions(id: string): Promise<void> {
+  await financeDb.transaction(
+    'rw',
+    [financeDb.plans, financeDb.planOccurrences, financeDb.transactions],
+    async () => {
+      const linked = await financeDb.transactions.where('planId').equals(id).toArray();
+      for (const t of linked) {
+        await financeDb.transactions.delete(t.id);
+      }
+      await financeDb.planOccurrences.where('planId').equals(id).delete();
+      await financeDb.plans.delete(id);
+    }
+  );
 }
 
 // -------------------------------------------------- fixed-schedule plans
