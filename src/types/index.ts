@@ -15,7 +15,7 @@ export interface CurrencyDefinition {
   name: string;
 }
 
-export type AccountKind = 'CASH' | 'CARD' | 'BANK' | 'SAVINGS';
+export type AccountKind = 'CASH' | 'CARD' | 'BANK' | 'SAVINGS' | 'CREDIT_CARD';
 
 export interface FinanceAccount {
   id: string;
@@ -25,6 +25,8 @@ export interface FinanceAccount {
   openingBalance: number; // balance at the moment the account was created
   colorHex: string;
   isArchived: boolean;
+  /** kind === 'CREDIT_CARD' only — last 4 digits, never the full number. */
+  last4?: string;
   createdAt: string;
 }
 

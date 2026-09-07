@@ -108,7 +108,7 @@ const CATEGORY_NAMES: Record<string, Entry> = {
 /** Default account names are seeded in Russian for the same reason. */
 const ACCOUNT_NAMES: Record<string, Entry> = {
   'acc-cash': { ru: 'Наличные', he: 'מזומן', uk: 'Готівка', en: 'Cash' },
-  'acc-card': { ru: 'Основная карта', he: 'כרטיס ראשי', uk: 'Основна картка', en: 'Main card' },
+  'acc-card': { ru: 'Банковский счёт', he: 'חשבון בנק', uk: 'Банківський рахунок', en: 'Bank account' },
 };
 
 function localize(
@@ -142,12 +142,25 @@ export function accountName(account: { id: string; name: string }, language: Lan
   return localize(ACCOUNT_NAMES, account.id, account.name, language);
 }
 
+/**
+ * The name shown wherever an account must be told apart from any other —
+ * pickers, list rows, filters. For a credit card this appends its last 4
+ * digits so several cards never look the same in a list.
+ */
+export function accountDisplayLabel(
+  account: { id: string; name: string; kind: string; last4?: string },
+  language: Language
+): string {
+  const name = accountName(account, language);
+  return account.kind === 'CREDIT_CARD' && account.last4 ? `${name} •${account.last4}` : name;
+}
 
 const ACCOUNT_KIND_LABELS: Record<string, Entry> = {
   CASH: { ru: 'Наличные', he: 'מזומן', uk: 'Готівка', en: 'Cash' },
   CARD: { ru: 'Карта', he: 'כרטיס', uk: 'Картка', en: 'Card' },
-  BANK: { ru: 'Счёт в банке', he: 'חשבון בנק', uk: 'Рахунок у банку', en: 'Bank account' },
+  BANK: { ru: 'Банковский счёт', he: 'חשבון בנק', uk: 'Банківський рахунок', en: 'Bank account' },
   SAVINGS: { ru: 'Накопления', he: 'חיסכון', uk: 'Заощадження', en: 'Savings' },
+  CREDIT_CARD: { ru: 'Кредитная карта', he: 'כרטיס אשראי', uk: 'Кредитна картка', en: 'Credit card' },
 };
 
 export function accountKindLabel(kind: string, language: Language): string {

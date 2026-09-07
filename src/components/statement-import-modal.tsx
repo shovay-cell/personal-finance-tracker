@@ -33,7 +33,7 @@ import { isCsvFile, isSpreadsheetFile, readCsvAsTable, readSpreadsheetAsTable } 
 import { GeminiKeyPrompt } from './gemini-key-prompt';
 import { useT } from '@/i18n/context';
 import { usePasteUpload } from '@/hooks/use-paste-upload';
-import { accountName, categoryName } from '@/i18n/categories';
+import { accountDisplayLabel, categoryName } from '@/i18n/categories';
 import { Field, ModalShell, PrimaryButton, inputClass } from './ui';
 import { DEBT_KIND_META } from './transaction-form-modal';
 
@@ -350,7 +350,7 @@ export function StatementImportModal({
               >
                 {accounts.map((account) => (
                   <option key={account.id} value={account.id}>
-                    {accountName(account, language)}
+                    {accountDisplayLabel(account, language)}
                   </option>
                 ))}
               </select>

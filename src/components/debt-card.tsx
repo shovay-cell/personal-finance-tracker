@@ -36,7 +36,7 @@ import { EditScopeModal, OccurrenceOverrideModal, PlanEditScope } from './plan-s
 import { DEBT_KIND_META } from './transaction-form-modal';
 import { formatDateHuman, formatMoney } from '@/services/analytics';
 import { useT } from '@/i18n/context';
-import { accountName, categoryName } from '@/i18n/categories';
+import { accountDisplayLabel, categoryName } from '@/i18n/categories';
 import { Card, Field, ModalShell, PrimaryButton, inputClass } from './ui';
 
 const KIND_ICON: Record<PlanType, typeof CreditCard> = {
@@ -526,7 +526,7 @@ export function PlanEditModal({
             .filter((a) => !a.isArchived || a.id === accountId)
             .map((account) => (
               <option key={account.id} value={account.id}>
-                {accountName(account, language)}
+                {accountDisplayLabel(account, language)}
               </option>
             ))}
         </select>

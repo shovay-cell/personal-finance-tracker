@@ -6,7 +6,7 @@ import { CurrencyCode, FinanceAccount, FinanceCategory, VatPayment, VatSummary }
 import { addTransaction, addVatPayment, deleteVatPayment, todayIso } from '@/lib/db';
 import { formatDateHuman, formatMoney } from '@/services/analytics';
 import { useT } from '@/i18n/context';
-import { accountName } from '@/i18n/categories';
+import { accountDisplayLabel } from '@/i18n/categories';
 import { Card, Field, ModalShell, PrimaryButton, inputClass } from './ui';
 
 /**
@@ -213,7 +213,7 @@ function VatPaymentModal({
         <select value={accountId} onChange={(e) => setAccountId(e.target.value)} className={inputClass}>
           {accounts.map((account) => (
             <option key={account.id} value={account.id}>
-              {accountName(account, language)}
+              {accountDisplayLabel(account, language)}
             </option>
           ))}
         </select>

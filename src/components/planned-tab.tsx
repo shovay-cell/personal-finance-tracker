@@ -45,7 +45,7 @@ import { formatDateHuman, formatMoney, shiftMonth } from '@/services/analytics';
 import { UpcomingEvent, groupByDay, upcomingEvents } from '@/services/upcoming';
 import { getCategoryIcon } from '@/constants/categories';
 import { useT } from '@/i18n/context';
-import { accountName, categoryName } from '@/i18n/categories';
+import { accountDisplayLabel, categoryName } from '@/i18n/categories';
 import { EditScopeModal, OccurrenceOverrideModal, PlanEditScope } from './plan-scope-modal';
 import { PlanEditModal } from './debt-card';
 import { BearerChequeEditModal } from './debts-tab';
@@ -784,7 +784,7 @@ function PlannedPaymentModal({
         <select value={accountId} onChange={(e) => setAccountId(e.target.value)} className={inputClass}>
           {accounts.map((account) => (
             <option key={account.id} value={account.id}>
-              {accountName(account, language)}
+              {accountDisplayLabel(account, language)}
             </option>
           ))}
         </select>

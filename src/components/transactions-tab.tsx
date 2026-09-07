@@ -31,11 +31,11 @@ import {
   TransactionKind,
 } from '@/types';
 import { computeAccountBalance, convertToBase, todayIso } from '@/lib/db';
-import { ACCOUNT_KIND_LABELS, getCategoryIcon } from '@/constants/categories';
+import { ACCOUNT_KIND_ICONS, ACCOUNT_KIND_LABELS, getCategoryIcon } from '@/constants/categories';
 import { DateRange, formatDateHuman, formatMoney, rangeForPreset } from '@/services/analytics';
 import { UpcomingEvent, upcomingEvents } from '@/services/upcoming';
 import { useT } from '@/i18n/context';
-import { accountKindLabel, accountName, categoryName, seededName } from '@/i18n/categories';
+import { accountDisplayLabel, accountKindLabel, categoryName, seededName } from '@/i18n/categories';
 import { ConvertToObligationModal } from './convert-to-obligation-modal';
 import { BulkChangeCategoryModal } from './bulk-change-category-modal';
 import { Card, EmptyState, SectionTitle, SegmentedControl, inputClass } from './ui';
@@ -116,6 +116,7 @@ export function TransactionsTab({
 
   const categoryById = useMemo(() => new Map(categories.map((c) => [c.id, c])), [categories]);
   const memberById = useMemo(() => new Map(members.map((m) => [m.id, m])), [members]);
+  const accountsById = useMemo(() => new Map(accounts.map((a) => [a.id, a])), [accounts]);
 
   // Сегодня/7 дней/Месяц are quick local overrides — they don't touch the
   // shared range the rest of the app (Отчёты) uses. «Всё» means exactly
@@ -418,7 +419,7 @@ export function TransactionsTab({
                     {accountKindLabel(account.kind, language)}
                   </p>
                   <p className="text-xs font-bold text-slate-700 dark:text-slate-200 truncate mt-0.5">
-                    {accountName(account, language)}
+                    {accountDisplayLabel(account, language)}
                   </p>
                   <p
                     className={`text-sm font-black tabular-nums mt-1 ${
@@ -484,7 +485,7 @@ export function TransactionsTab({
             <option value="ALL">{t('tx.allAccounts')}</option>
             {accounts.map((account) => (
               <option key={account.id} value={account.id}>
-                {accountName(account, language)}
+                {accountDisplayLabel(account, language)}
               </option>
             ))}
           </select>
@@ -619,6 +620,7 @@ export function TransactionsTab({
                           row.transaction.subcategoryId ? categoryById.get(row.transaction.subcategoryId) : undefined
                         }
                         author={memberById.get(row.transaction.authorId)}
+                        account={accountsById.get(row.transaction.accountId)}
                         language={language}
                         baseCurrency={baseCurrency}
                         t={t}
@@ -650,6 +652,7 @@ function TransactionRow({
   category,
   subcategory,
   author,
+  account,
   language,
   baseCurrency,
   t,
@@ -659,12 +662,14 @@ function TransactionRow({
   category?: FinanceCategory;
   subcategory?: FinanceCategory;
   author?: ProfileMember;
+  account?: FinanceAccount;
   language: ReturnType<typeof useT>['language'];
   baseCurrency: CurrencyCode;
   t: ReturnType<typeof useT>['t'];
   onSelect: (transaction: Transaction) => void;
 }) {
   const Icon = getCategoryIcon(category?.iconName || 'CircleDashed');
+  const AccountIcon = account ? getCategoryIcon(ACCOUNT_KIND_ICONS[account.kind] || 'Wallet') : null;
 
   return (
     <button
@@ -695,6 +700,12 @@ function TransactionRow({
         <span className="block text-[10.5px] text-slate-400 font-medium truncate mt-0.5">
           {[transaction.merchant, transaction.note].filter(Boolean).join(' · ') || t('tx.noDescription')}
         </span>
+        {account && AccountIcon && (
+          <span className="flex items-center gap-1 text-[9.5px] text-slate-400 font-bold mt-0.5">
+            <AccountIcon className="w-2.5 h-2.5 flex-shrink-0" />
+            <span className="truncate">{accountDisplayLabel(account, language)}</span>
+          </span>
+        )}
       </span>
 
       <span className="text-right flex-shrink-0">

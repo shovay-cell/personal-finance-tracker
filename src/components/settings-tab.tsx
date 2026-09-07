@@ -76,7 +76,7 @@ import {
 } from '@/services/notifications';
 import { LANGUAGES, SPEECH_LOCALE_BY_LANGUAGE } from '@/i18n/dictionary';
 import { useT } from '@/i18n/context';
-import { accountKindLabel, accountName, seededName } from '@/i18n/categories';
+import { accountDisplayLabel, accountKindLabel, seededName } from '@/i18n/categories';
 import { numberLocale } from '@/i18n/runtime';
 import { CategoryManagerModal } from './category-manager-modal';
 import { ManagePinModal } from './pin-lock';
@@ -476,7 +476,7 @@ export function SettingsTab({
               />
               <span className="flex-1 min-w-0">
                 <span className="block text-xs font-black text-slate-800 dark:text-slate-100 truncate">
-                  {accountName(account, language)}
+                  {accountDisplayLabel(account, language)}
                   {account.isArchived && (
                     <span className="text-[10px] text-slate-400 font-bold"> · {t('st.archived')}</span>
                   )}
@@ -1197,10 +1197,14 @@ function AccountModal({
   const [currency, setCurrency] = useState<CurrencyCode>(account?.currency || baseCurrency);
   const [openingBalance, setOpeningBalance] = useState(String(account?.openingBalance ?? 0));
   const [colorHex, setColorHex] = useState(account?.colorHex || '#0EA5E9');
+  const [last4, setLast4] = useState(account?.last4 || '');
   const [error, setError] = useState<string | null>(null);
+
+  const isCreditCard = kind === 'CREDIT_CARD';
 
   const handleSave = async () => {
     if (!name.trim()) return setError(t('st.enterAccountName'));
+    if (isCreditCard && !/^\d{4}$/.test(last4)) return setError(t('st.last4Invalid'));
 
     const payload = {
       name: name.trim(),
@@ -1209,6 +1213,7 @@ function AccountModal({
       openingBalance: parseFloat(openingBalance.replace(',', '.')) || 0,
       colorHex,
       isArchived: account?.isArchived || false,
+      last4: isCreditCard ? last4 : undefined,
     };
 
     if (account) await updateAccount(account.id, payload);
@@ -1258,13 +1263,27 @@ function AccountModal({
           onChange={(e) => setKind(e.target.value as AccountKind)}
           className={inputClass}
         >
-          {(['CASH', 'CARD', 'BANK', 'SAVINGS'] as AccountKind[]).map((value) => (
+          {(['CASH', 'CARD', 'BANK', 'SAVINGS', 'CREDIT_CARD'] as AccountKind[]).map((value) => (
             <option key={value} value={value}>
               {accountKindLabel(value, language)}
             </option>
           ))}
         </select>
       </Field>
+
+      {isCreditCard && (
+        <Field label={t('st.fieldLast4')} hint={t('st.fieldLast4Hint')}>
+          <input
+            type="text"
+            inputMode="numeric"
+            maxLength={4}
+            value={last4}
+            onChange={(e) => setLast4(e.target.value.replace(/\D/g, '').slice(0, 4))}
+            placeholder="4242"
+            className={`${inputClass} text-center font-black tracking-widest`}
+          />
+        </Field>
+      )}
 
       <div className="grid grid-cols-2 gap-3">
         <Field label={t('st.fieldCurrency')}>

@@ -3,6 +3,7 @@
 import React, { useMemo, useState } from 'react';
 import {
   Coins,
+  CreditCard,
   FileSignature,
   ImagePlus,
   Percent,
@@ -57,7 +58,7 @@ import {
 import { useT } from '@/i18n/context';
 import type { TranslationKey } from '@/i18n/dictionary';
 import { unitNoun } from '@/i18n/plurals';
-import { seededName } from '@/i18n/categories';
+import { accountDisplayLabel, seededName } from '@/i18n/categories';
 import { translate } from '@/i18n/dictionary';
 import { getActiveLanguage } from '@/i18n/runtime';
 import { netFromGross, vatFromGross } from '@/services/vat';
@@ -100,8 +101,14 @@ interface TransactionFormModalProps {
   onClose: () => void;
   onSaved?: (transaction: Transaction) => void;
   /** Opens the dedicated obligation flow — reached by picking «Обязательства»
-   *  (or a subcategory) instead of an ordinary category. */
-  onOpenObligation?: (kind?: CreatableDebtKind, initialAmount?: number) => void;
+   *  (or a subcategory) instead of an ordinary category, or by splitting a
+   *  credit-card payment into instalments. */
+  onOpenObligation?: (
+    kind?: CreatableDebtKind,
+    initialAmount?: number,
+    initialAccountId?: string,
+    initialPaymentsCount?: number
+  ) => void;
 }
 
 export function TransactionFormModal({
@@ -155,6 +162,10 @@ export function TransactionFormModal({
   const [isRepeating, setIsRepeating] = useState(false);
   const [repeatCount, setRepeatCount] = useState('1');
   const [repeatUnit, setRepeatUnit] = useState<RecurrenceUnit>('MONTH');
+  const [splitPayments, setSplitPayments] = useState(false);
+  const [splitPaymentsCount, setSplitPaymentsCount] = useState(
+    String(DEBT_KIND_META.INSTALLMENT.defaultPayments)
+  );
   const [chequePayee, setChequePayee] = useState('');
   const [chequeNumber, setChequeNumber] = useState('');
   const [chequeDueDate, setChequeDueDate] = useState(todayIso());
@@ -170,6 +181,12 @@ export function TransactionFormModal({
   // A cheque is its own mechanic, not an option layered on top of the debt
   // toggle: picking this category is enough, no extra switch to flip.
   const isBearerCheque = kind === 'EXPENSE' && categoryId === BEARER_CHEQUE_CATEGORY_ID;
+
+  // Splitting into instalments only makes sense once a credit card is the
+  // account paying for this — and only for a brand-new expense, same as the
+  // repeat toggle below.
+  const selectedAccount = accounts.find((a) => a.id === accountId);
+  const isCreditCardAccount = selectedAccount?.kind === 'CREDIT_CARD';
 
   // A brand-new bearer cheque is never a plain Transaction — creating one
   // always goes through the multi-cheque fields below, which only render on
@@ -257,6 +274,26 @@ export function TransactionFormModal({
     }
     if (isBearerCheque && !existing && !chequePayee.trim()) {
       setError(t('bc.enterPayee'));
+      return;
+    }
+    // Splitting a credit-card payment hands off to the same instalment
+    // engine as an obligation created from the category grid — it's the
+    // same thing (a purchase paid off over several charges), just reached
+    // by picking the card instead of a debt category.
+    if (
+      !existing &&
+      onOpenObligation &&
+      isCreditCardAccount &&
+      splitPayments &&
+      Math.max(1, parseInt(splitPaymentsCount, 10) || 1) > 1
+    ) {
+      onOpenObligation(
+        'INSTALLMENT',
+        numericAmount,
+        accountId,
+        Math.max(1, parseInt(splitPaymentsCount, 10) || 1)
+      );
+      onClose();
       return;
     }
     // Safety net for a category reaching this state some other way (e.g. a
@@ -629,7 +666,7 @@ export function TransactionFormModal({
                 .filter((a) => !a.isArchived || a.id === accountId)
                 .map((account) => (
                   <option key={account.id} value={account.id}>
-                    {account.name}
+                    {accountDisplayLabel(account, language)}
                   </option>
                 ))}
             </select>
@@ -807,11 +844,64 @@ export function TransactionFormModal({
                 .filter((a) => !a.isArchived || a.id === accountId)
                 .map((account) => (
                   <option key={account.id} value={account.id}>
-                    {account.name}
+                    {accountDisplayLabel(account, language)}
                   </option>
                 ))}
             </select>
           </Field>
+        </div>
+      )}
+
+      {kind === 'EXPENSE' && !existing && isCreditCardAccount && (
+        <div className="rounded-2xl border border-slate-200 dark:border-slate-700 p-3 space-y-2.5">
+          <button
+            type="button"
+            onClick={() => setSplitPayments((prev) => !prev)}
+            className="w-full flex items-center justify-between gap-3 text-left"
+          >
+            <span className="flex items-start gap-2">
+              <CreditCard className="w-4 h-4 text-slate-400 mt-px flex-shrink-0" />
+              <span>
+                <span className="block text-xs font-black text-slate-800 dark:text-slate-100">
+                  {t('form.splitPayments')}
+                </span>
+                <span className="block text-[10px] text-slate-400 font-medium mt-0.5">
+                  {t('form.splitPaymentsHint')}
+                </span>
+              </span>
+            </span>
+            <span
+              className={`w-11 h-6 rounded-full flex items-center px-0.5 transition-colors flex-shrink-0 ${
+                splitPayments ? 'bg-emerald-500' : 'bg-slate-300 dark:bg-slate-700'
+              }`}
+            >
+              <span
+                className={`w-5 h-5 rounded-full bg-white shadow transition-transform ${
+                  splitPayments ? 'translate-x-5' : ''
+                }`}
+              />
+            </span>
+          </button>
+
+          {splitPayments && (
+            <>
+              <Field label={t('form.paymentsCount')}>
+                <input
+                  type="number"
+                  min={2}
+                  value={splitPaymentsCount}
+                  onChange={(e) => setSplitPaymentsCount(e.target.value)}
+                  className={`${inputClass} text-center font-black`}
+                />
+              </Field>
+              <InstallmentPreview
+                total={parseFloat(amount.replace(',', '.')) || 0}
+                count={Math.max(1, parseInt(splitPaymentsCount, 10) || 1)}
+                currency={currency}
+                firstPaid={false}
+              />
+            </>
+          )}
         </div>
       )}
 

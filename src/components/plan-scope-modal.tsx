@@ -9,7 +9,7 @@ import {
   upsertPlanOccurrenceOverride,
 } from '@/lib/db';
 import { useT } from '@/i18n/context';
-import { accountName, categoryName } from '@/i18n/categories';
+import { accountDisplayLabel, categoryName } from '@/i18n/categories';
 import { Card, CategoryGrid, Field, ModalShell, PrimaryButton, inputClass } from './ui';
 
 export type PlanEditScope = 'THIS' | 'THIS_AND_FUTURE' | 'RULE';
@@ -213,7 +213,7 @@ export function OccurrenceOverrideModal({
             .filter((a) => !a.isArchived || a.id === accountId)
             .map((account) => (
               <option key={account.id} value={account.id}>
-                {accountName(account, language)}
+                {accountDisplayLabel(account, language)}
               </option>
             ))}
         </select>

@@ -384,8 +384,8 @@ export async function initializeFinanceDb(): Promise<void> {
       },
       {
         id: 'acc-card',
-        name: 'Основная карта',
-        kind: 'CARD',
+        name: 'Банковский счёт',
+        kind: 'BANK',
         currency: 'ILS',
         openingBalance: 0,
         colorHex: '#0EA5E9',
@@ -393,6 +393,16 @@ export async function initializeFinanceDb(): Promise<void> {
         createdAt: now,
       },
     ]);
+  }
+
+  // The default payment account used to be seeded as a generic "card" — now
+  // that a credit card is its own distinct kind, an untouched default account
+  // (still carrying its original name and kind) is migrated in place to the
+  // bank-account kind it always actually meant. Anyone who already renamed or
+  // retyped it is left exactly as they set it.
+  const defaultCardAccount = await financeDb.accounts.get('acc-card');
+  if (defaultCardAccount && defaultCardAccount.kind === 'CARD' && defaultCardAccount.name === 'Основная карта') {
+    await financeDb.accounts.update('acc-card', { kind: 'BANK', name: 'Банковский счёт' });
   }
 
   if ((await financeDb.members.count()) === 0) {

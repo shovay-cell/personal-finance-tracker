@@ -42,7 +42,7 @@ import { exportObligationsCsv } from '@/services/export';
 import { PAYEE_KIND_OPTIONS, OBLIGATION_INCOME_CATEGORY_ID } from '@/constants/categories';
 import { useT } from '@/i18n/context';
 import { usePasteUpload } from '@/hooks/use-paste-upload';
-import { accountName, obligationStatusLabel, payeeKindLabelI18n } from '@/i18n/categories';
+import { accountDisplayLabel, obligationStatusLabel, payeeKindLabelI18n } from '@/i18n/categories';
 import {
   analyzeReceiptWithAI,
   compressForStorage,
@@ -717,7 +717,7 @@ function SettleObligationModal({
           <select value={accountId} onChange={(e) => setAccountId(e.target.value)} className={inputClass}>
             {accounts.map((account) => (
               <option key={account.id} value={account.id}>
-                {accountName(account, language)}
+                {accountDisplayLabel(account, language)}
               </option>
             ))}
           </select>

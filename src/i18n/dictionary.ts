@@ -621,6 +621,19 @@ export const DICTIONARY = {
   },
   'st.fieldName': { ru: 'Название', he: 'שם', uk: 'Назва', en: 'Name' },
   'st.fieldAccountKind': { ru: 'Тип счёта', he: 'סוג חשבון', uk: 'Тип рахунку', en: 'Account type' },
+  'st.fieldLast4': { ru: 'Последние 4 цифры карты', he: '4 הספרות האחרונות של הכרטיס', uk: 'Останні 4 цифри картки', en: 'Card last 4 digits' },
+  'st.fieldLast4Hint': {
+    ru: 'Только для распознавания — полный номер карты не хранится',
+    he: 'רק לזיהוי — מספר הכרטיס המלא אינו נשמר',
+    uk: 'Лише для розпізнавання — повний номер картки не зберігається',
+    en: 'For recognition only — the full card number is never stored',
+  },
+  'st.last4Invalid': {
+    ru: 'Введите ровно 4 цифры',
+    he: 'הזינו בדיוק 4 ספרות',
+    uk: 'Введіть рівно 4 цифри',
+    en: 'Enter exactly 4 digits',
+  },
   'st.fieldCurrency': { ru: 'Валюта', he: 'מטבע', uk: 'Валюта', en: 'Currency' },
   'st.fieldOpeningBalance': {
     ru: 'Начальный баланс',
@@ -2308,6 +2321,18 @@ export const DICTIONARY = {
     he: 'פיצול הקבלה בין קטגוריות',
     uk: 'Розділити чек між категоріями',
     en: 'Split the receipt between categories',
+  },
+  'form.splitPayments': {
+    ru: 'Разделить на несколько платежей',
+    he: 'לפצל למספר תשלומים',
+    uk: 'Розділити на декілька платежів',
+    en: 'Split into several payments',
+  },
+  'form.splitPaymentsHint': {
+    ru: 'Оформит как рассрочку по этой карте',
+    he: 'יירשם כתשלומים על כרטיס זה',
+    uk: 'Оформить як розстрочку по цій картці',
+    en: "Books it as this card's instalment plan",
   },
   'form.repeat': { ru: 'Повторить операцию', he: 'לחזור על התנועה', uk: 'Повторити операцію', en: 'Repeat this operation' },
   'form.repeatHint': {

@@ -598,8 +598,9 @@ export function payeeKindLabel(kind: PayeeKind): string {
 export const ACCOUNT_KIND_LABELS: Record<string, string> = {
   CASH: 'Наличные',
   CARD: 'Карта',
-  BANK: 'Счёт в банке',
+  BANK: 'Банковский счёт',
   SAVINGS: 'Накопления',
+  CREDIT_CARD: 'Кредитная карта',
 };
 
 export const ACCOUNT_KIND_ICONS: Record<string, string> = {
@@ -607,6 +608,7 @@ export const ACCOUNT_KIND_ICONS: Record<string, string> = {
   CARD: 'CreditCard',
   BANK: 'Landmark',
   SAVINGS: 'PiggyBank',
+  CREDIT_CARD: 'CreditCard',
 };
 
 export const MEMBER_COLORS = ['#0EA5E9', '#F97316', '#8B5CF6', '#10B981'];

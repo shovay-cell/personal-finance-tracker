@@ -47,7 +47,7 @@ import { VatCard } from './vat-card';
 import { DebtCard } from './debt-card';
 import { ObligationsTab } from './obligations-tab';
 import { useT } from '@/i18n/context';
-import { accountName, categoryName } from '@/i18n/categories';
+import { accountDisplayLabel, categoryName } from '@/i18n/categories';
 import type { TranslationKey } from '@/i18n/dictionary';
 import { Card, EmptyState, Field, ModalShell, PrimaryButton, SectionTitle, inputClass } from './ui';
 
@@ -621,7 +621,7 @@ export function BearerChequeEditModal({
             .filter((a) => !a.isArchived || a.id === accountId)
             .map((account) => (
               <option key={account.id} value={account.id}>
-                {accountName(account, language)}
+                {accountDisplayLabel(account, language)}
               </option>
             ))}
         </select>
@@ -863,7 +863,7 @@ function BearerChequeSeriesEditModal({
             .filter((a) => !a.isArchived || a.id === accountId)
             .map((account) => (
               <option key={account.id} value={account.id}>
-                {accountName(account, language)}
+                {accountDisplayLabel(account, language)}
               </option>
             ))}
         </select>

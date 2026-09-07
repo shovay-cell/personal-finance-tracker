@@ -78,12 +78,17 @@ function FinanceApp() {
   const [obligationPreset, setObligationPreset] = useState<{
     kind?: CreatableDebtKind;
     amount?: number;
+    accountId?: string;
+    paymentsCount?: number;
   } | null>(null);
 
-  const openObligation = useCallback((kind?: CreatableDebtKind, amount?: number) => {
-    setObligationPreset({ kind, amount });
-    setIsCreatingObligation(true);
-  }, []);
+  const openObligation = useCallback(
+    (kind?: CreatableDebtKind, amount?: number, accountId?: string, paymentsCount?: number) => {
+      setObligationPreset({ kind, amount, accountId, paymentsCount });
+      setIsCreatingObligation(true);
+    },
+    []
+  );
   const [formPrefill, setFormPrefill] = useState<TransactionPrefill | null>(null);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
   const [pendingPlanned, setPendingPlanned] = useState<Plan[]>([]);
@@ -497,6 +502,8 @@ function FinanceApp() {
           baseCurrency={settings.baseCurrency}
           initialKind={obligationPreset?.kind}
           initialAmount={obligationPreset?.amount}
+          initialAccountId={obligationPreset?.accountId}
+          initialPaymentsCount={obligationPreset?.paymentsCount}
           onClose={() => {
             setIsCreatingObligation(false);
             setObligationPreset(null);

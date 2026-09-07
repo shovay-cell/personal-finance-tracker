@@ -12,7 +12,7 @@ import {
 import { addFixedSchedulePlan, todayIso } from '@/lib/db';
 import { unitNoun } from '@/i18n/plurals';
 import { useT } from '@/i18n/context';
-import { accountName, categoryName } from '@/i18n/categories';
+import { accountDisplayLabel, categoryName } from '@/i18n/categories';
 import { DEBT_KIND_META, InstallmentPreview } from './transaction-form-modal';
 import { Field, ModalShell, PrimaryButton, inputClass } from './ui';
 
@@ -34,6 +34,8 @@ interface ObligationQuickAddModalProps {
   baseCurrency: CurrencyCode;
   initialKind?: CreatableDebtKind;
   initialAmount?: number;
+  initialAccountId?: string;
+  initialPaymentsCount?: number;
   onClose: () => void;
   onSaved?: () => void;
 }
@@ -51,6 +53,8 @@ export function ObligationQuickAddModal({
   baseCurrency,
   initialKind,
   initialAmount,
+  initialAccountId,
+  initialPaymentsCount,
   onClose,
   onSaved,
 }: ObligationQuickAddModalProps) {
@@ -64,9 +68,13 @@ export function ObligationQuickAddModal({
     categories.some((c) => c.id === DEFAULT_CATEGORY_ID[startKind]) ? DEFAULT_CATEGORY_ID[startKind] : ''
   );
   const [subcategoryId, setSubcategoryId] = useState<string | undefined>(undefined);
-  const [accountId, setAccountId] = useState(accounts[0]?.id || '');
+  const [accountId, setAccountId] = useState(
+    (initialAccountId && accounts.some((a) => a.id === initialAccountId) ? initialAccountId : accounts[0]?.id) || ''
+  );
   const [firstDueDate, setFirstDueDate] = useState(todayIso());
-  const [paymentsCount, setPaymentsCount] = useState(String(DEBT_KIND_META[startKind].defaultPayments));
+  const [paymentsCount, setPaymentsCount] = useState(
+    String(initialPaymentsCount || DEBT_KIND_META[startKind].defaultPayments)
+  );
   const [intervalUnit, setIntervalUnit] = useState<RecurrenceUnit>('MONTH');
   const [intervalCount, setIntervalCount] = useState('1');
   const [firstPaymentPaid, setFirstPaymentPaid] = useState(false);
@@ -281,7 +289,7 @@ export function ObligationQuickAddModal({
         <select value={accountId} onChange={(e) => setAccountId(e.target.value)} className={inputClass}>
           {accounts.map((account) => (
             <option key={account.id} value={account.id}>
-              {accountName(account, language)}
+              {accountDisplayLabel(account, language)}
             </option>
           ))}
         </select>
