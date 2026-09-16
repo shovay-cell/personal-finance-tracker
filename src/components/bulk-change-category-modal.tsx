@@ -102,9 +102,10 @@ export function BulkChangeCategoryModal({
           categories={rootCategories}
           allCategories={categories}
           selectedId={categoryId}
-          onSelect={(id) => {
+          selectedSubcategoryId={subcategoryId}
+          onSelect={(id, subId) => {
             setCategoryId(id);
-            setSubcategoryId(undefined);
+            setSubcategoryId(subId);
           }}
         />
       </Field>

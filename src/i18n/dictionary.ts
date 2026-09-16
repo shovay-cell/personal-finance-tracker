@@ -1283,6 +1283,12 @@ export const DICTIONARY = {
     uk: 'Категорія всім рядкам',
     en: 'Category for every row',
   },
+  'si.bulkSubcategory': {
+    ru: 'Подкатегория всем строкам с этой категорией',
+    he: 'תת-קטגוריה לכל השורות עם קטגוריה זו',
+    uk: 'Підкатегорія всім рядкам із цією категорією',
+    en: 'Subcategory for every row with this category',
+  },
   'si.bulkAsDebt': {
     ru: 'Кредит/рассрочка всем строкам',
     he: 'אשראי/תשלומים לכל השורות',
@@ -1301,6 +1307,7 @@ export const DICTIONARY = {
   'si.incomeTag': { ru: '+ доход', he: '+ הכנסה', uk: '+ дохід', en: '+ income' },
   'si.expenseTag': { ru: '− расход', he: '− הוצאה', uk: '− витрата', en: '− expense' },
   'si.categoryPlaceholder': { ru: 'Категория…', he: 'קטגוריה…', uk: 'Категорія…', en: 'Category…' },
+  'si.subcategoryPlaceholder': { ru: 'Подкатегория…', he: 'תת-קטגוריה…', uk: 'Підкатегорія…', en: 'Subcategory…' },
   'si.purpose': { ru: 'Назначение', he: 'ייעוד', uk: 'Призначення', en: 'Purpose' },
   'si.duplicate': {
     ru: 'Похожая операция уже есть в базе — проверьте, чтобы не задвоить',
@@ -1309,6 +1316,12 @@ export const DICTIONARY = {
     en: 'A similar operation already exists — check so it is not counted twice',
   },
   'si.aiUnsure': { ru: 'ИИ не уверен', he: 'ה‑AI אינו בטוח', uk: 'ШІ не впевнений', en: 'The AI is unsure about' },
+  'si.missingDate': {
+    ru: 'Укажите дату — без неё строка не импортируется',
+    he: 'ציינו תאריך — ללא זה השורה לא תיובא',
+    uk: 'Вкажіть дату — без неї рядок не імпортується',
+    en: 'Set a date — the row won’t import without one',
+  },
   // ------------------------------------------------------------- paste
   'paste.unsupportedFormat': {
     ru: 'Из буфера обмена вставлен неподдерживаемый формат',
@@ -1331,6 +1344,7 @@ export const DICTIONARY = {
     en: 'Enter an amount above zero',
   },
   'tf.pickCategory': { ru: 'Выберите категорию', he: 'בחרו קטגוריה', uk: 'Оберіть категорію', en: 'Pick a category' },
+  'tf.pickDate': { ru: 'Укажите дату операции', he: 'ציינו תאריך לתנועה', uk: 'Вкажіть дату операції', en: 'Set a date for this transaction' },
   'tf.pickAccount': { ru: 'Выберите счёт', he: 'בחרו חשבון', uk: 'Оберіть рахунок', en: 'Pick an account' },
   'tf.recurringTitle': { ru: 'Повторяющийся расход', he: 'הוצאה חוזרת', uk: 'Повторювана витрата', en: 'Recurring expense' },
   'tf.saveFailed': {

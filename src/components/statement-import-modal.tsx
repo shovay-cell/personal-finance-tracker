@@ -40,6 +40,7 @@ import { DEBT_KIND_META } from './transaction-form-modal';
 interface DraftRow extends ParsedStatementRow {
   id: string;
   categoryId: string;
+  subcategoryId?: string;
   selected: boolean;
   /** Same date and amount already exist — importing again would double-count. */
   duplicate: boolean;
@@ -80,6 +81,7 @@ export function StatementImportModal({
   const [lastFiles, setLastFiles] = useState<File[]>([]);
   const [accountId, setAccountId] = useState(accounts[0]?.id || '');
   const [bulkCategoryId, setBulkCategoryId] = useState('');
+  const [bulkSubcategoryId, setBulkSubcategoryId] = useState('');
 
   const incomeCategories = useMemo(
     () => categories.filter((c) => c.kind === 'INCOME' && !c.parentId && !c.isHidden),
@@ -88,6 +90,10 @@ export function StatementImportModal({
   const expenseCategories = useMemo(
     () => categories.filter((c) => c.kind === 'EXPENSE' && !c.parentId && !c.isHidden),
     [categories]
+  );
+  const bulkSubcategories = useMemo(
+    () => (bulkCategoryId ? categories.filter((c) => c.parentId === bulkCategoryId && !c.isHidden) : []),
+    [categories, bulkCategoryId]
   );
 
   /** Reads one file through whichever pipeline matches its format — a
@@ -180,7 +186,7 @@ export function StatementImportModal({
   const update = (id: string, patch: Partial<DraftRow>) =>
     setRows((prev) => prev?.map((row) => (row.id === id ? { ...row, ...patch } : row)) || null);
 
-  const selected = rows?.filter((row) => row.selected && row.categoryId && row.amount) || [];
+  const selected = rows?.filter((row) => row.selected && row.categoryId && row.amount && row.date) || [];
   const selectedTotal = selected.reduce(
     (sum, row) => sum + (row.kind === 'INCOME' ? row.amount || 0 : -(row.amount || 0)),
     0
@@ -206,6 +212,7 @@ export function StatementImportModal({
             totalAmount: row.amount as number,
             currency: row.currency || baseCurrency,
             categoryId: row.categoryId,
+            subcategoryId: row.subcategoryId,
             accountId: accountId || accounts[0]?.id,
             startDate: row.date as string,
             firstDueDate: row.date as string,
@@ -222,6 +229,7 @@ export function StatementImportModal({
           amount: row.amount as number,
           currency: row.currency || baseCurrency,
           categoryId: row.categoryId,
+          subcategoryId: row.subcategoryId,
           accountId: accountId || accounts[0]?.id,
           date: row.date as string,
           note: row.description,
@@ -362,12 +370,13 @@ export function StatementImportModal({
                 onChange={(e) => {
                   const value = e.target.value;
                   setBulkCategoryId(value);
+                  setBulkSubcategoryId('');
                   if (!value) return;
                   const kind = incomeCategories.some((c) => c.id === value) ? 'INCOME' : 'EXPENSE';
                   setRows(
                     (prev) =>
                       prev?.map((row) =>
-                        row.kind === kind ? { ...row, categoryId: value } : row
+                        row.kind === kind ? { ...row, categoryId: value, subcategoryId: undefined } : row
                       ) || null
                   );
                 }}
@@ -391,6 +400,34 @@ export function StatementImportModal({
               </select>
             </Field>
           </div>
+
+          {bulkSubcategories.length > 0 && (
+            <Field label={t('si.bulkSubcategory')}>
+              <select
+                value={bulkSubcategoryId}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  setBulkSubcategoryId(value);
+                  setRows(
+                    (prev) =>
+                      prev?.map((row) =>
+                        row.categoryId === bulkCategoryId
+                          ? { ...row, subcategoryId: value || undefined }
+                          : row
+                      ) || null
+                  );
+                }}
+                className={`${inputClass} text-xs`}
+              >
+                <option value="">{t('si.keepAsIs')}</option>
+                {bulkSubcategories.map((sub) => (
+                  <option key={sub.id} value={sub.id}>
+                    {categoryName(sub, language)}
+                  </option>
+                ))}
+              </select>
+            </Field>
+          )}
 
           {rows.some((row) => row.kind === 'EXPENSE') && (
             <button
@@ -420,7 +457,8 @@ export function StatementImportModal({
           <div className="space-y-2">
             {rows.map((row) => {
               const pool = row.kind === 'INCOME' ? incomeCategories : expenseCategories;
-              const needsAttention = row.uncertainFields.length > 0 || !row.categoryId;
+              const rowSubcategories = categories.filter((c) => c.parentId === row.categoryId && !c.isHidden);
+              const needsAttention = row.uncertainFields.length > 0 || !row.categoryId || !row.date;
 
               return (
                 <div
@@ -452,7 +490,9 @@ export function StatementImportModal({
                       type="date"
                       value={row.date || ''}
                       onChange={(e) => update(row.id, { date: e.target.value })}
-                      className={`${inputClass} text-[11px] py-1.5 w-36`}
+                      className={`${inputClass} text-[11px] py-1.5 w-36 ${
+                        !row.date ? 'border-rose-400 dark:border-rose-700' : ''
+                      }`}
                     />
 
                     <input
@@ -494,7 +534,7 @@ export function StatementImportModal({
                   <div className="flex items-center gap-2">
                     <select
                       value={row.categoryId}
-                      onChange={(e) => update(row.id, { categoryId: e.target.value })}
+                      onChange={(e) => update(row.id, { categoryId: e.target.value, subcategoryId: undefined })}
                       className={`${inputClass} text-[11px] py-1.5 flex-1`}
                     >
                       <option value="">{t('si.categoryPlaceholder')}</option>
@@ -504,6 +544,21 @@ export function StatementImportModal({
                         </option>
                       ))}
                     </select>
+
+                    {rowSubcategories.length > 0 && (
+                      <select
+                        value={row.subcategoryId || ''}
+                        onChange={(e) => update(row.id, { subcategoryId: e.target.value || undefined })}
+                        className={`${inputClass} text-[11px] py-1.5 flex-1`}
+                      >
+                        <option value="">{t('si.subcategoryPlaceholder')}</option>
+                        {rowSubcategories.map((sub) => (
+                          <option key={sub.id} value={sub.id}>
+                            {categoryName(sub, language)}
+                          </option>
+                        ))}
+                      </select>
+                    )}
 
                     <input
                       type="text"
@@ -577,15 +632,17 @@ export function StatementImportModal({
                     </p>
                   )}
 
-                  {(row.duplicate || row.uncertainFields.length > 0 || row.sourceFile) && (
+                  {(row.duplicate || !row.date || row.uncertainFields.length > 0 || row.sourceFile) && (
                     <p className="text-[10px] font-bold text-amber-600 dark:text-amber-400 flex items-start gap-1.5">
                       <AlertTriangle className="w-3 h-3 mt-px flex-shrink-0" />
                       {row.duplicate
                         ? t('si.duplicate')
+                        : !row.date
+                        ? t('si.missingDate')
                         : row.uncertainFields.length > 0
                         ? `${t('si.aiUnsure')}: ${row.uncertainFields.join(', ')}`
                         : ''}
-                      {row.sourceFile && !row.duplicate && row.uncertainFields.length === 0 && (
+                      {row.sourceFile && !row.duplicate && row.date && row.uncertainFields.length === 0 && (
                         <span className="text-slate-400 dark:text-slate-500 font-medium">
                           {t('si.sourceFile')}: {row.sourceFile}
                         </span>

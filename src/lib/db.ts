@@ -424,6 +424,26 @@ export async function initializeFinanceDb(): Promise<void> {
   }
 
   await backfillBearerChequeSeries();
+  await backfillMissingTransactionDates();
+}
+
+const VALID_DATE = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * A transaction saved with no date (or one cleared to an empty string during
+ * statement-import review, before that path required one) is otherwise
+ * invisible in every day/month-grouped view. Additive and idempotent: only
+ * touches rows whose date isn't a real YYYY-MM-DD string, and only ever sets
+ * it to today — nothing else about the transaction changes.
+ */
+export async function backfillMissingTransactionDates(): Promise<void> {
+  const all = await financeDb.transactions.toArray();
+  const broken = all.filter((t) => !t.date || !VALID_DATE.test(t.date));
+  if (broken.length === 0) return;
+
+  const today = todayIso();
+  const now = new Date().toISOString();
+  await financeDb.transactions.bulkPut(broken.map((t) => ({ ...t, date: today, updatedAt: now })));
 }
 
 // ---------------------------------------------------------------- settings
@@ -505,6 +525,10 @@ export async function addTransaction(input: NewTransactionInput): Promise<Transa
 
   const tx: Transaction = {
     ...input,
+    // Every operation is dated — a missing or blanked-out date (e.g. cleared
+    // during statement-import review) falls back to today rather than being
+    // written as an empty string.
+    date: input.date || todayIso(),
     splits,
     // With a split the biggest slice represents the operation in lists.
     categoryId: splits
@@ -839,7 +863,7 @@ export async function addFixedSchedulePlan(input: NewFixedSchedulePlanInput): Pr
     categoryId: input.categoryId,
     subcategoryId: input.subcategoryId,
     accountId: input.accountId,
-    startDate: input.startDate,
+    startDate: input.startDate || todayIso(),
     occurrencesCount: input.paymentsCount,
     occurrencesPaid: 0,
     outstandingAmount: input.totalAmount,
@@ -851,7 +875,7 @@ export async function addFixedSchedulePlan(input: NewFixedSchedulePlanInput): Pr
   await financeDb.plans.put(plan);
 
   const amounts = buildInstallmentAmounts(input.totalAmount, input.paymentsCount);
-  const firstDue = input.firstDueDate || input.startDate;
+  const firstDue = input.firstDueDate || plan.startDate;
   const occurrences: PlanOccurrence[] = amounts.map((amount, index) => ({
     id: newId('occ'),
     planId: plan.id,

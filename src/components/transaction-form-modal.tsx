@@ -268,6 +268,10 @@ export function TransactionFormModal({
       setError(t('tf.pickCategory'));
       return;
     }
+    if (!date) {
+      setError(t('tf.pickDate'));
+      return;
+    }
     if (!accountId) {
       setError(t('tf.pickAccount'));
       return;
@@ -522,9 +526,10 @@ export function TransactionFormModal({
           categories={rootCategories}
           allCategories={categories}
           selectedId={categoryId}
-          onSelect={(id) => {
+          selectedSubcategoryId={subcategoryId}
+          onSelect={(id, subId) => {
             setCategoryId(id);
-            setSubcategoryId(undefined);
+            setSubcategoryId(subId);
             confirmField('category');
           }}
           onCreate={() => setIsCreatingCategory(true)}

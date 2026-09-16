@@ -190,19 +190,33 @@ export function SegmentedControl<T extends string>({
  *  would only be in the way. */
 const SEARCH_THRESHOLD = 8;
 
+interface CategoryGridItem {
+  key: string;
+  id: string;
+  /** Set when this tile represents a subcategory match, not the category itself. */
+  subcategoryId?: string;
+  iconName: string;
+  colorHex: string;
+  label: string;
+  /** The parent's name, shown as a small caption above a subcategory tile. */
+  subLabel?: string;
+}
+
 export function CategoryGrid({
   categories,
   allCategories,
   selectedId,
+  selectedSubcategoryId,
   onSelect,
   onCreate,
   columns = 4,
 }: {
   categories: FinanceCategory[];
-  /** Full list, so a query can also match a subcategory and surface its parent. */
+  /** Full list — a query also matches a subcategory, selectable directly. */
   allCategories?: FinanceCategory[];
   selectedId?: string;
-  onSelect: (id: string) => void;
+  selectedSubcategoryId?: string;
+  onSelect: (id: string, subcategoryId?: string) => void;
   /** When given, a «Создать» tile is appended for making a category on the spot. */
   onCreate?: () => void;
   columns?: number;
@@ -210,9 +224,17 @@ export function CategoryGrid({
   const { t, language } = useT();
   const [query, setQuery] = useState('');
 
-  const visible = useMemo(() => {
+  const visible = useMemo<CategoryGridItem[]>(() => {
     const needle = query.trim().toLowerCase();
-    if (!needle) return categories;
+    if (!needle) {
+      return categories.map((category) => ({
+        key: category.id,
+        id: category.id,
+        iconName: category.iconName,
+        colorHex: category.colorHex,
+        label: categoryName(category, language),
+      }));
+    }
 
     // Matching covers the name shown right now and the one stored in the
     // database, so a query works whichever language the category was named in.
@@ -220,12 +242,36 @@ export function CategoryGrid({
       categoryName(category, language).toLowerCase().includes(needle) ||
       category.name.toLowerCase().includes(needle);
 
-    return categories.filter(
-      (category) =>
-        matches(category) ||
-        // «НДС» should find «Налоги» — a parent whose child matches stays in.
-        (allCategories || []).some((c) => c.parentId === category.id && matches(c))
-    );
+    const items: CategoryGridItem[] = [];
+    for (const category of categories) {
+      if (matches(category)) {
+        items.push({
+          key: category.id,
+          id: category.id,
+          iconName: category.iconName,
+          colorHex: category.colorHex,
+          label: categoryName(category, language),
+        });
+        continue;
+      }
+      // The category itself doesn't match, but a child might — «НДС» finds
+      // «Налоги → НДС» directly selectable, not just its parent tile.
+      const matchingChildren = (allCategories || []).filter(
+        (c) => c.parentId === category.id && !c.isHidden && matches(c)
+      );
+      for (const child of matchingChildren) {
+        items.push({
+          key: `${category.id}:${child.id}`,
+          id: category.id,
+          subcategoryId: child.id,
+          iconName: child.iconName,
+          colorHex: child.colorHex,
+          label: categoryName(child, language),
+          subLabel: categoryName(category, language),
+        });
+      }
+    }
+    return items;
   }, [categories, allCategories, query, language]);
 
   const showSearch = categories.length > SEARCH_THRESHOLD;
@@ -263,14 +309,16 @@ export function CategoryGrid({
           className={`grid gap-2`}
           style={{ gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))` }}
         >
-          {visible.map((category) => {
-            const Icon = getCategoryIcon(category.iconName);
-            const isActive = category.id === selectedId;
+          {visible.map((item) => {
+            const Icon = getCategoryIcon(item.iconName);
+            const isActive = item.subcategoryId
+              ? item.id === selectedId && item.subcategoryId === selectedSubcategoryId
+              : item.id === selectedId && !selectedSubcategoryId;
             return (
               <button
-                key={category.id}
+                key={item.key}
                 type="button"
-                onClick={() => onSelect(category.id)}
+                onClick={() => onSelect(item.id, item.subcategoryId)}
                 className={`flex flex-col items-center gap-1.5 py-2.5 px-1 rounded-2xl border transition-all active:scale-95 ${
                   isActive
                     ? 'border-transparent ring-2 ring-offset-1 dark:ring-offset-slate-900'
@@ -279,21 +327,26 @@ export function CategoryGrid({
                 style={
                   isActive
                     ? ({
-                        backgroundColor: `${category.colorHex}1A`,
+                        backgroundColor: `${item.colorHex}1A`,
                         // CSS custom property drives the Tailwind ring colour
-                        '--tw-ring-color': category.colorHex,
+                        '--tw-ring-color': item.colorHex,
                       } as React.CSSProperties)
                     : undefined
                 }
               >
                 <span
                   className="w-9 h-9 rounded-xl flex items-center justify-center"
-                  style={{ backgroundColor: `${category.colorHex}22`, color: category.colorHex }}
+                  style={{ backgroundColor: `${item.colorHex}22`, color: item.colorHex }}
                 >
                   <Icon className="w-4.5 h-4.5" style={{ width: 18, height: 18 }} />
                 </span>
                 <span className="text-[9.5px] font-bold leading-tight text-center text-slate-600 dark:text-slate-300 line-clamp-2">
-                  {categoryName(category, language)}
+                  {item.subLabel && (
+                    <span className="block text-[8px] font-medium text-slate-400 normal-case">
+                      {item.subLabel}
+                    </span>
+                  )}
+                  {item.label}
                 </span>
               </button>
             );

@@ -10,7 +10,7 @@ import {
   SpeechLocale,
   TransactionKind,
 } from '@/types';
-import { addTransaction } from '@/lib/db';
+import { addTransaction, todayIso } from '@/lib/db';
 import {
   CategoryGrid,
   ModalShell,
@@ -198,7 +198,7 @@ export function QuickAddSheet({
         currency,
         categoryId,
         accountId: accountId || accounts[0]?.id,
-        date: new Date().toISOString().slice(0, 10),
+        date: todayIso(),
       });
       onClose();
       return;
@@ -220,7 +220,7 @@ export function QuickAddSheet({
         currency,
         categoryId,
         accountId: accountId || accounts[0]?.id,
-        date: new Date().toISOString().slice(0, 10),
+        date: todayIso(),
         source: 'MANUAL',
       } as any);
       onSaved?.();
@@ -235,8 +235,10 @@ export function QuickAddSheet({
   // Picking «Обязательства» or one of its subcategories (Рассрочка/Кредит/
   // Налог/Другое) isn't a plain expense with a category — hand off to the
   // dedicated flow immediately instead of waiting for "Записать".
-  const handleCategorySelect = (id: string) => {
-    const debtKind = DEBT_KIND_BY_CATEGORY_ID[id];
+  const handleCategorySelect = (id: string, subId?: string) => {
+    // A search match landing directly on a debt-kind subcategory (e.g.
+    // "рассрочка") redirects the same as picking it through the parent.
+    const debtKind = DEBT_KIND_BY_CATEGORY_ID[subId || id];
     if (id === OBLIGATION_CATEGORY_ID || debtKind) {
       onOpenObligation(debtKind, parseFloat(amount) || undefined);
       onClose();
