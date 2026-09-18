@@ -40,7 +40,7 @@ import { ConvertToObligationModal } from './convert-to-obligation-modal';
 import { BulkChangeCategoryModal } from './bulk-change-category-modal';
 import { Card, EmptyState, SectionTitle, SegmentedControl, inputClass } from './ui';
 
-type QuickChip = 'TODAY' | 'WEEK' | 'MONTH' | 'UPCOMING' | 'ALL';
+type QuickChip = 'TODAY' | 'WEEK' | 'MONTH' | 'THREE_MONTHS' | 'UPCOMING' | 'ALL';
 type StatusFilter = 'ALL' | 'DONE' | 'PLANNED' | 'OVERDUE' | 'UNCONFIRMED';
 
 /** One row of the unified list — either a real transaction or a plan/
@@ -135,10 +135,18 @@ export function TransactionsTab({
       return { from: from.toISOString().slice(0, 10), to: today };
     }
     if (chip === 'MONTH') return rangeForPreset('MONTH');
+    if (chip === 'THREE_MONTHS') {
+      const from = new Date(today);
+      from.setMonth(from.getMonth() - 3);
+      from.setDate(from.getDate() + 1);
+      return { from: from.toISOString().slice(0, 10), to: today };
+    }
     if (chip === 'UPCOMING') {
       const tomorrow = new Date(today);
       tomorrow.setDate(tomorrow.getDate() + 1);
-      return { from: tomorrow.toISOString().slice(0, 10), to: rangeForPreset('MONTH').to };
+      // Every future-dated item, not just what's left of this calendar
+      // month — an instalment running into next month must still show up.
+      return { from: tomorrow.toISOString().slice(0, 10), to: '9999-12-31' };
     }
     if (chip === 'ALL') return undefined;
     return range;
@@ -309,6 +317,7 @@ export function TransactionsTab({
     { id: 'TODAY', label: t('tx.chipToday') },
     { id: 'WEEK', label: t('tx.chipWeek') },
     { id: 'MONTH', label: t('tx.chipMonth') },
+    { id: 'THREE_MONTHS', label: t('tx.chipThreeMonths') },
     { id: 'UPCOMING', label: t('tx.chipUpcoming') },
     { id: 'ALL', label: t('tx.chipAll') },
   ];

@@ -142,6 +142,7 @@ export const DICTIONARY = {
   'tx.chipToday': { ru: 'Сегодня', he: 'היום', uk: 'Сьогодні', en: 'Today' },
   'tx.chipWeek': { ru: '7 дней', he: '7 ימים', uk: '7 днів', en: '7 days' },
   'tx.chipMonth': { ru: 'Месяц', he: 'חודש', uk: 'Місяць', en: 'Month' },
+  'tx.chipThreeMonths': { ru: '3 месяца', he: '3 חודשים', uk: '3 місяці', en: '3 months' },
   'tx.chipUpcoming': { ru: 'Предстоящие', he: 'קרובים', uk: 'Найближчі', en: 'Upcoming' },
   'tx.chipAll': { ru: 'Всё', he: 'הכול', uk: 'Усе', en: 'All' },
   'tx.dueForPayment': { ru: 'К оплате', he: 'לתשלום', uk: 'До сплати', en: 'Due' },
