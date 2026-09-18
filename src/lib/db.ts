@@ -32,9 +32,11 @@ import {
   RecurrenceUnit,
 } from '@/types';
 import {
+  BEARER_CHEQUE_CATEGORY_ID,
   buildDefaultCategories,
   DEFAULT_EXCHANGE_RATES,
   MEMBER_COLORS,
+  OBLIGATION_CATEGORY_ID,
 } from '@/constants/categories';
 
 const CURRENT_MEMBER_KEY = 'fintrack_current_member_id';
@@ -425,6 +427,32 @@ export async function initializeFinanceDb(): Promise<void> {
 
   await backfillBearerChequeSeries();
   await backfillMissingTransactionDates();
+  await migrateBearerChequeCategoryNesting();
+}
+
+/**
+ * «Чеки на предъявителя» used to be its own top-level category; it now lives
+ * nested under «Обязательства». A transaction booked before that move still
+ * has the leaf id as its bare `categoryId` — re-point it to the parent as
+ * `categoryId` and the leaf as `subcategoryId`, so it keeps showing (and
+ * stays editable) the same way any other subcategorised operation does.
+ * Additive and idempotent: only touches rows that still look like the old
+ * shape (no subcategoryId of their own already).
+ */
+export async function migrateBearerChequeCategoryNesting(): Promise<void> {
+  const all = await financeDb.transactions.toArray();
+  const affected = all.filter((t) => t.categoryId === BEARER_CHEQUE_CATEGORY_ID && !t.subcategoryId);
+  if (affected.length === 0) return;
+
+  const now = new Date().toISOString();
+  await financeDb.transactions.bulkPut(
+    affected.map((t) => ({
+      ...t,
+      categoryId: OBLIGATION_CATEGORY_ID,
+      subcategoryId: BEARER_CHEQUE_CATEGORY_ID,
+      updatedAt: now,
+    }))
+  );
 }
 
 const VALID_DATE = /^\d{4}-\d{2}-\d{2}$/;
@@ -1936,11 +1964,17 @@ export async function clearBearerCheque(id: string, clearedDate?: string): Promi
   if (!cheque || cheque.status !== 'ISSUED') return;
 
   const date = clearedDate || todayIso();
+  // The cheque's own categoryId can be a subcategory (e.g. «Чеки на
+  // предъявителя», nested under «Обязательства») — split it into the
+  // booked transaction's category/subcategory so it shows correctly and
+  // stays editable, instead of storing a leaf id as a bare top-level one.
+  const chequeCategory = await financeDb.categories.get(cheque.categoryId);
   const transaction = await addTransaction({
     kind: 'EXPENSE',
     amount: cheque.amount,
     currency: cheque.currency,
-    categoryId: cheque.categoryId,
+    categoryId: chequeCategory?.parentId || cheque.categoryId,
+    subcategoryId: chequeCategory?.parentId ? cheque.categoryId : undefined,
     accountId: cheque.accountId,
     date,
     note: cheque.note || `${tr('bc.chequeNoun')} ${cheque.payee}`,

@@ -236,6 +236,22 @@ export function QuickAddSheet({
   // Налог/Другое) isn't a plain expense with a category — hand off to the
   // dedicated flow immediately instead of waiting for "Записать".
   const handleCategorySelect = (id: string, subId?: string) => {
+    // A cheque needs payee/due-date/number this sheet has no room for —
+    // hand it to the full form the moment it's picked, same as handleSave's
+    // fallback below for a prefill reaching this state some other way.
+    if (id === BEARER_CHEQUE_CATEGORY_ID || subId === BEARER_CHEQUE_CATEGORY_ID) {
+      const numericAmount = parseFloat(amount);
+      onOpenFullForm({
+        kind: 'EXPENSE',
+        amount: Number.isFinite(numericAmount) && numericAmount > 0 ? numericAmount : undefined,
+        currency,
+        categoryId: BEARER_CHEQUE_CATEGORY_ID,
+        accountId: accountId || accounts[0]?.id,
+        date: todayIso(),
+      });
+      onClose();
+      return;
+    }
     // A search match landing directly on a debt-kind subcategory (e.g.
     // "рассрочка") redirects the same as picking it through the parent.
     const debtKind = DEBT_KIND_BY_CATEGORY_ID[subId || id];

@@ -179,8 +179,12 @@ export function TransactionFormModal({
   const [lastScanFile, setLastScanFile] = useState<File | null>(null);
 
   // A cheque is its own mechanic, not an option layered on top of the debt
-  // toggle: picking this category is enough, no extra switch to flip.
-  const isBearerCheque = kind === 'EXPENSE' && categoryId === BEARER_CHEQUE_CATEGORY_ID;
+  // toggle: picking this category is enough, no extra switch to flip. It
+  // lives nested under «Обязательства» — reachable as the category itself
+  // (legacy data, before it was nested) or as that category's subcategory.
+  const isBearerCheque =
+    kind === 'EXPENSE' &&
+    (categoryId === BEARER_CHEQUE_CATEGORY_ID || subcategoryId === BEARER_CHEQUE_CATEGORY_ID);
 
   // Splitting into instalments only makes sense once a credit card is the
   // account paying for this — and only for a brand-new expense, same as the
@@ -302,9 +306,12 @@ export function TransactionFormModal({
     }
     // Safety net for a category reaching this state some other way (e.g. a
     // prefill) without going through the subcategory click handler above.
+    // A cheque picked as «Обязательства»'s subcategory must not be swept
+    // into this redirect — it has its own fields below, not a debt plan.
     if (
       !existing &&
       onOpenObligation &&
+      !isBearerCheque &&
       (categoryId === OBLIGATION_CATEGORY_ID ||
         DEBT_KIND_BY_CATEGORY_ID[subcategoryId || ''] ||
         DEBT_KIND_BY_CATEGORY_ID[categoryId])
@@ -379,7 +386,9 @@ export function TransactionFormModal({
             chequeNumber: chequeNumberForIndex(chequeNumber.trim(), i, count),
             amount: amounts[i],
             currency,
-            categoryId,
+            // Always the cheque category itself — `categoryId` here can be
+            // «Обязательства» (its parent) when reached as a subcategory.
+            categoryId: BEARER_CHEQUE_CATEGORY_ID,
             accountId,
             issueDate: date,
             dueDate: dueDates[i],

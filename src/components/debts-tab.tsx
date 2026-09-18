@@ -486,6 +486,38 @@ function PendingChequesList({
 }
 
 /**
+ * `<option>`s for a cheque's category select — a subcategory (e.g. «Чеки на
+ * предъявителя» nested under «Обязательства») needs to stay pickable here
+ * too, not just the top-level list a plain root filter would give.
+ */
+function chequeCategoryOptions(
+  categories: FinanceCategory[],
+  relevantCategories: FinanceCategory[],
+  language: ReturnType<typeof useT>['language']
+) {
+  return relevantCategories.map((category) => {
+    const children = categories.filter((c) => c.parentId === category.id && c.kind === 'EXPENSE' && !c.isHidden);
+    if (children.length === 0) {
+      return (
+        <option key={category.id} value={category.id}>
+          {categoryName(category, language)}
+        </option>
+      );
+    }
+    return (
+      <optgroup key={category.id} label={categoryName(category, language)}>
+        <option value={category.id}>{categoryName(category, language)}</option>
+        {children.map((child) => (
+          <option key={child.id} value={child.id}>
+            {categoryName(child, language)}
+          </option>
+        ))}
+      </optgroup>
+    );
+  });
+}
+
+/**
  * Fields for a postdated cheque already issued — payee, amount, dates,
  * account, cheque number, note. Nothing about this changes what clearing or
  * cancelling it does; it just corrects the record itself.
@@ -589,11 +621,7 @@ export function BearerChequeEditModal({
 
       <Field label={t('common.category')}>
         <select value={categoryId} onChange={(e) => setCategoryId(e.target.value)} className={inputClass}>
-          {relevantCategories.map((category) => (
-            <option key={category.id} value={category.id}>
-              {categoryName(category, language)}
-            </option>
-          ))}
+          {chequeCategoryOptions(categories, relevantCategories, language)}
         </select>
       </Field>
 
@@ -849,11 +877,7 @@ function BearerChequeSeriesEditModal({
 
       <Field label={t('common.category')}>
         <select value={categoryId} onChange={(e) => setCategoryId(e.target.value)} className={inputClass}>
-          {relevantCategories.map((category) => (
-            <option key={category.id} value={category.id}>
-              {categoryName(category, language)}
-            </option>
-          ))}
+          {chequeCategoryOptions(categories, relevantCategories, language)}
         </select>
       </Field>
 

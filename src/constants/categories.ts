@@ -316,13 +316,6 @@ const EXPENSE_SEEDS: CategorySeed[] = [
     ],
   },
   {
-    key: 'bearer_cheques',
-    name: 'Чеки на предъявителя',
-    iconName: 'FileSignature',
-    colorHex: '#A855F7',
-    order: 137,
-  },
-  {
     key: 'obligations',
     name: 'Обязательства',
     iconName: 'Scale',
@@ -336,6 +329,7 @@ const EXPENSE_SEEDS: CategorySeed[] = [
       { key: 'obligations_insurance', name: 'Страховой платёж' },
       { key: 'obligations_contract', name: 'Платёж по договору' },
       { key: 'obligations_legal', name: 'Судебный / юридический платёж' },
+      { key: 'bearer_cheques', name: 'Чеки на предъявителя' },
       { key: 'obligations_other', name: 'Другое' },
     ],
   },
