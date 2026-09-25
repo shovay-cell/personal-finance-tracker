@@ -17,6 +17,7 @@ import {
   FinanceAccount,
   FinanceCategory,
   ParsedStatementRow,
+  ReceiptFieldFlag,
   Transaction,
   TransactionKind,
 } from '@/types';
@@ -34,7 +35,19 @@ import { GeminiKeyPrompt } from './gemini-key-prompt';
 import { useT } from '@/i18n/context';
 import { usePasteUpload } from '@/hooks/use-paste-upload';
 import { accountDisplayLabel, categoryName } from '@/i18n/categories';
-import { Field, ModalShell, PrimaryButton, inputClass } from './ui';
+import type { TranslationKey } from '@/i18n/dictionary';
+import { Field, ModalShell, PrimaryButton, fieldClass, inputClass } from './ui';
+
+/** Human labels for `uncertainFields` flags, for the "ИИ не уверен: …" hint —
+ *  the raw flag names (`amount`, `merchant`…) are English identifiers, not
+ *  something to show a Russian/Hebrew-reading user as-is. */
+const FIELD_FLAG_LABEL: Record<ReceiptFieldFlag, TranslationKey> = {
+  amount: 'common.amount',
+  date: 'common.date',
+  merchant: 'form.merchant',
+  category: 'common.category',
+  currency: 'st.fieldCurrency',
+};
 import { DEBT_KIND_META } from './transaction-form-modal';
 
 interface DraftRow extends ParsedStatementRow {
@@ -502,7 +515,8 @@ export function StatementImportModal({
                       onChange={(e) =>
                         update(row.id, { amount: parseFloat(e.target.value.replace(',', '.')) || 0 })
                       }
-                      className={`${inputClass} text-xs py-1.5 flex-1 font-black`}
+                      placeholder={t('si.amountPlaceholder')}
+                      className={`${fieldClass(row.uncertainFields, 'amount')} text-xs py-1.5 flex-1 font-black`}
                     />
 
                     <button
@@ -640,7 +654,7 @@ export function StatementImportModal({
                         : !row.date
                         ? t('si.missingDate')
                         : row.uncertainFields.length > 0
-                        ? `${t('si.aiUnsure')}: ${row.uncertainFields.join(', ')}`
+                        ? `${t('si.aiUnsure')}: ${row.uncertainFields.map((f) => t(FIELD_FLAG_LABEL[f])).join(', ')}`
                         : ''}
                       {row.sourceFile && !row.duplicate && row.date && row.uncertainFields.length === 0 && (
                         <span className="text-slate-400 dark:text-slate-500 font-medium">

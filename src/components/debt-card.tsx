@@ -30,6 +30,7 @@ import {
   PlanDeletionImpact,
   splitFixedSchedulePlanFromOccurrence,
   unpayPlanOccurrence,
+  updateFixedSchedulePlanAmount,
   updatePlan,
 } from '@/lib/db';
 import { EditScopeModal, OccurrenceOverrideModal, PlanEditScope } from './plan-scope-modal';
@@ -246,6 +247,7 @@ export function DebtCard({
       {editingPlan && (
         <PlanEditModal
           plan={editingPlan}
+          occurrences={row.occurrences}
           categories={categories}
           accounts={accounts}
           onClose={() => setEditingPlan(null)}
@@ -383,14 +385,21 @@ function Row({ label, value }: { label: string; value: string }) {
  * place — its id, schedule, paid history and linked transactions are
  * untouched, so it just moves to a different group in «Обязательства»
  * immediately, nothing to re-link.
+ *
+ * The total amount is a distinct, explicit action (its own button, its own
+ * `updateFixedSchedulePlanAmount` call) rather than part of the general
+ * save above: fixing it must reflow the still-unpaid occurrences, which
+ * `updatePlan` alone can't do — it only ever touches the `Plan` row.
  */
 export function PlanEditModal({
   plan,
+  occurrences,
   categories,
   accounts,
   onClose,
 }: {
   plan: Plan;
+  occurrences: PlanOccurrence[];
   categories: FinanceCategory[];
   accounts: FinanceAccount[];
   onClose: () => void;
@@ -405,10 +414,32 @@ export function PlanEditModal({
   const [note, setNote] = useState(plan.note || '');
   const [error, setError] = useState<string | null>(null);
 
+  const planOccurrences = occurrences.filter((o) => o.planId === plan.id);
+  const paidAmount = Math.round(
+    planOccurrences.filter((o) => o.isPaid).reduce((sum, o) => sum + o.amount, 0) * 100
+  ) / 100;
+  const hasUnpaidOccurrences = planOccurrences.some((o) => !o.isPaid);
+  const [totalAmount, setTotalAmount] = useState(String(plan.amount));
+  const [amountError, setAmountError] = useState<string | null>(null);
+  const [amountSaved, setAmountSaved] = useState(false);
+  const [amountBusy, setAmountBusy] = useState(false);
+
   const relevantCategories = categories.filter(
     (c) => c.kind === plan.kind && !c.parentId && !c.isHidden
   );
   const subcategories = categories.filter((c) => c.parentId === categoryId && !c.isHidden);
+
+  const handleSaveAmount = async () => {
+    const numericAmount = parseFloat(totalAmount.replace(',', '.'));
+    setAmountSaved(false);
+    if (!Number.isFinite(numericAmount) || numericAmount <= 0) return setAmountError(t('pl.enterAmount'));
+    if (numericAmount < paidAmount) return setAmountError(t('dc.amountBelowPaid'));
+    setAmountError(null);
+    setAmountBusy(true);
+    await updateFixedSchedulePlanAmount(plan.id, numericAmount);
+    setAmountBusy(false);
+    setAmountSaved(true);
+  };
 
   const handleSave = async () => {
     if (!title.trim()) return setError(t('pl.enterTitle'));
@@ -448,6 +479,36 @@ export function PlanEditModal({
           autoFocus
         />
       </Field>
+
+      {hasUnpaidOccurrences && (
+        <Card className="p-3.5 space-y-2.5">
+          <Field label={`${t('dc.totalAmount')}, ${plan.currency}`} hint={t('dc.totalAmountHint')}>
+            <input
+              type="text"
+              inputMode="decimal"
+              value={totalAmount}
+              onChange={(e) => {
+                setTotalAmount(e.target.value);
+                setAmountSaved(false);
+              }}
+              className={`${inputClass} text-lg font-black`}
+            />
+          </Field>
+          <p className="text-[10.5px] font-bold text-slate-400">
+            {t('debts.paid')} {formatMoney(paidAmount, plan.currency)}
+          </p>
+          {amountError && <p className="text-[11px] font-bold text-rose-500">{amountError}</p>}
+          {amountSaved && <p className="text-[11px] font-bold text-emerald-500">{t('dc.amountSaved')}</p>}
+          <button
+            type="button"
+            onClick={handleSaveAmount}
+            disabled={amountBusy}
+            className="w-full py-2.5 rounded-2xl text-[11px] font-black text-sky-600 bg-sky-50 dark:bg-sky-950/40 flex items-center justify-center gap-1.5 disabled:opacity-40"
+          >
+            {t('dc.saveAmount')}
+          </button>
+        </Card>
+      )}
 
       <Field label={t('form.merchant')} hint={t('pl.optional')}>
         <input

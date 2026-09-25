@@ -475,6 +475,7 @@ export function PlannedTab({
       {editing && editing !== 'NEW' && editing.scheduleType === 'FIXED_SCHEDULE' ? (
         <PlanEditModal
           plan={editing}
+          occurrences={occurrences}
           categories={categories}
           accounts={accounts}
           onClose={() => setEditing(null)}

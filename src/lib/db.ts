@@ -925,6 +925,38 @@ export async function addFixedSchedulePlan(input: NewFixedSchedulePlanInput): Pr
   return plan;
 }
 
+/**
+ * Corrects a FIXED_SCHEDULE plan's total financed amount after a data-entry
+ * mistake. Paid instalments are real, already-booked transactions — those
+ * amounts stay exactly as recorded. Only the still-unpaid occurrences are
+ * rebuilt to add up to the new total, split the same way a fresh schedule
+ * is (`buildInstallmentAmounts`, drift on the first of them). Does nothing
+ * if every occurrence is already paid — there is no unpaid slot left to
+ * carry the difference.
+ */
+export async function updateFixedSchedulePlanAmount(planId: string, newTotalAmount: number): Promise<void> {
+  const plan = await financeDb.plans.get(planId);
+  if (!plan || plan.scheduleType !== 'FIXED_SCHEDULE') return;
+
+  const occurrences = await financeDb.planOccurrences.where('planId').equals(planId).sortBy('index');
+  const paid = occurrences.filter((o) => o.isPaid);
+  const unpaid = occurrences.filter((o) => !o.isPaid);
+  if (unpaid.length === 0) return;
+
+  const paidAmount = Math.round(paid.reduce((sum, o) => sum + o.amount, 0) * 100) / 100;
+  const remaining = Math.round((newTotalAmount - paidAmount) * 100) / 100;
+  const amounts = buildInstallmentAmounts(remaining, unpaid.length);
+  await financeDb.planOccurrences.bulkPut(
+    unpaid.map((occurrence, index) => ({ ...occurrence, amount: amounts[index] }))
+  );
+
+  await financeDb.plans.update(planId, {
+    amount: newTotalAmount,
+    outstandingAmount: remaining,
+    updatedAt: new Date().toISOString(),
+  });
+}
+
 export interface ConvertToObligationInput {
   /** Already-real transactions to fold into one obligation — e.g. an
    *  imported loan schedule that was recorded as plain expenses. */
