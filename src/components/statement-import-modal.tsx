@@ -503,7 +503,14 @@ export function StatementImportModal({
                       type="date"
                       value={row.date || ''}
                       onChange={(e) => update(row.id, { date: e.target.value })}
-                      className={`${inputClass} text-[11px] py-1.5 w-36 ${
+                      // `inputClass` bakes in `w-full`, which — same specificity,
+                      // later in Tailwind's generated sheet — beats a `w-36`
+                      // class here; only an inline width reliably wins. Without
+                      // it a native date widget's min-content floor (~260px)
+                      // used to crowd the amount field next to it down to a
+                      // sliver.
+                      style={{ width: '8rem', flexShrink: 0 }}
+                      className={`${inputClass} text-[11px] py-1.5 ${
                         !row.date ? 'border-rose-400 dark:border-rose-700' : ''
                       }`}
                     />
