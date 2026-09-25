@@ -362,7 +362,7 @@ export function TransactionsTab({
         </Card>
       </div>
 
-      <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 -mx-1 px-1">
+      <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 -mx-1 px-1 sm:justify-center">
         {chips.map((option) => (
           <button
             key={option.id}
@@ -413,7 +413,7 @@ export function TransactionsTab({
 
       <div>
         <SectionTitle title={t('tx.accounts')} />
-        <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">
+        <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1 sm:justify-center">
           {accounts
             .filter((a) => !a.isArchived)
             .map((account) => {
@@ -421,7 +421,7 @@ export function TransactionsTab({
               return (
                 <div
                   key={account.id}
-                  className="min-w-[140px] rounded-2xl p-3 border border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 flex-shrink-0"
+                  className="min-w-[140px] sm:w-52 rounded-2xl p-3 border border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 flex-shrink-0"
                   style={{ borderTopColor: account.colorHex, borderTopWidth: 3 }}
                 >
                   <p className="text-[10px] font-black uppercase tracking-wide text-slate-400">
@@ -696,7 +696,7 @@ function TransactionRow({
         <Icon className="w-4.5 h-4.5" style={{ width: 18, height: 18 }} />
       </span>
 
-      <span className="flex-1 min-w-0">
+      <span className="flex-1 min-w-0 max-w-sm">
         <span className="flex items-center gap-1.5">
           <span className="text-xs font-black text-slate-800 dark:text-slate-100 truncate">
             {category ? categoryName(category, language) : t('common.category')}
@@ -786,7 +786,7 @@ function UpcomingRow({
         <Icon className="w-4.5 h-4.5" style={{ width: 18, height: 18 }} />
       </span>
 
-      <span className="flex-1 min-w-0">
+      <span className="flex-1 min-w-0 max-w-sm">
         <span className="text-xs font-black text-slate-600 dark:text-slate-300 truncate block">{event.title}</span>
         <span className={`block text-[10.5px] font-bold truncate mt-0.5 ${statusClass}`}>{statusLabel}</span>
       </span>
