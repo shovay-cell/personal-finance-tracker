@@ -56,7 +56,7 @@ export function FinanceBottomNav({
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-40 bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl border-t border-slate-100 dark:border-slate-800 shadow-[0_-10px_30px_rgba(14,165,233,0.06)] pb-[env(safe-area-inset-bottom)]">
-      <div className="max-w-lg mx-auto px-3 h-16 flex items-center justify-between relative">
+      <div className="max-w-4xl mx-auto px-3 h-16 flex items-center justify-between relative">
         <div className="flex items-center justify-around flex-1 pr-7">
           {TABS.slice(0, 2).map(renderTab)}
         </div>
@@ -99,7 +99,7 @@ export function FinanceHeader({
 
   return (
     <header className="sticky top-0 z-30 bg-white/90 dark:bg-slate-900/90 backdrop-blur-xl border-b border-slate-100 dark:border-slate-800">
-      <div className="max-w-lg mx-auto px-4 py-3 flex items-center gap-3">
+      <div className="max-w-4xl mx-auto px-4 py-3 flex items-center gap-3">
         <div className="w-9 h-9 rounded-2xl bg-gradient-to-tr from-sky-500 to-cyan-400 text-white flex items-center justify-center flex-shrink-0">
           <Wallet className="w-4.5 h-4.5" style={{ width: 18, height: 18 }} />
         </div>

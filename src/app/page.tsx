@@ -295,7 +295,7 @@ function FinanceApp() {
         onTabChange={setActiveTab}
       />
 
-      <main className="flex-1 max-w-lg w-full mx-auto px-4 py-4 safe-bottom">
+      <main className="flex-1 max-w-4xl w-full mx-auto px-4 py-4 safe-bottom">
         {pendingPlanned.length > 0 && (
           <div className="mb-4 p-4 rounded-3xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900 space-y-2">
             <div className="flex items-start gap-2">
