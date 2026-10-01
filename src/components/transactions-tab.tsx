@@ -14,6 +14,7 @@ import {
   Search,
   Tag,
   Wallet,
+  X,
 } from 'lucide-react';
 import {
   BearerCheque,
@@ -78,7 +79,9 @@ interface TransactionsTabProps {
   baseCurrency: CurrencyCode;
   range: DateRange;
   onSelect: (transaction: Transaction) => void;
-  onShowUpcoming?: () => void;
+  /** Takes the clicked event's own id, so the destination can open that
+   *  exact payment instead of landing on a generic list. */
+  onShowUpcoming?: (eventId: string) => void;
 }
 
 export function TransactionsTab({
@@ -521,20 +524,61 @@ export function TransactionsTab({
               )
             )}
           </select>
-          <input
-            type="date"
-            value={dateFrom}
-            onChange={(e) => setDateFrom(e.target.value)}
-            title={t('tx.dateFrom')}
-            className={`${inputClass} text-xs`}
-          />
-          <input
-            type="date"
-            value={dateTo}
-            onChange={(e) => setDateTo(e.target.value)}
-            title={t('tx.dateTo')}
-            className={`${inputClass} text-xs`}
-          />
+          {/* One native picker visible at a time — picking «с» reveals «по»
+              right in its place instead of two pickers sitting side by side,
+              which is easy to misread as two unrelated dates. */}
+          <div className="col-span-2 flex items-center gap-2">
+            {!dateFrom ? (
+              <input
+                type="date"
+                value={dateFrom}
+                onChange={(e) => setDateFrom(e.target.value)}
+                title={t('tx.dateFrom')}
+                className={`${inputClass} text-xs flex-1`}
+              />
+            ) : !dateTo ? (
+              <>
+                <button
+                  type="button"
+                  onClick={() => setDateFrom('')}
+                  className="px-2.5 py-2 rounded-xl bg-slate-50 dark:bg-slate-800/70 text-[11px] font-bold text-slate-600 dark:text-slate-300 flex-shrink-0"
+                >
+                  {formatDateHuman(dateFrom)}
+                </button>
+                <span className="text-slate-300 flex-shrink-0">→</span>
+                <input
+                  type="date"
+                  value={dateTo}
+                  min={dateFrom}
+                  onChange={(e) => setDateTo(e.target.value)}
+                  title={t('tx.dateTo')}
+                  className={`${inputClass} text-xs flex-1`}
+                  autoFocus
+                />
+              </>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  onClick={() => setDateTo('')}
+                  className="flex-1 px-2.5 py-2 rounded-xl bg-slate-50 dark:bg-slate-800/70 text-[11px] font-bold text-slate-600 dark:text-slate-300 text-center"
+                >
+                  {formatDateHuman(dateFrom)} → {formatDateHuman(dateTo)}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDateFrom('');
+                    setDateTo('');
+                  }}
+                  className="text-slate-300 hover:text-rose-500 flex-shrink-0"
+                  title={t('tx.clearRange')}
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </>
+            )}
+          </div>
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
@@ -642,7 +686,7 @@ export function TransactionsTab({
                         category={categoryById.get(row.categoryId || '')}
                         baseCurrency={baseCurrency}
                         t={t}
-                        onOpen={onShowUpcoming}
+                        onOpen={onShowUpcoming ? () => onShowUpcoming(row.event!.id) : undefined}
                       />
                     )
                   )}

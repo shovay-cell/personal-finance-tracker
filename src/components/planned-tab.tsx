@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   AlarmClock,
   AlertTriangle,
@@ -76,6 +76,12 @@ interface PlannedTabProps {
   /** Opens the ordinary transaction edit form — for an event that is a plain,
    *  hand-entered transaction rather than a plan (no schedule to manage). */
   onEditTransaction: (transaction: Transaction) => void;
+  /** Set when another screen (e.g. a future row found in «Операции») wants
+   *  this specific event opened the moment this tab mounts, instead of
+   *  landing on the generic list. Cleared via `onAutoOpenHandled` once
+   *  acted on, so it never re-fires on an unrelated re-render. */
+  autoOpenEventId?: string | null;
+  onAutoOpenHandled?: () => void;
 }
 
 type Preset = 'ALL' | 'TODAY' | 'WEEK' | 'MONTH' | 'NEXT_MONTH' | 'OVERDUE' | 'UNCONFIRMED' | 'CUSTOM';
@@ -112,6 +118,8 @@ export function PlannedTab({
   settings,
   autoCreateDefault,
   onEditTransaction,
+  autoOpenEventId,
+  onAutoOpenHandled,
 }: PlannedTabProps) {
   const [kind, setKind] = useState<TransactionKind>('EXPENSE');
   const [preset, setPreset] = useState<Preset>('ALL');
@@ -273,6 +281,18 @@ export function PlannedTab({
       if (obligation) setEditingObligation(obligation);
     }
   };
+
+  // A future row clicked in «Операции» lands here asking for one specific
+  // event, not the whole list — open exactly that one the same way clicking
+  // it in this tab's own list would, then clear the request so switching
+  // tabs again later doesn't reopen it.
+  useEffect(() => {
+    if (!autoOpenEventId) return;
+    const found = events.find((e) => e.id === autoOpenEventId);
+    if (found) openEvent(found);
+    onAutoOpenHandled?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoOpenEventId, events]);
 
   const chooseScope = async (scope: PlanEditScope) => {
     if (!scopeTarget) return;

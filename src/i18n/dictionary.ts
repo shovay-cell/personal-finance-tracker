@@ -2033,6 +2033,7 @@ export const DICTIONARY = {
   'tx.statusUnconfirmed': { ru: 'Ожидает подтверждения', he: 'ממתין לאישור', uk: 'Очікує підтвердження', en: 'Awaiting confirmation' },
   'tx.dateFrom': { ru: 'С даты', he: 'מתאריך', uk: 'З дати', en: 'From date' },
   'tx.dateTo': { ru: 'По дату', he: 'עד תאריך', uk: 'До дати', en: 'To date' },
+  'tx.clearRange': { ru: 'Сбросить период', he: 'איפוס הטווח', uk: 'Скинути період', en: 'Clear the range' },
   'tx.upcomingRow': { ru: 'плановая операция · нажмите, чтобы открыть в «Планах»', he: 'תנועה מתוכננת · הקישו כדי לפתוח ב«תוכניות»', uk: 'планова операція · натисніть, щоб відкрити в «Планах»', en: 'planned item · tap to open in Planned' },
   'tx.bulkFound': { ru: 'операций найдено', he: 'תנועות נמצאו', uk: 'операцій знайдено', en: 'transactions found' },
   'tx.bulkConvert': { ru: 'Оформить как обязательство', he: 'להפוך להתחייבות', uk: 'Оформити як зобов’язання', en: 'File as an obligation' },

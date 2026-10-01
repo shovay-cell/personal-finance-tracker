@@ -66,6 +66,9 @@ function FinanceApp() {
   const searchParams = useSearchParams();
   const [mounted, setMounted] = useState(false);
   const [activeTab, setActiveTab] = useState<FinanceTab>('transactions');
+  // A future row clicked on «Операции» asks «Планы» to open that one exact
+  // event on arrival, instead of just landing on its generic list.
+  const [autoOpenEventId, setAutoOpenEventId] = useState<string | null>(null);
   const [month, setMonth] = useState(currentMonth());
   const [preset, setPreset] = useState<PeriodPreset>('MONTH');
   const [range, setRange] = useState<DateRange>(() => rangeForPreset('MONTH'));
@@ -365,7 +368,10 @@ function FinanceApp() {
             baseCurrency={settings.baseCurrency}
             range={range}
             onSelect={setEditingTransaction}
-            onShowUpcoming={() => setActiveTab('planned')}
+            onShowUpcoming={(eventId) => {
+              setAutoOpenEventId(eventId);
+              setActiveTab('planned');
+            }}
           />
         )}
 
@@ -400,6 +406,8 @@ function FinanceApp() {
             settings={settings}
             autoCreateDefault={settings.plannedPaymentAutoCreate}
             onEditTransaction={setEditingTransaction}
+            autoOpenEventId={autoOpenEventId}
+            onAutoOpenHandled={() => setAutoOpenEventId(null)}
           />
         )}
 
