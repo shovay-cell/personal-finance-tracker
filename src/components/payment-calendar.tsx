@@ -9,7 +9,7 @@ import { useT } from '@/i18n/context';
 import type { TranslationKey } from '@/i18n/dictionary';
 import { Card } from './ui';
 
-const WEEKDAY_KEYS: TranslationKey[] = [
+export const WEEKDAY_KEYS: TranslationKey[] = [
   'pc.mon',
   'pc.tue',
   'pc.wed',

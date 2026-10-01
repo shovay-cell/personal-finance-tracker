@@ -5,6 +5,8 @@ import {
   ArrowDownLeft,
   ArrowUpRight,
   CalendarClock,
+  ChevronLeft,
+  ChevronRight,
   Filter,
   Mic,
   Receipt,
@@ -33,13 +35,14 @@ import {
 } from '@/types';
 import { computeAccountBalance, convertToBase, todayIso } from '@/lib/db';
 import { ACCOUNT_KIND_ICONS, ACCOUNT_KIND_LABELS, getCategoryIcon } from '@/constants/categories';
-import { DateRange, formatDateHuman, formatMoney, rangeForPreset } from '@/services/analytics';
+import { DateRange, formatDateHuman, formatMoney, monthLabel, rangeForPreset, shiftMonth } from '@/services/analytics';
 import { UpcomingEvent, upcomingEvents } from '@/services/upcoming';
 import { useT } from '@/i18n/context';
 import { accountDisplayLabel, accountKindLabel, categoryName, seededName } from '@/i18n/categories';
 import { ConvertToObligationModal } from './convert-to-obligation-modal';
 import { BulkChangeCategoryModal } from './bulk-change-category-modal';
-import { Card, EmptyState, Field, ModalShell, PrimaryButton, SectionTitle, SegmentedControl, inputClass } from './ui';
+import { WEEKDAY_KEYS } from './payment-calendar';
+import { Card, EmptyState, ModalShell, PrimaryButton, SectionTitle, SegmentedControl, inputClass } from './ui';
 
 type QuickChip = 'TODAY' | 'WEEK' | 'MONTH' | 'THREE_MONTHS' | 'UPCOMING' | 'ALL';
 type StatusFilter = 'ALL' | 'DONE' | 'PLANNED' | 'OVERDUE' | 'UNCONFIRMED';
@@ -686,10 +689,20 @@ export function TransactionsTab({
   );
 }
 
+function daysInMonth(month: string): number {
+  const [y, m] = month.split('-').map(Number);
+  return new Date(y, m, 0).getDate();
+}
+
+/** Monday-first offset for the 1st of the month, matching `PaymentCalendar`'s grid. */
+function firstWeekdayOffset(month: string): number {
+  return (new Date(`${month}-01T00:00:00`).getDay() + 6) % 7;
+}
+
 /**
- * One window for the whole «от — до» range: both dates picked here, applied
- * together on confirm — nothing changes in the list while the user is still
- * choosing, and there is never more than one picker on screen at a time.
+ * One calendar, one window: tap a start day, tap an end day, flip to the
+ * next month with the arrow if the range spans two — the same picker as a
+ * booking site's date-range field, not two separate native date inputs.
  */
 function DateRangeModal({
   initialFrom,
@@ -703,12 +716,35 @@ function DateRangeModal({
   onClose: () => void;
 }) {
   const { t } = useT();
+  const today = todayIso();
   const [from, setFrom] = useState(initialFrom);
   const [to, setTo] = useState(initialTo);
+  const [viewMonth, setViewMonth] = useState((initialFrom || today).slice(0, 7));
+
+  const handleDayClick = (date: string) => {
+    // No range yet, or a complete one already picked — this tap starts a
+    // fresh one rather than trying to guess which end the user means.
+    if (!from || (from && to)) {
+      setFrom(date);
+      setTo('');
+      return;
+    }
+    // Tapping before the chosen start restarts from there instead of
+    // producing a reversed, invalid range.
+    if (date < from) {
+      setFrom(date);
+      return;
+    }
+    setTo(date);
+  };
+
+  const count = daysInMonth(viewMonth);
+  const pad = firstWeekdayOffset(viewMonth);
 
   return (
     <ModalShell
       title={t('tx.periodTitle')}
+      subtitle={from ? `${formatDateHuman(from)}${to ? ` → ${formatDateHuman(to)}` : ''}` : t('tx.periodHint')}
       icon={<CalendarClock className="w-5 h-5" />}
       onClose={onClose}
       footer={
@@ -718,6 +754,7 @@ function DateRangeModal({
               onApply(from, to);
               onClose();
             }}
+            disabled={!from}
           >
             {t('tx.periodApply')}
           </PrimaryButton>
@@ -737,26 +774,64 @@ function DateRangeModal({
         </div>
       }
     >
-      <div className="grid grid-cols-2 gap-3">
-        <Field label={t('tx.dateFrom')}>
-          <input
-            type="date"
-            value={from}
-            max={to || undefined}
-            onChange={(e) => setFrom(e.target.value)}
-            className={inputClass}
-            autoFocus
-          />
-        </Field>
-        <Field label={t('tx.dateTo')}>
-          <input
-            type="date"
-            value={to}
-            min={from || undefined}
-            onChange={(e) => setTo(e.target.value)}
-            className={inputClass}
-          />
-        </Field>
+      <div className="flex items-center justify-between">
+        <button
+          type="button"
+          onClick={() => setViewMonth((m) => shiftMonth(m, -1))}
+          className="w-8 h-8 rounded-xl flex items-center justify-center text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800/60"
+        >
+          <ChevronLeft className="w-4 h-4" />
+        </button>
+        <p className="text-xs font-black text-slate-800 dark:text-slate-100 capitalize">
+          {monthLabel(viewMonth)}
+        </p>
+        <button
+          type="button"
+          onClick={() => setViewMonth((m) => shiftMonth(m, 1))}
+          className="w-8 h-8 rounded-xl flex items-center justify-center text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800/60"
+        >
+          <ChevronRight className="w-4 h-4" />
+        </button>
+      </div>
+
+      <div className="grid grid-cols-7 gap-1">
+        {WEEKDAY_KEYS.map((key) => (
+          <div
+            key={key}
+            className="text-center text-[9px] font-black uppercase tracking-wide text-slate-400 pb-1"
+          >
+            {t(key)}
+          </div>
+        ))}
+
+        {Array.from({ length: pad }).map((_, index) => (
+          <div key={`pad-${index}`} />
+        ))}
+
+        {Array.from({ length: count }, (_, i) => i + 1).map((day) => {
+          const date = `${viewMonth}-${String(day).padStart(2, '0')}`;
+          const isEnd = date === from || date === to;
+          const inRange = !!from && !!to && date > from && date < to;
+          const isToday = date === today;
+          return (
+            <button
+              key={date}
+              type="button"
+              onClick={() => handleDayClick(date)}
+              className={`aspect-square rounded-xl flex items-center justify-center text-[11px] font-bold tabular-nums transition-colors ${
+                isEnd
+                  ? 'bg-sky-500 text-white'
+                  : inRange
+                  ? 'bg-sky-100 dark:bg-sky-950/50 text-sky-700 dark:text-sky-300'
+                  : isToday
+                  ? 'border border-sky-400 text-slate-700 dark:text-slate-200'
+                  : 'text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/60'
+              }`}
+            >
+              {day}
+            </button>
+          );
+        })}
       </div>
     </ModalShell>
   );

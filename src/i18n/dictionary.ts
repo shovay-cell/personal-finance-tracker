@@ -2036,6 +2036,12 @@ export const DICTIONARY = {
   'tx.clearRange': { ru: 'Сбросить период', he: 'איפוס הטווח', uk: 'Скинути період', en: 'Clear the range' },
   'tx.periodTitle': { ru: 'Период', he: 'טווח תאריכים', uk: 'Період', en: 'Date range' },
   'tx.periodPlaceholder': { ru: 'Выбрать период', he: 'בחירת טווח תאריכים', uk: 'Вибрати період', en: 'Pick a date range' },
+  'tx.periodHint': {
+    ru: 'Нажмите на дату начала, затем на дату конца',
+    he: 'הקישו על תאריך ההתחלה, ואז על תאריך הסיום',
+    uk: 'Натисніть дату початку, потім дату кінця',
+    en: 'Tap the start date, then the end date',
+  },
   'tx.periodApply': { ru: 'Применить', he: 'החלה', uk: 'Застосувати', en: 'Apply' },
   'tx.upcomingRow': { ru: 'плановая операция · нажмите, чтобы открыть в «Планах»', he: 'תנועה מתוכננת · הקישו כדי לפתוח ב«תוכניות»', uk: 'планова операція · натисніть, щоб відкрити в «Планах»', en: 'planned item · tap to open in Planned' },
   'tx.bulkFound': { ru: 'операций найдено', he: 'תנועות נמצאו', uk: 'операцій знайдено', en: 'transactions found' },
