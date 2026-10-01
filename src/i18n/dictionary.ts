@@ -2047,6 +2047,28 @@ export const DICTIONARY = {
   'cvo.titlePlaceholder': { ru: 'Например, Кредит за квартиру', he: 'למשל, משכנתא לדירה', uk: 'Наприклад, Кредит за квартиру', en: 'e.g. Apartment loan' },
   'cvo.confirm': { ru: 'Оформить обязательство', he: 'ליצור התחייבות', uk: 'Оформити зобов’язання', en: 'Create the obligation' },
   'cvo.nothingToConvert': { ru: 'Нет ни одной подходящей операции', he: 'אין תנועה מתאימה', uk: 'Немає жодної відповідної операції', en: 'No matching transactions' },
+  'cvo.singleHint': {
+    ru: 'Если вся сумма не должна была пройти одной операцией в этом месяце — превратите её в график платежей.',
+    he: 'אם הסכום כולו לא היה אמור לעבור כתנועה אחת החודש — הפכו אותה ללוח תשלומים.',
+    uk: 'Якщо вся сума не мала пройти однією операцією цього місяця — перетворіть її на графік платежів.',
+    en: 'If the full amount shouldn’t have gone through as one operation this month, turn it into a payment schedule instead.',
+  },
+  'cvo.turnIntoInstallment': { ru: 'Превратить в рассрочку', he: 'להפוך לתשלומים', uk: 'Перетворити на розстрочку', en: 'Turn into instalments' },
+  'cvo.turnIntoCheque': { ru: 'Это была оплата чеком', he: 'זה שולם בצ’ק', uk: 'Це була оплата чеком', en: 'This was paid by cheque' },
+  'cvo.totalAmountHint': {
+    ru: 'Эта операция станет первым платежом; остаток распределится по следующим',
+    he: 'התנועה הזו תהיה התשלום הראשון; היתרה תתחלק בין הבאים',
+    uk: 'Ця операція стане першим платежем; залишок розподілиться по наступних',
+    en: 'This operation becomes payment #1; the remainder splits across the rest',
+  },
+  'cvo.totalBelowBooked': {
+    ru: 'Общая сумма не может быть меньше уже записанной операции',
+    he: 'הסכום הכולל לא יכול להיות קטן מהתנועה שכבר נרשמה',
+    uk: 'Загальна сума не може бути меншою за вже записану операцію',
+    en: 'The total can’t be less than the operation already booked',
+  },
+  'cvo.paymentsCount': { ru: 'Количество платежей', he: 'מספר תשלומים', uk: 'Кількість платежів', en: 'Number of payments' },
+  'cvo.every': { ru: 'Платежи каждые', he: 'תשלומים כל', uk: 'Платежі кожні', en: 'Payments every' },
   'bcc.title': { ru: 'Изменить категорию', he: 'שינוי קטגוריה', uk: 'Змінити категорію', en: 'Change category' },
   'bcc.hint': {
     ru: 'Применится сразу ко всем найденным операциям — сумма, дата и счёт не меняются. Это работает и для уже оформленных обязательств: их категория на самом плане отдельно не влияет на уже списанные платежи.',

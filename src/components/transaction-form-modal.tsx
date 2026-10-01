@@ -34,6 +34,8 @@ import {
   addRecurringPlan,
   addTransaction,
   buildInstallmentAmounts,
+  convertTransactionToBearerChequeSeries,
+  convertTransactionToInstallmentPlan,
   deleteTransaction,
   getCurrentMemberId,
   updateBearerCheque,
@@ -177,6 +179,22 @@ export function TransactionFormModal({
   const [keyError, setKeyError] = useState<string | null>(null);
   const { t, language } = useT();
   const [lastScanFile, setLastScanFile] = useState<File | null>(null);
+
+  // "Turn this already-booked operation into a schedule" — reachable on any
+  // existing transaction, any category, either kind (see
+  // `convertTransactionToInstallmentPlan`/`convertTransactionToBearerChequeSeries`
+  // in lib/db for why this can't just be folded into the ordinary save).
+  const [convertMode, setConvertMode] = useState<'NONE' | 'INSTALLMENT' | 'CHEQUE'>('NONE');
+  const [convertPlanType, setConvertPlanType] = useState<CreatableDebtKind>('INSTALLMENT');
+  const [convertTitle, setConvertTitle] = useState(existing?.merchant || existing?.note || '');
+  const [convertTotalAmount, setConvertTotalAmount] = useState(existing ? String(existing.amount) : '');
+  const [convertPaymentsCount, setConvertPaymentsCount] = useState(
+    String(DEBT_KIND_META.INSTALLMENT.defaultPayments)
+  );
+  const [convertIntervalUnit, setConvertIntervalUnit] = useState<RecurrenceUnit>('MONTH');
+  const [convertIntervalCount, setConvertIntervalCount] = useState('1');
+  const [convertBusy, setConvertBusy] = useState(false);
+  const [convertError, setConvertError] = useState<string | null>(null);
 
   // A cheque is its own mechanic, not an option layered on top of the debt
   // toggle: picking this category is enough, no extra switch to flip. It
@@ -445,6 +463,54 @@ export function TransactionFormModal({
     if (!existing) return;
     await deleteTransaction(existing.id);
     onClose();
+  };
+
+  const handleConvertToInstallment = async () => {
+    if (!existing) return;
+    if (!convertTitle.trim()) return setConvertError(t('pl.enterTitle'));
+    const totalAmount = parseFloat(convertTotalAmount.replace(',', '.'));
+    if (!Number.isFinite(totalAmount) || totalAmount < existing.amount) {
+      return setConvertError(t('cvo.totalBelowBooked'));
+    }
+    setConvertError(null);
+    setConvertBusy(true);
+    try {
+      await convertTransactionToInstallmentPlan({
+        transactionId: existing.id,
+        planType: convertPlanType,
+        title: convertTitle.trim(),
+        totalAmount,
+        paymentsCount: Math.max(1, parseInt(convertPaymentsCount, 10) || 1),
+        intervalUnit: convertIntervalUnit,
+        intervalCount: Math.max(1, parseInt(convertIntervalCount, 10) || 1),
+      });
+      onClose();
+    } catch (err: any) {
+      setConvertError(err.message || t('qa.saveFailed'));
+      setConvertBusy(false);
+    }
+  };
+
+  const handleConvertToCheque = async () => {
+    if (!existing) return;
+    if (!chequePayee.trim()) return setConvertError(t('bc.enterPayee'));
+    setConvertError(null);
+    setConvertBusy(true);
+    try {
+      await convertTransactionToBearerChequeSeries({
+        transactionId: existing.id,
+        payee: chequePayee.trim(),
+        chequeNumber: chequeNumber.trim() || undefined,
+        count: Math.max(1, parseInt(chequeCount, 10) || 1),
+        firstDueDate: chequeDueDate,
+        intervalUnit: chequeIntervalUnit,
+        intervalCount: Math.max(1, parseInt(chequeIntervalCount, 10) || 1),
+      });
+      onClose();
+    } catch (err: any) {
+      setConvertError(err.message || t('qa.saveFailed'));
+      setConvertBusy(false);
+    }
   };
 
   return (
@@ -1056,6 +1122,239 @@ export function TransactionFormModal({
             confirmField('category');
           }}
         />
+      )}
+
+      {existing && convertMode === 'NONE' && (
+        <div className="rounded-2xl border border-slate-200 dark:border-slate-700 p-3 space-y-2">
+          <p className="text-[10.5px] text-slate-400 font-medium leading-relaxed">
+            {t('cvo.singleHint')}
+          </p>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                setConvertError(null);
+                setConvertMode('INSTALLMENT');
+              }}
+              className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-[10.5px] font-black text-violet-600 dark:text-violet-400 bg-violet-50 dark:bg-violet-950/40"
+            >
+              <CreditCard className="w-3.5 h-3.5" />
+              {t('cvo.turnIntoInstallment')}
+            </button>
+            {kind === 'EXPENSE' && (
+              <button
+                type="button"
+                onClick={() => {
+                  setConvertError(null);
+                  setConvertMode('CHEQUE');
+                }}
+                className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl text-[10.5px] font-black text-violet-600 dark:text-violet-400 bg-violet-50 dark:bg-violet-950/40"
+              >
+                <FileSignature className="w-3.5 h-3.5" />
+                {t('cvo.turnIntoCheque')}
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {existing && convertMode === 'INSTALLMENT' && (
+        <div className="rounded-2xl border border-violet-200 dark:border-violet-900 bg-violet-50/60 dark:bg-violet-950/20 p-3 space-y-2.5">
+          <div className="flex items-center justify-between">
+            <p className="flex items-center gap-1.5 text-[10.5px] font-black text-violet-600 dark:text-violet-400">
+              <CreditCard className="w-3.5 h-3.5" />
+              {t('cvo.turnIntoInstallment')}
+            </p>
+            <button
+              type="button"
+              onClick={() => {
+                setConvertMode('NONE');
+                setConvertError(null);
+              }}
+              className="text-[10.5px] font-bold text-slate-400"
+            >
+              {t('common.cancel')}
+            </button>
+          </div>
+
+          <Field label={t('pl.title')}>
+            <input
+              type="text"
+              value={convertTitle}
+              onChange={(e) => setConvertTitle(e.target.value)}
+              className={inputClass}
+              autoFocus
+            />
+          </Field>
+
+          <Field label={t('dc.obligationType')}>
+            <div className="grid grid-cols-4 gap-1.5">
+              {(Object.keys(DEBT_KIND_META) as CreatableDebtKind[]).map((option) => {
+                const meta = DEBT_KIND_META[option];
+                const isActive = convertPlanType === option;
+                return (
+                  <button
+                    key={option}
+                    type="button"
+                    onClick={() => setConvertPlanType(option)}
+                    className={`py-2 rounded-xl text-[10px] font-black border transition-all ${
+                      isActive
+                        ? 'bg-violet-500 text-white border-transparent'
+                        : 'bg-slate-50 dark:bg-slate-800 text-slate-500 border-slate-200 dark:border-slate-700'
+                    }`}
+                  >
+                    {t(meta.label)}
+                  </button>
+                );
+              })}
+            </div>
+          </Field>
+
+          <Field label={`${t('dc.totalAmount')}, ${currency}`} hint={t('cvo.totalAmountHint')}>
+            <input
+              type="text"
+              inputMode="decimal"
+              value={convertTotalAmount}
+              onChange={(e) => setConvertTotalAmount(e.target.value)}
+              className={`${inputClass} text-lg font-black`}
+            />
+          </Field>
+
+          <div className="grid grid-cols-2 gap-3">
+            <Field label={t('cvo.paymentsCount')}>
+              <input
+                type="number"
+                min={1}
+                value={convertPaymentsCount}
+                onChange={(e) => setConvertPaymentsCount(e.target.value)}
+                className={`${inputClass} text-center font-black`}
+              />
+            </Field>
+            <Field label={t('cvo.every')}>
+              <div className="flex gap-1.5">
+                <input
+                  type="number"
+                  min={1}
+                  value={convertIntervalCount}
+                  onChange={(e) => setConvertIntervalCount(e.target.value)}
+                  className={`${inputClass} w-16 text-center`}
+                />
+                <select
+                  value={convertIntervalUnit}
+                  onChange={(e) => setConvertIntervalUnit(e.target.value as RecurrenceUnit)}
+                  className={`${inputClass} flex-1`}
+                >
+                  <option value="WEEK">{pluralUnit('WEEK', convertIntervalCount)}</option>
+                  <option value="MONTH">{pluralUnit('MONTH', convertIntervalCount)}</option>
+                  <option value="YEAR">{pluralUnit('YEAR', convertIntervalCount)}</option>
+                </select>
+              </div>
+            </Field>
+          </div>
+
+          {convertError && <p className="text-[11px] font-bold text-rose-500 text-center">{convertError}</p>}
+          <button
+            type="button"
+            onClick={handleConvertToInstallment}
+            disabled={convertBusy}
+            className="w-full py-2.5 rounded-2xl text-[11px] font-black text-white bg-violet-500 flex items-center justify-center gap-1.5 disabled:opacity-40"
+          >
+            {t('cvo.confirm')}
+          </button>
+        </div>
+      )}
+
+      {existing && convertMode === 'CHEQUE' && (
+        <div className="rounded-2xl border border-violet-200 dark:border-violet-900 bg-violet-50/60 dark:bg-violet-950/20 p-3 space-y-2.5">
+          <div className="flex items-center justify-between">
+            <p className="flex items-center gap-1.5 text-[10.5px] font-black text-violet-600 dark:text-violet-400">
+              <FileSignature className="w-3.5 h-3.5" />
+              {t('cvo.turnIntoCheque')}
+            </p>
+            <button
+              type="button"
+              onClick={() => {
+                setConvertMode('NONE');
+                setConvertError(null);
+              }}
+              className="text-[10.5px] font-bold text-slate-400"
+            >
+              {t('common.cancel')}
+            </button>
+          </div>
+
+          <Field label={t('bc.payee')}>
+            <input
+              type="text"
+              value={chequePayee}
+              onChange={(e) => setChequePayee(e.target.value)}
+              placeholder={t('bc.payeePlaceholder')}
+              className={inputClass}
+              autoFocus
+            />
+          </Field>
+
+          <Field label={t('bc.chequeNumber')} hint={t('bc.chequeNumberOptional')}>
+            <input
+              type="text"
+              value={chequeNumber}
+              onChange={(e) => setChequeNumber(e.target.value)}
+              className={inputClass}
+            />
+          </Field>
+
+          <Field label={t('bc.dueDate')}>
+            <input
+              type="date"
+              value={chequeDueDate}
+              onChange={(e) => setChequeDueDate(e.target.value)}
+              className={inputClass}
+            />
+          </Field>
+
+          <Field label={t('bc.count')} hint={t('bc.countHint')}>
+            <input
+              type="number"
+              min={1}
+              value={chequeCount}
+              onChange={(e) => setChequeCount(e.target.value)}
+              className={`${inputClass} text-center font-black`}
+            />
+          </Field>
+
+          {parseInt(chequeCount, 10) > 1 && (
+            <Field label={t('bc.every')}>
+              <div className="flex gap-1.5">
+                <input
+                  type="number"
+                  min={1}
+                  value={chequeIntervalCount}
+                  onChange={(e) => setChequeIntervalCount(e.target.value)}
+                  className={`${inputClass} w-16 text-center`}
+                />
+                <select
+                  value={chequeIntervalUnit}
+                  onChange={(e) => setChequeIntervalUnit(e.target.value as RecurrenceUnit)}
+                  className={`${inputClass} flex-1`}
+                >
+                  <option value="WEEK">{pluralUnit('WEEK', chequeIntervalCount)}</option>
+                  <option value="MONTH">{pluralUnit('MONTH', chequeIntervalCount)}</option>
+                  <option value="YEAR">{pluralUnit('YEAR', chequeIntervalCount)}</option>
+                </select>
+              </div>
+            </Field>
+          )}
+
+          {convertError && <p className="text-[11px] font-bold text-rose-500 text-center">{convertError}</p>}
+          <button
+            type="button"
+            onClick={handleConvertToCheque}
+            disabled={convertBusy}
+            className="w-full py-2.5 rounded-2xl text-[11px] font-black text-white bg-violet-500 flex items-center justify-center gap-1.5 disabled:opacity-40"
+          >
+            {t('cvo.confirm')}
+          </button>
+        </div>
       )}
 
       {existing && (

@@ -978,7 +978,12 @@ export interface ConvertToObligationInput {
  */
 export async function convertTransactionsToObligation(input: ConvertToObligationInput): Promise<Plan> {
   const rows = await financeDb.transactions.bulkGet(input.transactionIds);
-  const valid = rows.filter((t): t is Transaction => t != null && t.kind === 'EXPENSE');
+  // Income works the same way as expense — a receivable that only partly
+  // landed is still one schedule — but a plan has one `kind`, so a mixed
+  // selection keeps only the rows matching the first one picked.
+  const candidates = rows.filter((t): t is Transaction => t != null);
+  const kind = candidates[0]?.kind;
+  const valid = candidates.filter((t) => t.kind === kind);
   if (valid.length === 0) {
     throw new Error(tr('cvo.nothingToConvert'));
   }
@@ -994,7 +999,7 @@ export async function convertTransactionsToObligation(input: ConvertToObligation
     scheduleType: 'FIXED_SCHEDULE',
     status: 'ACTIVE',
     title: input.title,
-    kind: 'EXPENSE',
+    kind,
     amount: totalAmount,
     currency,
     categoryId: valid[0].categoryId,
@@ -1032,6 +1037,161 @@ export async function convertTransactionsToObligation(input: ConvertToObligation
 
   await syncFixedSchedulePlanCache(plan.id);
   return plan;
+}
+
+export interface ConvertTransactionToInstallmentInput {
+  transactionId: string;
+  planType: CreatableDebtKind;
+  title: string;
+  /** The whole deal's total — must be at least the transaction's own
+   *  amount; the difference is what's still outstanding. */
+  totalAmount: number;
+  /** Including the already-booked payment as #1. */
+  paymentsCount: number;
+  intervalUnit: RecurrenceUnit;
+  intervalCount: number;
+}
+
+/**
+ * For the "only part of this landed/left this month" case on a single
+ * already-booked operation, any category, either kind: the transaction
+ * becomes occurrence #1 of a brand-new FIXED_SCHEDULE plan (paid, still
+ * linked to the same real transaction — nothing about it changes but its
+ * `planId`/note), and the remainder (`totalAmount` minus what's already
+ * booked) is spread across `paymentsCount - 1` future occurrences the same
+ * way a fresh schedule's amounts are split.
+ */
+export async function convertTransactionToInstallmentPlan(
+  input: ConvertTransactionToInstallmentInput
+): Promise<Plan> {
+  const transaction = await financeDb.transactions.get(input.transactionId);
+  if (!transaction) throw new Error(tr('cvo.nothingToConvert'));
+
+  const now = new Date().toISOString();
+  const paymentsCount = Math.max(1, Math.floor(input.paymentsCount));
+  const remainingCount = Math.max(0, paymentsCount - 1);
+  const remaining = Math.max(0, Math.round((input.totalAmount - transaction.amount) * 100) / 100);
+
+  const plan: Plan = {
+    id: newId('debt'),
+    planType: input.planType,
+    scheduleType: 'FIXED_SCHEDULE',
+    status: 'ACTIVE',
+    title: input.title,
+    merchant: transaction.merchant,
+    kind: transaction.kind,
+    amount: input.totalAmount,
+    currency: transaction.currency,
+    categoryId: transaction.categoryId,
+    subcategoryId: transaction.subcategoryId,
+    accountId: transaction.accountId,
+    startDate: transaction.date,
+    occurrencesCount: paymentsCount,
+    occurrencesPaid: 1,
+    outstandingAmount: remaining,
+    authorId: getCurrentMemberId(),
+    createdAt: now,
+    updatedAt: now,
+  };
+  await financeDb.plans.put(plan);
+
+  const occurrences: PlanOccurrence[] = [
+    {
+      id: newId('occ'),
+      planId: plan.id,
+      index: 1,
+      dueDate: transaction.date,
+      amount: transaction.amount,
+      currency: transaction.currency,
+      isPaid: true,
+      paidDate: transaction.date,
+      transactionId: transaction.id,
+    },
+  ];
+  if (remainingCount > 0) {
+    const amounts = buildInstallmentAmounts(remaining, remainingCount);
+    for (let i = 0; i < remainingCount; i++) {
+      occurrences.push({
+        id: newId('occ'),
+        planId: plan.id,
+        index: i + 2,
+        dueDate: addInterval(transaction.date, input.intervalUnit, input.intervalCount * (i + 1)),
+        amount: amounts[i],
+        currency: transaction.currency,
+        isPaid: false,
+      });
+    }
+  }
+  await financeDb.planOccurrences.bulkPut(occurrences);
+
+  await financeDb.transactions.update(transaction.id, {
+    planId: plan.id,
+    note: transaction.note || `${input.title} · ${tr('dbx.payment')} 1/${paymentsCount}`,
+  });
+
+  return plan;
+}
+
+/** Cheque numbers only auto-increment when the base is a plain number — a
+ *  free-text number ("A-104") can't be safely incremented, so every cheque
+ *  in the series keeps it as typed. */
+function chequeSeriesNumber(base: string | undefined, index: number, count: number): string | undefined {
+  if (!base) return undefined;
+  if (count <= 1 || !/^\d+$/.test(base)) return base;
+  return String(parseInt(base, 10) + index);
+}
+
+export interface ConvertTransactionToChequeSeriesInput {
+  transactionId: string;
+  payee: string;
+  chequeNumber?: string;
+  count: number;
+  firstDueDate: string;
+  intervalUnit: RecurrenceUnit;
+  intervalCount: number;
+}
+
+/**
+ * Replaces an already-booked expense with one or more bearer cheques for
+ * the same total — for "it turns out this was paid by cheque, not in one
+ * go". The original transaction is removed (its money didn't actually
+ * leave in a single lump), and in its place: a cheque due today or earlier
+ * clears immediately (booked as a fresh expense, so the ledger still shows
+ * that part as spent), anything due later stays issued and open — the
+ * normal bearer-cheque lifecycle from here on.
+ */
+export async function convertTransactionToBearerChequeSeries(
+  input: ConvertTransactionToChequeSeriesInput
+): Promise<void> {
+  const transaction = await financeDb.transactions.get(input.transactionId);
+  if (!transaction) throw new Error(tr('cvo.nothingToConvert'));
+
+  const count = Math.max(1, Math.floor(input.count));
+  const amounts = buildInstallmentAmounts(transaction.amount, count);
+  const today = todayIso();
+  const seriesId = count > 1 ? newId('cheque') : undefined;
+
+  await financeDb.transactions.delete(transaction.id);
+
+  for (let i = 0; i < count; i++) {
+    const dueDate =
+      i === 0 ? input.firstDueDate : addInterval(input.firstDueDate, input.intervalUnit, input.intervalCount * i);
+    const cheque = await addBearerCheque({
+      payee: input.payee,
+      chequeNumber: chequeSeriesNumber(input.chequeNumber, i, count),
+      amount: amounts[i],
+      currency: transaction.currency,
+      categoryId: BEARER_CHEQUE_CATEGORY_ID,
+      accountId: transaction.accountId,
+      issueDate: transaction.date,
+      dueDate,
+      note: transaction.note,
+      seriesId,
+    });
+    if (dueDate <= today) {
+      await clearBearerCheque(cheque.id, dueDate);
+    }
+  }
 }
 
 export interface BulkChangeCategoryInput {
@@ -1707,18 +1867,40 @@ export async function mergeFinanceDatabaseJson(
 
     const { plans, planOccurrences } = plansFromBackup(data);
 
+    // Tables that carry `updatedAt`: merge the same way transactions do
+    // above — a remote row only overwrites local when it is strictly newer,
+    // so pulling an older device's backup can never erase an edit made here
+    // since the last time *that* device's copy was pulled in (e.g. a total
+    // just corrected via «Изменить сумму» surviving a stale phone backup).
+    for (const [table, rows] of [
+      [financeDb.plans, plans],
+      [financeDb.planOccurrenceOverrides, data.planOccurrenceOverrides],
+      [financeDb.obligations, data.obligations],
+      [financeDb.bearerCheques, data.bearerCheques],
+    ] as [Table<any, string>, any[] | undefined][]) {
+      if (!Array.isArray(rows) || rows.length === 0) continue;
+      const localById = new Map((await table.toArray()).map((row: any) => [row.id, row]));
+      const winners = rows.filter((remote) => {
+        const local = localById.get(remote.id);
+        return !local || remote.updatedAt > local.updatedAt;
+      });
+      if (winners.length > 0) {
+        await table.bulkPut(winners);
+        merged += winners.length;
+      }
+    }
+
+    // No `updatedAt` on these — nothing to compare a remote row's recency
+    // against, so a plain union is the best available: newest Drive copy
+    // wins on an id collision, same as before.
     for (const [table, rows] of [
       [financeDb.accounts, data.accounts],
       [financeDb.categories, data.categories],
-      [financeDb.plans, plans],
       [financeDb.planOccurrences, planOccurrences],
-      [financeDb.planOccurrenceOverrides, data.planOccurrenceOverrides],
-      [financeDb.obligations, data.obligations],
       [financeDb.obligationSettlements, data.obligationSettlements],
       [financeDb.budgets, data.budgets],
       [financeDb.members, data.members],
       [financeDb.vatPayments, data.vatPayments],
-      [financeDb.bearerCheques, data.bearerCheques],
     ] as [Table<any, string>, any[] | undefined][]) {
       if (!Array.isArray(rows) || rows.length === 0) continue;
       await table.bulkPut(rows);
