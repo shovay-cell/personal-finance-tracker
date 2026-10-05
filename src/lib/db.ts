@@ -30,6 +30,8 @@ import {
   PlanType,
   PlanWithSchedule,
   RecurrenceUnit,
+  Tombstone,
+  TombstoneTable,
 } from '@/types';
 import {
   BEARER_CHEQUE_CATEGORY_ID,
@@ -72,6 +74,7 @@ export class FinanceDatabase extends Dexie {
   planOccurrences!: Table<PlanOccurrence, string>;
   planOccurrenceOverrides!: Table<PlanOccurrenceOverride, string>;
   planMigrationSnapshots!: Table<PlanMigrationSnapshot, string>;
+  tombstones!: Table<Tombstone, string>;
   settings!: Table<FinanceSettings, string>;
 
   constructor() {
@@ -138,6 +141,17 @@ export class FinanceDatabase extends Dexie {
     // `PlanOccurrence` row. Pure addition, nothing to backfill.
     this.version(6).stores({
       planOccurrenceOverrides: 'id, planId, dueDate',
+    });
+
+    // v7 adds deletion markers — see the doc comment on `Tombstone` in @/types.
+    // A Drive-backup merge otherwise has no way to tell "this row was deleted"
+    // apart from "this row never existed", so an older or other-device copy
+    // would silently resurrect anything already removed locally. Pure
+    // addition, nothing to backfill — no row deleted before this shipped has
+    // a tombstone, but that only means it can't be *protected* retroactively,
+    // not that it comes back (it's already gone from every table either way).
+    this.version(7).stores({
+      tombstones: 'id, table, deletedAt',
     });
   }
 }
@@ -313,6 +327,53 @@ export async function rebuildPlansFromLegacyTables(): Promise<{
 function newId(prefix: string): string {
   return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
 }
+
+// ------------------------------------------------------------ tombstones
+// Every genuine hard delete in this file records one of these — see the
+// doc comment on `Tombstone` in @/types and `mergeFinanceDatabaseJson` for
+// why: without it, a Drive-backup merge can't tell a deleted row apart from
+// one it just hasn't seen yet, and silently brings it back.
+
+async function recordTombstone(table: TombstoneTable, id: string): Promise<void> {
+  await financeDb.tombstones.put({ id, table, deletedAt: new Date().toISOString() });
+}
+
+async function recordTombstones(table: TombstoneTable, ids: string[]): Promise<void> {
+  if (ids.length === 0) return;
+  const deletedAt = new Date().toISOString();
+  await financeDb.tombstones.bulkPut(ids.map((id) => ({ id, table, deletedAt })));
+}
+
+/** Ages out old deletion markers so the tombstones table (and every future
+ *  backup) doesn't grow forever. 180 days is generous on purpose: a device
+ *  that stays dark longer than every other device's retention window could
+ *  otherwise resurrect something on reconnecting, by re-uploading its own
+ *  stale local copy of a row everyone else has already forgotten was
+ *  deleted. Run on every merge and on export, so a device that only ever
+ *  pushes (never merges) still prunes its own tombstones over time. */
+async function pruneTombstones(olderThanDays = 180): Promise<void> {
+  const cutoff = new Date(Date.now() - olderThanDays * 24 * 60 * 60 * 1000).toISOString();
+  const stale = await financeDb.tombstones.where('deletedAt').below(cutoff).primaryKeys();
+  if (stale.length > 0) await financeDb.tombstones.bulkDelete(stale);
+}
+
+/** Every table a tombstone can name, keyed the same way — lets the merge's
+ *  delete-sweep (`mergeFinanceDatabaseJson`) look up the right Dexie table
+ *  from a `Tombstone.table` value without a runtime `financeDb[name]` cast. */
+const tombstoneTables: Record<TombstoneTable, Table<any, string>> = {
+  transactions: financeDb.transactions,
+  accounts: financeDb.accounts,
+  categories: financeDb.categories,
+  plans: financeDb.plans,
+  planOccurrences: financeDb.planOccurrences,
+  planOccurrenceOverrides: financeDb.planOccurrenceOverrides,
+  obligations: financeDb.obligations,
+  obligationSettlements: financeDb.obligationSettlements,
+  budgets: financeDb.budgets,
+  members: financeDb.members,
+  vatPayments: financeDb.vatPayments,
+  bearerCheques: financeDb.bearerCheques,
+};
 
 // toISOString() reports UTC, not the device's local calendar day — for a
 // user ahead of UTC (e.g. Asia/Jerusalem, UTC+2/+3) that lags the real local
@@ -616,6 +677,7 @@ export async function updateTransaction(
 export async function deleteTransaction(id: string): Promise<void> {
   const tx = await financeDb.transactions.get(id);
   await financeDb.transactions.delete(id);
+  await recordTombstone('transactions', id);
 
   // A transaction created by settling a bearer cheque owns its settlement row:
   // drop it too, otherwise the obligation would stay short-paid on paper only.
@@ -624,9 +686,11 @@ export async function deleteTransaction(id: string): Promise<void> {
       .where('obligationId')
       .equals(tx.obligationId)
       .toArray();
-    for (const s of linked.filter((s) => s.transactionId === id)) {
-      await financeDb.obligationSettlements.delete(s.id);
+    const settlementIds = linked.filter((s) => s.transactionId === id).map((s) => s.id);
+    for (const settlementId of settlementIds) {
+      await financeDb.obligationSettlements.delete(settlementId);
     }
+    await recordTombstones('obligationSettlements', settlementIds);
     await recomputeObligationStatus(tx.obligationId);
   }
 }
@@ -657,6 +721,7 @@ export async function deleteAccount(id: string): Promise<void> {
     return;
   }
   await financeDb.accounts.delete(id);
+  await recordTombstone('accounts', id);
 }
 
 /** Opening balance plus every income minus every expense booked on the account. */
@@ -727,6 +792,7 @@ export async function deleteCategory(id: string): Promise<{ deleted: boolean; re
     await financeDb.categories.delete(child.id);
   }
   await financeDb.categories.delete(id);
+  await recordTombstones('categories', [...children.map((c) => c.id), id]);
   return { deleted: true };
 }
 
@@ -824,14 +890,17 @@ export async function getPlanDeletionImpact(planId: string): Promise<PlanDeletio
 export async function deletePlan(id: string): Promise<void> {
   await financeDb.transaction(
     'rw',
-    [financeDb.plans, financeDb.planOccurrences, financeDb.transactions],
+    [financeDb.plans, financeDb.planOccurrences, financeDb.transactions, financeDb.tombstones],
     async () => {
-      await financeDb.planOccurrences.where('planId').equals(id).delete();
+      const occurrenceIds = await financeDb.planOccurrences.where('planId').equals(id).primaryKeys();
+      await financeDb.planOccurrences.bulkDelete(occurrenceIds);
+      await recordTombstones('planOccurrences', occurrenceIds as string[]);
       const linked = await financeDb.transactions.where('planId').equals(id).toArray();
       for (const t of linked) {
         await financeDb.transactions.update(t.id, { planId: undefined });
       }
       await financeDb.plans.delete(id);
+      await recordTombstone('plans', id);
     }
   );
 }
@@ -842,14 +911,16 @@ export async function deletePlan(id: string): Promise<void> {
 export async function deletePlanAndTransactions(id: string): Promise<void> {
   await financeDb.transaction(
     'rw',
-    [financeDb.plans, financeDb.planOccurrences, financeDb.transactions],
+    [financeDb.plans, financeDb.planOccurrences, financeDb.transactions, financeDb.tombstones],
     async () => {
-      const linked = await financeDb.transactions.where('planId').equals(id).toArray();
-      for (const t of linked) {
-        await financeDb.transactions.delete(t.id);
-      }
-      await financeDb.planOccurrences.where('planId').equals(id).delete();
+      const linkedIds = await financeDb.transactions.where('planId').equals(id).primaryKeys();
+      await financeDb.transactions.bulkDelete(linkedIds);
+      await recordTombstones('transactions', linkedIds as string[]);
+      const occurrenceIds = await financeDb.planOccurrences.where('planId').equals(id).primaryKeys();
+      await financeDb.planOccurrences.bulkDelete(occurrenceIds);
+      await recordTombstones('planOccurrences', occurrenceIds as string[]);
       await financeDb.plans.delete(id);
+      await recordTombstone('plans', id);
     }
   );
 }
@@ -1298,6 +1369,7 @@ export async function unpayPlanOccurrence(occurrenceId: string): Promise<void> {
 
   if (occurrence.transactionId) {
     await financeDb.transactions.delete(occurrence.transactionId);
+    await recordTombstone('transactions', occurrence.transactionId);
   }
   await financeDb.planOccurrences.update(occurrenceId, {
     isPaid: false,
@@ -1576,7 +1648,9 @@ export async function deleteObligation(id: string): Promise<void> {
   for (const s of settlements) {
     await financeDb.obligationSettlements.delete(s.id);
   }
+  await recordTombstones('obligationSettlements', settlements.map((s) => s.id));
   await financeDb.obligations.delete(id);
+  await recordTombstone('obligations', id);
 }
 
 export function computeObligationStatus(
@@ -1629,8 +1703,10 @@ export async function deleteObligationSettlement(id: string): Promise<void> {
   const settlement = await financeDb.obligationSettlements.get(id);
   if (!settlement) return;
   await financeDb.obligationSettlements.delete(id);
+  await recordTombstone('obligationSettlements', id);
   if (settlement.transactionId) {
     await financeDb.transactions.delete(settlement.transactionId);
+    await recordTombstone('transactions', settlement.transactionId);
   }
   await recomputeObligationStatus(settlement.obligationId);
 }
@@ -1668,6 +1744,7 @@ export async function upsertBudget(
 
 export async function deleteBudget(id: string): Promise<void> {
   await financeDb.budgets.delete(id);
+  await recordTombstone('budgets', id);
 }
 
 // ----------------------------------------------------------------- members
@@ -1692,11 +1769,14 @@ export async function deleteMember(id: string): Promise<void> {
   const member = await financeDb.members.get(id);
   if (!member || member.role === 'OWNER') return;
   await financeDb.members.delete(id);
+  await recordTombstone('members', id);
 }
 
 // ------------------------------------------------------- backup / restore
 
 export async function exportFinanceDatabaseJson(): Promise<string> {
+  await pruneTombstones();
+
   const [
     accounts,
     categories,
@@ -1710,6 +1790,7 @@ export async function exportFinanceDatabaseJson(): Promise<string> {
     members,
     vatPayments,
     bearerCheques,
+    tombstones,
     settings,
   ] = await Promise.all([
     financeDb.accounts.toArray(),
@@ -1724,6 +1805,7 @@ export async function exportFinanceDatabaseJson(): Promise<string> {
     financeDb.members.toArray(),
     financeDb.vatPayments.toArray(),
     financeDb.bearerCheques.toArray(),
+    financeDb.tombstones.toArray(),
     financeDb.settings.get('default'),
   ]);
 
@@ -1748,6 +1830,7 @@ export async function exportFinanceDatabaseJson(): Promise<string> {
     members,
     vatPayments,
     bearerCheques,
+    tombstones,
     settings: settings || null,
   };
 
@@ -1801,6 +1884,7 @@ export async function importFinanceDatabaseJson(
         financeDb.members,
         financeDb.vatPayments,
         financeDb.bearerCheques,
+        financeDb.tombstones,
         financeDb.settings,
       ],
       async () => {
@@ -1823,6 +1907,15 @@ export async function importFinanceDatabaseJson(
           if (!Array.isArray(rows)) continue;
           await table.clear();
           if (rows.length > 0) await table.bulkPut(rows);
+        }
+
+        // Unlike the tables above, this always replaces — a full restore
+        // defines the complete state being restored to, deletion history
+        // included; an old backup with no `tombstones` field at all just
+        // means that state has none, not "leave what's here untouched".
+        await financeDb.tombstones.clear();
+        if (data.tombstones && data.tombstones.length > 0) {
+          await financeDb.tombstones.bulkPut(data.tombstones);
         }
 
         if (data.settings) {
@@ -1853,10 +1946,39 @@ export async function mergeFinanceDatabaseJson(
 
     let merged = 0;
 
+    // A — merge incoming tombstones first. The deletion this merge needs to
+    // honor may have arrived via a *different* device's backup merged in on
+    // an earlier sync, not necessarily via `data` itself — so what steps B/C
+    // check against is the local tombstones table, re-read after this merge,
+    // not just `data.tombstones`.
+    const localTombstones = new Map(
+      (await financeDb.tombstones.toArray()).map((t) => [t.id, t])
+    );
+    const incomingTombstones = (data.tombstones || []).filter((remote) => {
+      const local = localTombstones.get(remote.id);
+      return !local || remote.deletedAt > local.deletedAt;
+    });
+    if (incomingTombstones.length > 0) {
+      await financeDb.tombstones.bulkPut(incomingTombstones);
+    }
+    const tombstoneById = new Map(
+      (await financeDb.tombstones.toArray()).map((t) => [t.id, t])
+    );
+
+    // B — a tombstone always wins: sweep any local row it names, for the
+    // case where this device never deleted the row itself and is only now
+    // learning — via this merge — that some other device did. A no-op for
+    // every tombstone whose row is already gone here, so safe to run in
+    // full every time rather than tracking which ones are "new" this round.
+    for (const tomb of Array.from(tombstoneById.values())) {
+      await tombstoneTables[tomb.table].delete(tomb.id);
+    }
+
     const localTransactions = new Map(
       (await financeDb.transactions.toArray()).map((t) => [t.id, t])
     );
     const incoming = (data.transactions || []).filter((remote) => {
+      if (tombstoneById.has(remote.id)) return false;
       const local = localTransactions.get(remote.id);
       return !local || remote.updatedAt > local.updatedAt;
     });
@@ -1867,9 +1989,12 @@ export async function mergeFinanceDatabaseJson(
 
     const { plans, planOccurrences } = plansFromBackup(data);
 
-    // Tables that carry `updatedAt`: merge the same way transactions do
-    // above — a remote row only overwrites local when it is strictly newer,
-    // so pulling an older device's backup can never erase an edit made here
+    // C — merge each table's incoming rows, skipping anything a tombstone
+    // already condemns regardless of its own `updatedAt` (delete always
+    // wins — see the doc comment on `Tombstone` in @/types). Tables that
+    // carry `updatedAt` otherwise merge the same way transactions do above:
+    // a remote row only overwrites local when it is strictly newer, so
+    // pulling an older device's backup can never erase an edit made here
     // since the last time *that* device's copy was pulled in (e.g. a total
     // just corrected via «Изменить сумму» surviving a stale phone backup).
     for (const [table, rows] of [
@@ -1881,6 +2006,7 @@ export async function mergeFinanceDatabaseJson(
       if (!Array.isArray(rows) || rows.length === 0) continue;
       const localById = new Map((await table.toArray()).map((row: any) => [row.id, row]));
       const winners = rows.filter((remote) => {
+        if (tombstoneById.has(remote.id)) return false;
         const local = localById.get(remote.id);
         return !local || remote.updatedAt > local.updatedAt;
       });
@@ -1890,9 +2016,10 @@ export async function mergeFinanceDatabaseJson(
       }
     }
 
-    // No `updatedAt` on these — nothing to compare a remote row's recency
-    // against, so a plain union is the best available: newest Drive copy
-    // wins on an id collision, same as before.
+    // No `updatedAt` on these, so no "newer than the tombstone" comparison
+    // is possible — a tombstoned id is simply never re-added regardless of
+    // which backup it came from; otherwise newest Drive copy wins on an id
+    // collision, same as before.
     for (const [table, rows] of [
       [financeDb.accounts, data.accounts],
       [financeDb.categories, data.categories],
@@ -1903,9 +2030,15 @@ export async function mergeFinanceDatabaseJson(
       [financeDb.vatPayments, data.vatPayments],
     ] as [Table<any, string>, any[] | undefined][]) {
       if (!Array.isArray(rows) || rows.length === 0) continue;
-      await table.bulkPut(rows);
-      merged += rows.length;
+      const winners = rows.filter((r) => !tombstoneById.has(r.id));
+      if (winners.length > 0) {
+        await table.bulkPut(winners);
+        merged += winners.length;
+      }
     }
+
+    // D — age out old deletion markers now that this merge is done with them.
+    await pruneTombstones();
 
     return { success: true, merged };
   } catch (err: any) {
@@ -1933,6 +2066,7 @@ export async function clearAllFinanceData(): Promise<void> {
     financeDb.members.clear(),
     financeDb.vatPayments.clear(),
     financeDb.bearerCheques.clear(),
+    financeDb.tombstones.clear(),
     financeDb.settings.clear(),
   ]);
   await initializeFinanceDb();
@@ -2045,8 +2179,10 @@ export async function addVatPayment(
 export async function deleteVatPayment(id: string): Promise<void> {
   const payment = await financeDb.vatPayments.get(id);
   await financeDb.vatPayments.delete(id);
+  await recordTombstone('vatPayments', id);
   if (payment?.transactionId) {
     await financeDb.transactions.delete(payment.transactionId);
+    await recordTombstone('transactions', payment.transactionId);
   }
 }
 
@@ -2210,6 +2346,7 @@ export async function unclearBearerCheque(id: string): Promise<void> {
 
   if (cheque.transactionId) {
     await financeDb.transactions.delete(cheque.transactionId);
+    await recordTombstone('transactions', cheque.transactionId);
   }
   await financeDb.bearerCheques.update(id, {
     status: 'ISSUED' as BearerChequeStatus,
@@ -2231,8 +2368,10 @@ export async function deleteBearerCheque(id: string): Promise<void> {
   const cheque = await financeDb.bearerCheques.get(id);
   if (cheque?.transactionId) {
     await financeDb.transactions.delete(cheque.transactionId);
+    await recordTombstone('transactions', cheque.transactionId);
   }
   await financeDb.bearerCheques.delete(id);
+  await recordTombstone('bearerCheques', id);
 }
 
 function addDaysIso(dateStr: string, days: number): string {

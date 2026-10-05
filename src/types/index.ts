@@ -766,6 +766,39 @@ export interface FinanceBackupPayload {
   vatPayments?: VatPayment[];
   bearerCheques?: BearerCheque[];
   settings: FinanceSettings | null;
+  /** Absent in a backup taken before this existed — treated as "no deletions known". */
+  tombstones?: Tombstone[];
+}
+
+/** Every table a hard delete can remove a row from — kept explicit rather than
+ *  inferred from the id's prefix, since the prefix→table mapping is an informal
+ *  convention (`newId()`), not a type-enforced invariant. */
+export type TombstoneTable =
+  | 'transactions'
+  | 'accounts'
+  | 'categories'
+  | 'plans'
+  | 'planOccurrences'
+  | 'planOccurrenceOverrides'
+  | 'obligations'
+  | 'obligationSettlements'
+  | 'budgets'
+  | 'members'
+  | 'vatPayments'
+  | 'bearerCheques';
+
+/**
+ * A deletion marker — the only way a Drive-backup merge can tell "this row was
+ * removed on purpose" apart from "this row never existed", so a sync pulling in
+ * an older or other-device copy never silently resurrects it.
+ */
+export interface Tombstone {
+  /** The deleted row's own id — already globally unique across tables via
+   *  `newId()`'s per-table prefix, so this alone is a safe primary key. */
+  id: string;
+  table: TombstoneTable;
+  /** ISO timestamp of the delete — newest wins when two devices tombstone the same id. */
+  deletedAt: string;
 }
 
 /** File entry returned by the Drive `appDataFolder` listing. */
