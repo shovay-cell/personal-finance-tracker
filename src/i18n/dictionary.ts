@@ -492,6 +492,18 @@ export const DICTIONARY = {
     uk: 'Інакше застосунок запитає підтвердження в день платежу',
     en: 'Otherwise the app asks for confirmation on the due date',
   },
+  'st.autoSettle': {
+    ru: 'Автоматически отмечать просроченные как оплаченные',
+    he: 'לסמן אוטומטית תשלומים שעבר מועדם כשולמו',
+    uk: 'Автоматично позначати прострочені як оплачені',
+    en: 'Auto-mark overdue payments as paid',
+  },
+  'st.autoSettleHint': {
+    ru: 'Плановые платежи, рассрочки, налоги и чеки с прошедшей датой проводятся сами',
+    he: 'תשלומים מתוכננים, תשלומים, מסים וצ׳קים שמועדם עבר נרשמים מעצמם',
+    uk: 'Планові платежі, розстрочки, податки й чеки з минулою датою проводяться самі',
+    en: 'Planned payments, instalments, taxes and cheques past their date are booked automatically',
+  },
   'st.serverKeyChecking': {
     ru: 'Проверяем ключ распознавания на сервере…',
     he: 'בודקים את מפתח הזיהוי בשרת…',
@@ -1746,6 +1758,7 @@ export const DICTIONARY = {
   'svc.largeOperation': { ru: '💸 Крупная операция', he: '💸 תנועה גדולה', uk: '💸 Велика операція', en: '💸 Large operation' },
   'svc.partner': { ru: 'Партнёр', he: 'בן/בת הזוג', uk: 'Партнер', en: 'Partner' },
   // ------------------------------------------------------ page shell
+  'app.autoSettled': { ru: 'Автоматически проведено', he: 'נרשמו אוטומטית', uk: 'Автоматично проведено', en: 'Settled automatically' },
   'app.plansCreated': { ru: 'Создано плановых операций', he: 'נוצרו תנועות מתוכננות', uk: 'Створено планових операцій', en: 'Planned operations created' },
   'app.recorded': { ru: 'записан', he: 'נרשמה', uk: 'записано', en: 'recorded' },
   'app.settingsSaved': { ru: 'Настройки сохранены', he: 'ההגדרות נשמרו', uk: 'Налаштування збережено', en: 'Settings saved' },

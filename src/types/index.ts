@@ -319,6 +319,8 @@ export interface PlanOccurrence {
   paidDate?: string;
   /** Expense created when the payment was marked paid. */
   transactionId?: string;
+  /** Set when the user un-pays it by hand — auto-settle then leaves it alone. */
+  autoSettleOff?: boolean;
 
   // --- Per-occurrence overrides, all optional: an unset field inherits from
   // the parent Plan exactly like before this existed. Set by "только эту
@@ -437,6 +439,8 @@ export interface BearerCheque {
    * instead of as unrelated rows.
    */
   seriesId?: string;
+  /** Set when the user reopens a cleared cheque — auto-settle then leaves it alone. */
+  autoSettleOff?: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -653,6 +657,8 @@ export interface FinanceSettings {
   budgetRolloverEnabled: boolean;
   notifyAtPercent: number[]; // e.g. [80, 100]
   plannedPaymentAutoCreate: boolean;
+  /** Overdue planned payments are marked paid on their own. Absent = ON. */
+  autoSettleOverdue?: boolean;
   geminiApiKey?: string;
   lastBackupDate?: string;
 

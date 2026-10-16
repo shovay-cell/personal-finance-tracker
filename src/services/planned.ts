@@ -263,25 +263,48 @@ export async function materializeRecurringPlan(
  * booked yet. Plans requiring confirmation are returned for the UI to prompt.
  */
 export async function processDueRecurringPlans(
-  autoCreateDefault: boolean
+  autoCreateDefault: boolean,
+  autoSettleOverdue = false
 ): Promise<{ created: Transaction[]; awaitingConfirmation: Plan[] }> {
   const today = todayIso();
   const plans = await financeDb.plans.where('scheduleType').equals('RECURRING').toArray();
   const created: Transaction[] = [];
   const awaitingConfirmation: Plan[] = [];
 
-  for (const plan of plans) {
+  for (let plan of plans) {
     if (plan.status !== 'ACTIVE') continue;
-    if (!plan.nextDueDate || plan.nextDueDate > today) continue;
 
-    // Guard against a double-booking when the app is opened twice the same day.
-    const already = await financeDb.transactions.where('planId').equals(plan.id).toArray();
-    if (already.some((t) => t.date === plan.nextDueDate)) continue;
+    // A plan months behind catches up date by date; the cap only guards
+    // against a runaway loop on a malformed schedule.
+    for (let step = 0; step < 400; step++) {
+      if (!plan.nextDueDate || plan.nextDueDate > today) break;
+      const due = plan.nextDueDate;
+      const overdue = due < today;
 
-    if (plan.autoCreate || autoCreateDefault) {
-      created.push(await materializeRecurringPlan(plan));
-    } else {
-      awaitingConfirmation.push(plan);
+      const auto = plan.autoCreate || autoCreateDefault || (autoSettleOverdue && overdue);
+      // Guard against a double-booking when the app is opened twice the same
+      // day: that date is already booked, so just move the schedule on.
+      const already = await financeDb.transactions.where('planId').equals(plan.id).toArray();
+      const booked = already.some((t) => t.date === due);
+
+      if (!auto) {
+        if (!booked) awaitingConfirmation.push(plan);
+        break;
+      }
+      if (booked) {
+        const next = nextOccurrence(plan, due);
+        await updatePlan(plan.id, {
+          lastRunDate: due,
+          nextDueDate: next || due,
+          status: next !== null ? 'ACTIVE' : 'COMPLETED',
+        });
+      } else {
+        created.push(await materializeRecurringPlan(plan, { id: `auto-${plan.id}-${due}` }));
+      }
+
+      const fresh = await financeDb.plans.get(plan.id);
+      if (!fresh || fresh.status !== 'ACTIVE' || fresh.nextDueDate === due) break;
+      plan = fresh;
     }
   }
 

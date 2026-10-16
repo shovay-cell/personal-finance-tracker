@@ -6,10 +6,12 @@ import { useLiveQuery } from 'dexie-react-hooks';
 import { CalendarClock, CheckCircle2, X } from 'lucide-react';
 import {
   applyBudgetRollovers,
+  autoSettleOverdue,
   financeDb,
   initializeFinanceDb,
   currentMonth,
   getCurrentMemberId,
+  isAutoSettleEnabled,
   refreshObligationStatuses,
   saveFinanceSettings,
   summarizeVat,
@@ -133,13 +135,18 @@ function FinanceApp() {
       setMounted(true);
 
       const stored = await financeDb.settings.get('default');
+      const autoSettle = stored?.autoSettleOverdue !== false;
       const { created, awaitingConfirmation } = await processDueRecurringPlans(
-        stored?.plannedPaymentAutoCreate ?? false
+        stored?.plannedPaymentAutoCreate ?? false,
+        autoSettle
       );
+      const settled = autoSettle ? await autoSettleOverdue() : 0;
       if (cancelled) return;
 
       if (created.length > 0) {
         setToast(`${tr('app.plansCreated')}: ${created.length}`);
+      } else if (settled > 0) {
+        setToast(`${tr('app.autoSettled')}: ${settled}`);
       }
       setPendingPlanned(awaitingConfirmation);
 
@@ -182,8 +189,17 @@ function FinanceApp() {
         return currentPreset;
       });
     };
+    // An installed PWA can stay open for days — settle what came due meanwhile.
+    const settleDue = async () => {
+      if (!(await isAutoSettleEnabled())) return;
+      const settled = await autoSettleOverdue();
+      if (settled > 0) setToast(`${tr('app.autoSettled')}: ${settled}`);
+    };
     const onVisibility = () => {
-      if (document.visibilityState === 'visible') refreshIfStale();
+      if (document.visibilityState === 'visible') {
+        refreshIfStale();
+        settleDue().catch(() => {});
+      }
     };
     document.addEventListener('visibilitychange', onVisibility);
     window.addEventListener('focus', refreshIfStale);

@@ -671,6 +671,34 @@ export function SettingsTab({
               />
             </span>
           </button>
+
+          <button
+            type="button"
+            onClick={() =>
+              saveFinanceSettings({ autoSettleOverdue: settings.autoSettleOverdue === false })
+            }
+            className="w-full flex items-center justify-between p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/70"
+          >
+            <span className="text-left">
+              <span className="block text-xs font-black text-slate-700 dark:text-slate-200">
+                {t('st.autoSettle')}
+              </span>
+              <span className="block text-[10px] text-slate-400 font-medium">
+                {t('st.autoSettleHint')}
+              </span>
+            </span>
+            <span
+              className={`w-11 h-6 rounded-full flex items-center px-0.5 transition-colors flex-shrink-0 ${
+                settings.autoSettleOverdue !== false ? 'bg-emerald-500' : 'bg-slate-300 dark:bg-slate-700'
+              }`}
+            >
+              <span
+                className={`w-5 h-5 rounded-full bg-white shadow transition-transform ${
+                  settings.autoSettleOverdue !== false ? 'translate-x-5' : ''
+                }`}
+              />
+            </span>
+          </button>
         </Card>
       </div>
 

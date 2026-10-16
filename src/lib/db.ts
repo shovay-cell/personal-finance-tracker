@@ -578,7 +578,7 @@ export function convertToBase(
 export type NewTransactionInput = Omit<
   Transaction,
   'id' | 'createdAt' | 'updatedAt' | 'baseAmount' | 'exchangeRate' | 'authorId'
-> & { authorId?: string };
+> & { authorId?: string; id?: string };
 
 /**
  * Slices must add up to the transaction total, otherwise reports would quietly
@@ -624,7 +624,7 @@ export async function addTransaction(input: NewTransactionInput): Promise<Transa
       ? [...splits].sort((a, b) => b.amount - a.amount)[0].categoryId
       : input.categoryId,
     authorId: input.authorId || getCurrentMemberId(),
-    id: newId('tx'),
+    id: input.id || newId('tx'),
     baseAmount,
     exchangeRate,
     createdAt: now,
@@ -1330,7 +1330,8 @@ export async function getPlanOccurrenceOverride(
  *  the parent plan's cached paid-count/outstanding/status in sync. */
 export async function payPlanOccurrence(
   occurrenceId: string,
-  paidDate?: string
+  paidDate?: string,
+  transactionId?: string
 ): Promise<void> {
   const occurrence = await financeDb.planOccurrences.get(occurrenceId);
   if (!occurrence || occurrence.isPaid) return;
@@ -1342,6 +1343,7 @@ export async function payPlanOccurrence(
   const totalCount = await financeDb.planOccurrences.where('planId').equals(plan.id).count();
   const fields = effectivePlanFields(plan, occurrence);
   const transaction = await addTransaction({
+    id: transactionId,
     kind: 'EXPENSE',
     amount: occurrence.amount,
     currency: occurrence.currency,
@@ -1375,6 +1377,7 @@ export async function unpayPlanOccurrence(occurrenceId: string): Promise<void> {
     isPaid: false,
     paidDate: undefined,
     transactionId: undefined,
+    autoSettleOff: true,
   });
   await syncFixedSchedulePlanCache(occurrence.planId);
 }
@@ -2309,7 +2312,11 @@ export async function updateBearerCheque(
 }
 
 /** Marks the cheque cleared and books the expense it represents. */
-export async function clearBearerCheque(id: string, clearedDate?: string): Promise<void> {
+export async function clearBearerCheque(
+  id: string,
+  clearedDate?: string,
+  transactionId?: string
+): Promise<void> {
   const cheque = await financeDb.bearerCheques.get(id);
   if (!cheque || cheque.status !== 'ISSUED') return;
 
@@ -2320,6 +2327,7 @@ export async function clearBearerCheque(id: string, clearedDate?: string): Promi
   // stays editable, instead of storing a leaf id as a bare top-level one.
   const chequeCategory = await financeDb.categories.get(cheque.categoryId);
   const transaction = await addTransaction({
+    id: transactionId,
     kind: 'EXPENSE',
     amount: cheque.amount,
     currency: cheque.currency,
@@ -2351,8 +2359,47 @@ export async function unclearBearerCheque(id: string): Promise<void> {
   await financeDb.bearerCheques.update(id, {
     status: 'ISSUED' as BearerChequeStatus,
     transactionId: undefined,
+    autoSettleOff: true,
     updatedAt: new Date().toISOString(),
   });
+}
+
+/** Overdue planned payments are settled on their own unless switched off in Settings. */
+export async function isAutoSettleEnabled(): Promise<boolean> {
+  return (await getFinanceSettings()).autoSettleOverdue !== false;
+}
+
+/**
+ * Marks every overdue fixed-schedule payment and issued cheque as paid,
+ * backdated to its due date. Transaction ids are derived from the row id so
+ * two devices doing this independently merge into one expense, not two.
+ * Rows the user un-paid by hand (`autoSettleOff`) are left alone.
+ * Returns how many items were settled.
+ */
+export async function autoSettleOverdue(): Promise<number> {
+  const today = todayIso();
+  let count = 0;
+
+  const plans = await financeDb.plans.toArray();
+  const activeFixed = new Set(
+    plans.filter((p) => p.scheduleType === 'FIXED_SCHEDULE' && p.status === 'ACTIVE').map((p) => p.id)
+  );
+  const occurrences = await financeDb.planOccurrences.toArray();
+  for (const o of occurrences.sort((a, b) => a.dueDate.localeCompare(b.dueDate))) {
+    if (o.isPaid || o.autoSettleOff || o.dueDate >= today || o.amount <= 0) continue;
+    if (!activeFixed.has(o.planId)) continue;
+    await payPlanOccurrence(o.id, o.dueDate, `auto-${o.id}`);
+    count++;
+  }
+
+  const cheques = await financeDb.bearerCheques.toArray();
+  for (const c of cheques) {
+    if (c.status !== 'ISSUED' || c.autoSettleOff || c.dueDate >= today || c.amount <= 0) continue;
+    await clearBearerCheque(c.id, c.dueDate, `auto-cheque-${c.id}`);
+    count++;
+  }
+
+  return count;
 }
 
 export async function cancelBearerCheque(id: string): Promise<void> {
