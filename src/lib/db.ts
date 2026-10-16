@@ -2430,6 +2430,13 @@ export async function cancelBearerChequeSeries(seriesId: string): Promise<void> 
   );
 }
 
+/** Deletes a series' cheques for good. Cleared ones stay: their booked expense is real history. */
+export async function deleteBearerChequeSeries(seriesId: string): Promise<void> {
+  const all = await financeDb.bearerCheques.toArray();
+  const cheques = all.filter((c) => c.seriesId === seriesId && c.status !== 'CLEARED');
+  for (const c of cheques) await deleteBearerCheque(c.id);
+}
+
 /**
  * Cheques issued before series linking existed have no `seriesId` — only the
  * "N/M" suffix the split-issue flow already wrote into their note. Group

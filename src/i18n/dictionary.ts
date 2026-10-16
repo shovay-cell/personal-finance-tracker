@@ -2315,6 +2315,18 @@ export const DICTIONARY = {
     uk: 'Скасувати всю серію',
     en: 'Cancel whole series',
   },
+  'bc.seriesDeleteAll': {
+    ru: 'Удалить серию',
+    he: 'למחוק את הסדרה',
+    uk: 'Видалити серію',
+    en: 'Delete series',
+  },
+  'bc.seriesDeleteConfirm': {
+    ru: 'Нажмите ещё раз — удалить безвозвратно',
+    he: 'לחצו שוב — מחיקה לצמיתות',
+    uk: 'Натисніть ще раз — видалити назавжди',
+    en: 'Tap again — delete permanently',
+  },
   'bc.seriesAmountHint': {
     ru: 'Если заполнить — поставит одну и ту же сумму каждому чеку серии',
     he: 'אם ממלאים — יגדיר את אותו סכום לכל צ׳קי הסדרה',

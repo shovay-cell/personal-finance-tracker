@@ -14,6 +14,7 @@ import {
   Pencil,
   Percent,
   Scale,
+  Trash2,
   Wallet,
 } from 'lucide-react';
 import {
@@ -37,6 +38,7 @@ import {
   clearBearerCheque,
   convertToBase,
   deleteBearerCheque,
+  deleteBearerChequeSeries,
   todayIso,
   updateBearerCheque,
   updateBearerChequeSeries,
@@ -790,6 +792,7 @@ function BearerChequeSeriesEditModal({
   const [shiftDays, setShiftDays] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
 
   const relevantCategories = categories.filter((c) => c.kind === 'EXPENSE' && !c.parentId && !c.isHidden);
   const issued = series.items.filter((c) => c.status === 'ISSUED');
@@ -824,6 +827,13 @@ function BearerChequeSeriesEditModal({
     onClose();
   };
 
+  const handleDeleteSeries = async () => {
+    if (!confirmingDelete) return setConfirmingDelete(true);
+    setBusy(true);
+    await deleteBearerChequeSeries(series.seriesId);
+    onClose();
+  };
+
   return (
     <ModalShell
       title={t('bc.seriesEditTitle')}
@@ -845,6 +855,17 @@ function BearerChequeSeriesEditModal({
             <Ban className="w-3.5 h-3.5" />
             {t('bc.seriesCancelAll')}
           </button>
+          {cancelled.length > 0 && issued.length === 0 && (
+            <button
+              type="button"
+              disabled={busy}
+              onClick={handleDeleteSeries}
+              className="w-full py-2.5 rounded-2xl text-[11px] font-black text-white bg-rose-500 flex items-center justify-center gap-1.5 disabled:opacity-40"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+              {confirmingDelete ? t('bc.seriesDeleteConfirm') : t('bc.seriesDeleteAll')}
+            </button>
+          )}
         </div>
       }
     >
