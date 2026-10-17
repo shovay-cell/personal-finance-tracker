@@ -837,7 +837,7 @@ function DateRangeModal({
   );
 }
 
-function TransactionRow({
+export function TransactionRow({
   transaction,
   category,
   subcategory,

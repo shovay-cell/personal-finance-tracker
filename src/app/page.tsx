@@ -460,6 +460,7 @@ function FinanceApp() {
             month={month}
             range={range}
             preset={preset}
+            onSelectTransaction={setEditingTransaction}
             onRangeChange={(nextRange, nextPreset) => {
               setRange(nextRange);
               setPreset(nextPreset);

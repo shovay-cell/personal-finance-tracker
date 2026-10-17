@@ -22,6 +22,8 @@ import {
   PeriodPreset,
   budgetProgress,
   categoryBreakdown,
+  formatDateHuman,
+  transactionParts,
   excludeDebtRepayments,
   filterTransactions,
   formatMoney,
@@ -36,7 +38,8 @@ import { convertToBase, todayIso } from '@/lib/db';
 import { CategoryLegend, DonutChart, MonthlyBarChart } from './charts';
 import { CashFlowForecastCard } from './cash-flow-forecast';
 import { useT } from '@/i18n/context';
-import { Card, EmptyState, SectionTitle, SegmentedControl, inputClass } from './ui';
+import { Card, EmptyState, ModalShell, SectionTitle, SegmentedControl, inputClass } from './ui';
+import { TransactionRow } from './transactions-tab';
 import { ProgressBar } from './charts';
 
 interface ReportsTabProps {
@@ -56,6 +59,7 @@ interface ReportsTabProps {
   range: DateRange;
   preset: PeriodPreset;
   onRangeChange: (range: DateRange, preset: PeriodPreset) => void;
+  onSelectTransaction?: (transaction: Transaction) => void;
 }
 
 const PRESET_KEYS: { value: PeriodPreset; key: 'reports.week' | 'reports.month' | 'reports.quarter' | 'reports.year' }[] = [
@@ -82,11 +86,13 @@ export function ReportsTab({
   range,
   preset,
   onRangeChange,
+  onSelectTransaction,
 }: ReportsTabProps) {
   const [kind, setKind] = useState<TransactionKind>('EXPENSE');
   const [showCustom, setShowCustom] = useState(preset === 'CUSTOM');
   const [forecastDays, setForecastDays] = useState(30);
-  const { t } = useT();
+  const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
+  const { t, language } = useT();
 
   const forecast = useMemo(
     () =>
@@ -139,6 +145,27 @@ export function ReportsTab({
 
   const activeRows = kind === 'EXPENSE' ? expenseRows : incomeRows;
   const activeTotal = kind === 'EXPENSE' ? totalExpense : totalIncome;
+
+  const categoryById = useMemo(() => new Map(categories.map((c) => [c.id, c])), [categories]);
+  const selectedRow = selectedCategoryId
+    ? activeRows.find((r) => r.categoryId === selectedCategoryId)
+    : undefined;
+  // Same grouping rule as categoryBreakdown: root category of any part.
+  const selectedGroups = useMemo(() => {
+    if (!selectedCategoryId) return [] as [string, Transaction[]][];
+    const matching = periodSpending
+      .filter((tx) => tx.kind === kind)
+      .filter((tx) =>
+        transactionParts(tx).some((part) => {
+          const c = categoryById.get(part.categoryId);
+          return (c?.parentId || part.categoryId) === selectedCategoryId;
+        })
+      )
+      .sort((a, b) => b.date.localeCompare(a.date) || b.createdAt.localeCompare(a.createdAt));
+    const byDate = new Map<string, Transaction[]>();
+    for (const tx of matching) byDate.set(tx.date, [...(byDate.get(tx.date) || []), tx]);
+    return Array.from(byDate.entries());
+  }, [periodSpending, kind, selectedCategoryId, categoryById]);
 
   const handlePdf = () => {
     exportReportPdf({
@@ -256,11 +283,45 @@ export function ReportsTab({
               centerLabel={kind === 'EXPENSE' ? t('common.expenses') : t('common.incomes')}
             />
             <div className="mt-4">
-              <CategoryLegend rows={activeRows} currency={baseCurrency} />
+              <CategoryLegend rows={activeRows} currency={baseCurrency} onSelect={setSelectedCategoryId} />
             </div>
           </>
         )}
       </Card>
+
+      {selectedRow && (
+        <ModalShell
+          title={selectedRow.categoryName}
+          subtitle={`${formatDateHuman(range.from)} — ${formatDateHuman(range.to)} · ${selectedRow.transactionCount} ${t('ch.operationsShort')} · ${formatMoney(selectedRow.total, baseCurrency)}`}
+          onClose={() => setSelectedCategoryId(null)}
+        >
+          <div className="space-y-3">
+            {selectedGroups.map(([date, items]) => (
+              <div key={date}>
+                <p className="text-[11px] font-black text-slate-500 dark:text-slate-400 px-1 mb-1.5">
+                  {formatDateHuman(date)}
+                </p>
+                <Card className="divide-y divide-slate-50 dark:divide-slate-800/80">
+                  {items.map((tx) => (
+                    <TransactionRow
+                      key={tx.id}
+                      transaction={tx}
+                      category={categoryById.get(tx.categoryId)}
+                      subcategory={tx.subcategoryId ? categoryById.get(tx.subcategoryId) : undefined}
+                      author={members.find((m) => m.id === tx.authorId)}
+                      account={accounts.find((a) => a.id === tx.accountId)}
+                      language={language}
+                      baseCurrency={baseCurrency}
+                      t={t}
+                      onSelect={(row) => onSelectTransaction?.(row)}
+                    />
+                  ))}
+                </Card>
+              </div>
+            ))}
+          </div>
+        </ModalShell>
+      )}
 
       <div>
         <SectionTitle title={t('reports.forecast')} />
